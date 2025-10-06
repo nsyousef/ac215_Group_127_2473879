@@ -4,3 +4,6 @@ pandas
 numpy
 google-cloud-storage
 pillow
+requests
+tqdm
+

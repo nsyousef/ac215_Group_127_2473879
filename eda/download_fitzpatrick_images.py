@@ -5,7 +5,7 @@ import pandas as pd
 import requests
 from google.cloud import storage
 from PIL import Image
-from io import BytesIO
+from io import BytesIO, StringIO
 import mimetypes
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,7 +13,8 @@ import os
 
 # --- CONFIGURE THESE VARIABLES ---
 BUCKET_NAME = 'derma-datasets'
-BUCKET_PATH_IMGS = 'raw/fitzpatrick17k/'
+BUCKET_PATH_BASE = 'raw/fitzpatrick17k/'
+BUCKET_PATH_IMGS = os.path.join(BUCKET_PATH_BASE, 'images')
 MAX_WORKERS = 8  # Adjust based on your machine/network (use nproc in terminal to determine number of CPUs; set this to 2-4 times that number)
 
 def get_image_extension(image_bytes):
@@ -50,13 +51,13 @@ def get_content_type(image_bytes, extension):
             content_type = 'application/octet-stream'
     return content_type
 
-def blob_md5_set(bucket):
+def blob_md5_set(bucket, img_path):
     """
     Returns a set of md5hashes (with or without extension) from the files already in the bucket.
     If you might have various extensions, this checks for uniqueness only on the md5hash prefix.
     """
     md5_set = set()
-    blobs = bucket.list_blobs()
+    blobs = bucket.list_blobs(prefix=img_path)
     for blob in blobs:
         filename = blob.name
         if '.' in filename:
@@ -64,7 +65,7 @@ def blob_md5_set(bucket):
             md5_set.add(md5)
     return md5_set
 
-def upload_one(row, md5_set, bucket):
+def upload_one(row, md5_set, bucket, img_path):
     url = row['url']
     md5 = row['md5hash']
 
@@ -81,16 +82,16 @@ def upload_one(row, md5_set, bucket):
             return (url, 'fail', "Could not determine extension")
         filename = md5 + extension
         content_type = get_content_type(image_bytes, extension)
-        blob = bucket.blob(os.path.join(BUCKET_PATH_IMGS, filename))
+        blob = bucket.blob(os.path.join(img_path, filename))
         blob.upload_from_string(image_bytes, content_type=content_type)
         return (url, 'ok', None)
     except Exception as e:
         return (url, 'fail', str(e))
 
-def main(df):
+def main(df, bucket):
     # Get md5hashes already in the bucket
     print("Retrieving existing images from bucket...")
-    md5_set = blob_md5_set(bucket)
+    md5_set = blob_md5_set(bucket, BUCKET_PATH_IMGS)
     print(f"Found {len(md5_set)} unique md5hashes in bucket.")
 
     results = []
@@ -99,7 +100,7 @@ def main(df):
         for row in df.to_dict(orient='records'):
             # Only schedule those not already uploaded
             if row['md5hash'] not in md5_set:
-                futures.append(executor.submit(upload_one, row, md5_set, bucket))
+                futures.append(executor.submit(upload_one, row, md5_set, bucket, BUCKET_PATH_IMGS))
             else:
                 results.append((row['url'], 'skip', None))
         for future in tqdm(as_completed(futures), total=len(futures), desc="Processing images"):
@@ -122,8 +123,8 @@ if __name__ == '__main__':
     # Load Fitzpatrick csv
     storage_client = storage.Client()
     bucket = storage_client.bucket(BUCKET_NAME)
-    fitz_csv_blob = bucket.blob('raw/fitzpatrick17k/fitzpatrick17k.csv')
-    fitz_csv_data = blob.download_as_text()
+    fitz_csv_blob = bucket.blob(os.path.join(BUCKET_PATH_BASE, 'fitzpatrick17k.csv'))
+    fitz_csv_data = fitz_csv_blob.download_as_text()
     fitz_csv = pd.read_csv(StringIO(fitz_csv_data))
-    fitz_csv = fitz_csv.iloc[0,:]
-    main(fitz_csv)
+    fitz_csv = fitz_csv.head(2)
+    main(fitz_csv, bucket)

@@ -1,0 +1,29 @@
+url,status,reason
+https://www.dermaamin.com/site/images/clinical-pic/p/photosensitivity/photosensitivity18.jpg,fail,"403 POST https://storage.googleapis.com/upload/storage/v1/b/derma-datasets/o?uploadType=multipart: {
+  ""error"": {
+    ""code"": 403,
+    ""message"": ""Provided scope(s) are not authorized"",
+    ""errors"": [
+      {
+        ""message"": ""Provided scope(s) are not authorized"",
+        ""domain"": ""global"",
+        ""reason"": ""forbidden""
+      }
+    ]
+  }
+}
+: ('Request failed with status code', 403, 'Expected one of', <HTTPStatus.OK: 200>)"
+https://www.dermaamin.com/site/images/clinical-pic/m/minocycline-pigmentation/minocycline-pigmentation1.jpg,fail,"403 POST https://storage.googleapis.com/upload/storage/v1/b/derma-datasets/o?uploadType=multipart: {
+  ""error"": {
+    ""code"": 403,
+    ""message"": ""Provided scope(s) are not authorized"",
+    ""errors"": [
+      {
+        ""message"": ""Provided scope(s) are not authorized"",
+        ""domain"": ""global"",
+        ""reason"": ""forbidden""
+      }
+    ]
+  }
+}
+: ('Request failed with status code', 403, 'Expected one of', <HTTPStatus.OK: 200>)"

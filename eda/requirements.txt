@@ -4,8 +4,6 @@ anyio==4.11.0
     # via
     #   httpx
     #   jupyter-server
-appnope==0.1.4
-    # via ipykernel
 argon2-cffi==25.1.0
     # via jupyter-server
 argon2-cffi-bindings==25.1.0
@@ -28,7 +26,7 @@ bleach==6.2.0
     # via nbconvert
 cachetools==6.2.0
     # via google-auth
-certifi==2025.8.3
+certifi==2025.10.5
     # via
     #   httpcore
     #   httpx
@@ -202,6 +200,8 @@ numpy==2.3.3
     # via
     #   -r requirements.in
     #   pandas
+overrides==7.7.0
+    # via jupyter-server
 packaging==25.0
     # via
     #   ipykernel
@@ -262,7 +262,7 @@ python-dateutil==2.9.0.post0
     #   arrow
     #   jupyter-client
     #   pandas
-python-json-logger==3.3.0
+python-json-logger==4.0.0
     # via jupyter-events
 pytz==2025.2
     # via pandas
@@ -281,6 +281,7 @@ referencing==0.36.2
     #   jupyter-events
 requests==2.32.5
     # via
+    #   -r requirements.in
     #   google-api-core
     #   google-cloud-storage
     #   jupyterlab-server
@@ -328,6 +329,8 @@ tornado==6.5.2
     #   jupyterlab
     #   notebook
     #   terminado
+tqdm==4.67.1
+    # via -r requirements.in
 traitlets==5.14.3
     # via
     #   ipykernel
@@ -349,6 +352,7 @@ typing-extensions==4.15.0
     # via
     #   anyio
     #   beautifulsoup4
+    #   ipython
     #   referencing
 tzdata==2025.2
     # via pandas
