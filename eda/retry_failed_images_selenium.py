@@ -12,6 +12,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException, TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
 
 # --- CONFIGURE THESE ---
 BUCKET_NAME = 'derma-datasets'
@@ -73,10 +74,11 @@ def make_selenium_driver():
     chrome_options.add_argument('--headless=new')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--window-size=1920,1080')
     chrome_options.add_argument('--ignore-certificate-errors')
-    driver = webdriver.Chrome('/usr/bin/chromedriver', options=chrome_options)
+    service = Service('/usr/bin/chromedriver')
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.set_page_load_timeout(15)
     return driver
 
