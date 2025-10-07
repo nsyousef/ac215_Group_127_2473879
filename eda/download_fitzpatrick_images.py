@@ -126,5 +126,5 @@ if __name__ == '__main__':
     fitz_csv_blob = bucket.blob(os.path.join(BUCKET_PATH_BASE, 'fitzpatrick17k.csv'))
     fitz_csv_data = fitz_csv_blob.download_as_text()
     fitz_csv = pd.read_csv(StringIO(fitz_csv_data))
-    fitz_csv = fitz_csv.head(2)
+    # fitz_csv = fitz_csv.head(20).tail(5)
     main(fitz_csv, bucket)

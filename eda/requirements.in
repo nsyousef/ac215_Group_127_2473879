@@ -6,4 +6,6 @@ google-cloud-storage
 pillow
 requests
 tqdm
+selenium
+webdriver-manager
 
