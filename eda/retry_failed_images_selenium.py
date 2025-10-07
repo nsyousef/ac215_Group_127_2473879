@@ -20,7 +20,7 @@ BUCKET_PATH_BASE = 'raw/fitzpatrick17k/'
 BUCKET_PATH_IMGS = os.path.join(BUCKET_PATH_BASE, 'images')
 MASTER_CSV_BLOB = os.path.join(BUCKET_PATH_BASE, 'fitzpatrick17k.csv')
 FAILURE_CSV_PATH = 'fitzpatrick_upload_failures.csv'
-MAX_WORKERS = 2  # Adjust based on your machine's CPU/RAM (4-8 is typical for n1-standard-4 or better)
+MAX_WORKERS = 4  # Adjust based on your machine's CPU/RAM (4-8 is typical for n1-standard-4 or better)
 
 def is_valid_url(u):
     return isinstance(u, str) and u.startswith("http")
