@@ -8,4 +8,5 @@ requests
 tqdm
 selenium
 webdriver-manager
+matplotlib
 
