@@ -60,7 +60,7 @@ fonttools==4.60.1
     # via matplotlib
 fqdn==1.5.1
     # via jsonschema
-google-api-core==2.25.2
+google-api-core==2.26.0
     # via
     #   google-cloud-core
     #   google-cloud-storage
@@ -71,7 +71,7 @@ google-auth==2.41.1
     #   google-cloud-storage
 google-cloud-core==2.4.3
     # via google-cloud-storage
-google-cloud-storage==3.4.0
+google-cloud-storage==3.4.1
     # via -r requirements.in
 google-crc32c==1.7.1
     # via
@@ -185,7 +185,7 @@ markupsafe==3.0.3
     # via
     #   jinja2
     #   nbconvert
-matplotlib==3.10.6
+matplotlib==3.10.7
     # via -r requirements.in
 matplotlib-inline==0.1.7
     # via
@@ -246,7 +246,7 @@ pillow==11.3.0
     # via
     #   -r requirements.in
     #   matplotlib
-platformdirs==4.4.0
+platformdirs==4.5.0
     # via jupyter-core
 prometheus-client==0.23.1
     # via jupyter-server
