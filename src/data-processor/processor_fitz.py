@@ -94,6 +94,6 @@ if __name__ == "__main__":
     metadata = dp.load_metadata(FITZ_META_PATH)
     metadata_filt = dp.filter_metadata(metadata, FITZ_IMG_PATH)
     metadata_ins = dp.format_metadata_csv(metadata_filt, "fitzpatrick17k", FITZ_IMG_PATH)
-    dp.update_data(metadata_ins, metadata_filt, FITZ_IMG_PATH)
+    dp.update_data(metadata_ins, metadata_filt, "fitzpatrick17k_metadata.csv", FITZ_IMG_PATH)
 
 
