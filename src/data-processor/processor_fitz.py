@@ -30,6 +30,9 @@ class DatasetProcessorFitz(DatasetProcessor):
         # get the list of images we have
         _, img_ids = self._get_img_ids_names(raw_image_path)
 
+        print("Image IDs:")
+        print(img_ids[1:10])
+
         # filter data
         print(f"Original shape: {metadata.shape}")
         keep_flg = (metadata["qc"] != "3 Wrongly labelled") & metadata["md5hash"].isin(img_ids)
