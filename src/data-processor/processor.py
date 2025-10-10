@@ -203,13 +203,20 @@ class DatasetProcessor(ABC):
         # Upload to GCS
         blob.upload_from_file(csv_buffer, content_type='text/csv')
 
-    def _list_files_in_folder(self, folder_path: str, exclude_dir: bool=False) -> list[str]:
+    def _list_files_in_folder(
+        self,
+        folder_path: str,
+        exclude_dir: bool = False,
+        include_prefixes: bool = True
+    ) -> list[str]:
         """
         Lists all file names in a folder in Google Cloud Storage.
 
         @param folder_path: Path to the folder within the bucket (e.g., "my/folder/").
         @param exclude_dir: Whether to exclude directory names from the list.
-        @returns: List of file paths relative to the bucket root.
+        @param include_prefixes: If True, includes the prefix folders in the returned file names.
+                                If False, returns only the final file names (no folder prefixes).
+        @returns: List of file names (full path or base name, according to include_prefixes).
         """
         # Ensure folder_path ends with '/' for correct prefix matching
         if not folder_path.endswith('/'):
@@ -219,10 +226,16 @@ class DatasetProcessor(ABC):
         # Use the prefix to search
         blobs = self.storage_client.list_blobs(self.bucket_name, prefix=folder_path)
         if exclude_dir:
-            # Exclude "directory" blobs (ending with "/"), only include actual files
             files = [blob.name for blob in blobs if not blob.name.endswith('/')]
         else:
             files = [blob.name for blob in blobs]
+
+        if not include_prefixes:
+            # Only return the base file names (strip folder_path prefix)
+            # Protects against empty folder_path or accidental mismatches
+            cut_len = len(folder_path)
+            files = [f[cut_len:] if f.startswith(folder_path) else f for f in files]
+
         return files
 
     def _bulk_copy_files(self, file_list: list[str], src_dir: str, dst_dir: str, dest_names: list[str]=None, max_workers: int=20):

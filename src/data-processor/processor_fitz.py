@@ -15,7 +15,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         if not raw_image_path.endswith('/'): raw_image_path += '/'
         print("Raw image path:")
         print(raw_image_path)
-        img_files = self._list_files_in_folder(raw_image_path, exclude_dir=True)
+        img_files = self._list_files_in_folder(raw_image_path, exclude_dir=True, include_prefixes=False)
         print(img_files[0:10])
         img_ids = [os.path.splitext(f)[0] for f in img_files]
         return img_files, img_ids
