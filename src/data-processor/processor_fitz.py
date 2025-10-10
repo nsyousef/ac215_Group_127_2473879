@@ -81,7 +81,8 @@ class DatasetProcessorFitz(DatasetProcessor):
 
 if __name__ == "__main__":
     dp = DatasetProcessorFitz()
-    FITZ_META_PATH = "raw/fitzpatrick17k/fitzpatrick17k.csv"
+    FITZ_BASE_PATH = "raw/fitzpatrick17k/"
+    FITZ_META_PATH = os.path.join(FITZ_BASE_PATH, "fitzpatrick17k.csv")
     FITZ_IMG_PATH = os.path.join(FITZ_META_PATH, "images")
     metadata = dp.load_metadata(FITZ_META_PATH)
     metadata_filt = dp.filter_metadata(metadata, FITZ_IMG_PATH)
