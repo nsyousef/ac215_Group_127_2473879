@@ -9,4 +9,4 @@ tqdm
 selenium
 webdriver-manager
 matplotlib
-
+seaborn
