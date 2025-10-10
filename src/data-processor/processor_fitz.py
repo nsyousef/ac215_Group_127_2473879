@@ -12,7 +12,11 @@ class DatasetProcessorFitz(DatasetProcessor):
         @param raw_image_path: The path to the raw images.
         @returns: A list containing the image IDs extracted from the filenames.
         """
+        if not raw_image_path.endswith('/'): raw_image_path += '/'
+        print("Raw image path:")
+        print(raw_image_path)
         img_files = self._list_files_in_folder(raw_image_path, exclude_dir=True)
+        print(img_files[0:10])
         img_ids = [os.path.splittext(f)[0] for f in img_files]
         return img_files, img_ids
 
@@ -31,7 +35,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         _, img_ids = self._get_img_ids_names(raw_image_path)
 
         print("Image IDs:")
-        print(img_ids[1:10])
+        print(img_ids[0:10])
 
         # filter data
         print(f"Original shape: {metadata.shape}")
