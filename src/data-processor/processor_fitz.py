@@ -42,7 +42,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         @param metadata: A table of metadata.
         @param dataset: The name of your dataset (e.g. fitzpatrick17k, scin, etc.). Use to fill in the `dataset` column.
         @param raw_image_path: The path to the directory containing raw images.
-        @returns: A DataFrame containing the data to be upserted into metadata.csv.
+        @returns: A DataFrame containing the data to be upserted into metadata_all.csv.
         """
         print("Formatting metadata")
         img_names, img_ids = self._get_img_ids_names(raw_image_path)

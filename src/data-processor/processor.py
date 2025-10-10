@@ -121,7 +121,7 @@ class DatasetProcessor(ABC):
 
         The path to the final metadata file is specified in the constructor of this class.
 
-        @param final_metadata: A dataframe containing the final metadata to upsert into the metadata.csv.
+        @param final_metadata: A dataframe containing the final metadata to upsert into the metadata_all.csv.
         """
         final_metadata_path = os.path.join(self.final_metadata_dir, self.final_metadata_file)
         try:
