@@ -79,7 +79,7 @@ if __name__ == "__main__":
     FITZ_META_PATH = "raw/fitzpatrick17k/fitzpatrick17k.csv"
     FITZ_IMG_PATH = os.path.join(FITZ_META_PATH, "images")
     metadata = dp.load_metadata(FITZ_META_PATH)
-    metadata_filt = dp.filter_metadata(metadata)
+    metadata_filt = dp.filter_metadata(metadata, FITZ_IMG_PATH)
     metadata_ins = dp.format_metadata_csv(metadata_filt, "fitzpatrick17k")
     dp.update_data(metadata_ins, FITZ_META_PATH, FITZ_IMG_PATH)
 
