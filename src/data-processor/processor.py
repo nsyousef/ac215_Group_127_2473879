@@ -33,6 +33,7 @@ class DatasetProcessor(ABC):
         @param metadata_path: Path to the metadata file
         @param **kwargs: Keyword arguments for `pandas.read_csv()` to use when loading the file. Use this, for example, to set the separator.
         """
+        print("Loading metadata")
         return self._load_table_from_gcs(metadata_path, **kwargs)
 
     @abstractmethod
@@ -84,14 +85,17 @@ class DatasetProcessor(ABC):
         @param raw_image_dir: The directory containing the raw images.
         """
         # update metadata
+        print("Updating general metadata")
         self._update_metadata_csv(final_metadata)
 
         # update images
+        print("Copying images")
         image_names = final_metadata['orig_filename'].to_list()
         dataset = final_metadata["dataset"]
         self._update_images(image_names, raw_image_dir, dataset)
 
         # copy dataset-specific metadata to final folder
+        print("Copying dataset specific metadata")
         bucket = self.storage_client.bucket(self.bucket_name)
         source_blob = bucket.blob(dataset_meta)
         bucket.copy_blob(source_blob, bucket, self.final_metadata_path)
