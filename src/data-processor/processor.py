@@ -74,10 +74,10 @@ class DatasetProcessor(ABC):
         """
         pass
 
-    def update_data(self, final_metadata: pd.DataFrame, dataset_meta: str, raw_image_dir: str):
+    def update_data(self, final_metadata: pd.DataFrame, filt_meta: pd.DataFrame, raw_image_dir: str):
         """
         This function updates the data and metadata in the `final` folder in the bucket. It upserts the `final_metadata` into the metadata file. It also
-        copies all the images in the `final_metadata` file into the `final/imgs` folder.
+        copies all the images in the `final_metadata` file into the `final/imgs` folder. And it writes the filtered metadata to the `final` folder.
 
         Notes: 
         * This function in its current implementation assumes the images are named <image_id>.<extension>. If the images are named in a different format,
@@ -85,7 +85,7 @@ class DatasetProcessor(ABC):
         * This function also assumes every entry in the `datasets` column of `final_metadata` is the same.
 
         @param final_metadata: A dataframe containing the final metadata to upsert into the metadata.csv. Must be formatted as described in `format_metadata_csv`.
-        @param dataset_meta: The full path of the metadata of the original dataset to copy to the final folder. Ideally, data should be matched to images via some sort of image ID.
+        @param filt_meta: The filtered metadata returned by `filter_metadata` to write to the `final` folder.
         @param raw_image_dir: The directory containing the raw images.
         """
         # update metadata
@@ -104,10 +104,7 @@ class DatasetProcessor(ABC):
 
         # copy dataset-specific metadata to final folder
         print("Copying dataset specific metadata")
-        bucket = self.storage_client.bucket(self.bucket_name)
-        source_blob = bucket.blob(dataset_meta)
-        destination_blob_name = self.final_metadata_dir.rstrip('/') + '/' + source_blob.name.split('/')[-1]
-        bucket.copy_blob(source_blob, bucket, destination_blob_name)
+        self._write_table_to_gcs(filt_meta, self.final_metadata_dir)
 
     ######## These are helper funcitons. Theyy are called by the functions above. You can use them to help you override the above functions if needed. ########
 
