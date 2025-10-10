@@ -95,7 +95,11 @@ class DatasetProcessor(ABC):
         # update images
         print("Copying images")
         image_names = final_metadata['orig_filename'].to_list()
-        dataset = final_metadata["dataset"]
+        print("Image names:")
+        print(image_names[0:5])
+        dataset = final_metadata["dataset"].iloc[0]
+        print("Dataset:")
+        print(dataset)
         self._update_images(image_names, raw_image_dir, dataset)
 
         # copy dataset-specific metadata to final folder
