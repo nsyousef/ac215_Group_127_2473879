@@ -50,21 +50,17 @@ class DatasetProcessorFitz(DatasetProcessor):
         id_name_map = pd.DataFrame({"orig_filename": img_names}, index=img_ids)
         print(id_name_map.head())
 
-        final_metadata_drft = pd.DataFrame()
-        final_metadata_drft["image_id"] = metadata["md5hash"]
-        final_metadata_drft["dataset"] = [dataset] * final_metadata_drft.shape[0]
-        final_metadata_drft["filename"] = final_metadata_drft.apply(
-            lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x.name)[1]}", 
-            axis=1
-        )
+        final_metadata = pd.DataFrame()
+        final_metadata["image_id"] = metadata["md5hash"]
+        # add original filename column
+        final_metadata = final_metadata.merge(id_name_map, how="left", left_on="image_id", right_index=True)
+        final_metadata["dataset"] = [dataset] * final_metadata.shape[0]
+        final_metadata["filename"] = final_metadata.apply(lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x["orig_filename"])[1]}", axis=1)
         # NOTE: I am choosing this category since our goal is to have an ML app that identifies the disease and gives advice on it.
         # I think the collapsed categories are too broad for the model to be able to identify the disease and give good advice about it.
-        final_metadata_drft["label"] = metadata["label"]
-        final_metadata_drft["text_desc"] = [None] * final_metadata_drft.shape[0]
-
-        # add original filename column
-        final_metadata = final_metadata_drft.merge(id_name_map, how="left", left_on="image_id", right_index=True)
-
+        final_metadata["label"] = metadata["label"]
+        final_metadata["text_desc"] = [None] * final_metadata.shape[0]
+        
         print(final_metadata.head())
 
         # order columns
