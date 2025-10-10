@@ -5,6 +5,7 @@ import io
 from google.cloud import storage
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from google.api_core.exceptions import NotFound
 
 class DatasetProcessor(ABC):
     """
@@ -110,25 +111,32 @@ class DatasetProcessor(ABC):
         If your image ID and dataset combination is already in the metadata.csv file, this function updates that entry with the data in final_metadata.
         If your image ID and dataset combination is not in the metadata.csv file, this function adds it to that file.
 
+        If the metadata file does not already exist, it creates it using final_metadata.
+
         The path to the final metadata file is specified in the constructor of this class.
 
-        @param final_metadata: A dataframe containing the final metadata to upsert into the metadata.csv. Must be formatted as described in `format_metadata_csv`.
+        @param final_metadata: A dataframe containing the final metadata to upsert into the metadata.csv.
         """
-        # load existing metadata
-        old_meta = self._load_table_from_gcs(self.final_metadata_path)
+        try:
+            # Try to load existing metadata
+            old_meta = self._load_table_from_gcs(self.final_metadata_path)
 
-        # set indices to identifiers
-        old_meta = old_meta.set_index(['dataset', 'image_id'], drop=False)
-        final_metadata = final_metadata.set_index(['dataset', 'image_id'], drop=False)
+            # Set indices to identifiers
+            old_meta = old_meta.set_index(['dataset', 'image_id'], drop=False)
+            final_metadata = final_metadata.set_index(['dataset', 'image_id'], drop=False)
 
-        # concatenate and drop duplicates
-        upserted = pd.concat([old_meta, final_metadata])
-        upserted = upserted[~upserted.index.duplicated(keep='last')]
+            # Concatenate and drop duplicates
+            upserted = pd.concat([old_meta, final_metadata])
+            upserted = upserted[~upserted.index.duplicated(keep='last')]
 
-        # reset the index
-        upserted = upserted.reset_index(drop=True)
+            # Reset the index
+            upserted = upserted.reset_index(drop=True)
 
-        # replace old file in Google Cloud with new one
+        except NotFound:
+            # If file doesn't exist, just use the new metadata
+            upserted = final_metadata.reset_index(drop=True)
+
+        # Replace old file in Google Cloud with new one (or create new)
         self._write_table_to_gcs(upserted, self.final_metadata_path)
 
     def _update_images(self, image_names: list[str], raw_image_dir: str, dataset: str):
