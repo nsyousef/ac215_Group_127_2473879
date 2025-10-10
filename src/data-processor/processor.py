@@ -295,10 +295,19 @@ class DatasetProcessor(ABC):
             for _ in tqdm(as_completed(futures), total=len(futures), desc="Copying files", unit="file"):
                 pass  # Just update the progress bar
 
+    def _get_img_ids_names(self, raw_image_path: str):
+        """
+        This function takes a path to the raw images (named by IDs) and gets a list of their IDs and filenames.
 
+        Corresponding image IDs and filenames are at the same indices in the lists.
 
-    
-
-
-
-
+        @param raw_image_path: The path to the raw images.
+        @returns: A list containing the image IDs extracted from the filenames.
+        """
+        if not raw_image_path.endswith('/'): raw_image_path += '/'
+        print("Raw image path:")
+        print(raw_image_path)
+        img_files = self._list_files_in_folder(raw_image_path, exclude_dir=True, include_prefixes=False)
+        print(img_files[0:10])
+        img_ids = [os.path.splitext(f)[0] for f in img_files]
+        return img_files, img_ids
