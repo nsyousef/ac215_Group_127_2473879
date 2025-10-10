@@ -53,7 +53,10 @@ class DatasetProcessorFitz(DatasetProcessor):
         final_metadata_drft = pd.DataFrame()
         final_metadata_drft["image_id"] = metadata["md5hash"]
         final_metadata_drft["dataset"] = [dataset] * final_metadata_drft.shape[0]
-        final_metadata_drft["filename"] = final_metadata_drft.apply(lambda x: f"{x['dataset']}_{x['image_id']}", axis=1)
+        final_metadata_drft["filename"] = final_metadata_drft.apply(
+            lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x.name)[1]}", 
+            axis=1
+        )
         # NOTE: I am choosing this category since our goal is to have an ML app that identifies the disease and gives advice on it.
         # I think the collapsed categories are too broad for the model to be able to identify the disease and give good advice about it.
         final_metadata_drft["label"] = metadata["label"]
