@@ -77,7 +77,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         final_metadata_drft["text_desc"] = [None] * final_metadata_drft.shape[0]
 
         # add original filename column
-        final_metadata = final_metadata_drft.join(id_name_map)
+        final_metadata = final_metadata_drft.merge(id_name_map, how="left", left_on="image_id", right_index=True)
 
         print(final_metadata.head())
 
