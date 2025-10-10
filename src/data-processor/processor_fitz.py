@@ -65,6 +65,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         img_names, img_ids = self._get_img_ids_names(raw_image_path)
 
         id_name_map = pd.DataFrame({"orig_filename": img_names}, index=img_ids)
+        print(id_name_map.head())
 
         final_metadata_drft = pd.DataFrame()
         final_metadata_drft["image_id"] = metadata["md5hash"]
@@ -77,6 +78,8 @@ class DatasetProcessorFitz(DatasetProcessor):
 
         # add original filename column
         final_metadata = final_metadata_drft.join(id_name_map)
+
+        print(final_metadata.head())
 
         # order columns
         final_metadata = final_metadata[["image_id", "dataset", "filename", "orig_filename", "label", "text_desc"]]

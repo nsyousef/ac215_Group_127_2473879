@@ -270,6 +270,10 @@ class DatasetProcessor(ABC):
         bucket = self.storage_client.bucket(self.bucket_name)
         if not src_dir.endswith('/'): src_dir += '/'
         if not dst_dir.endswith('/'): dst_dir += '/'
+        print("Source dir:")
+        print(src_dir)
+        print("Dest dir:")
+        print(dst_dir)
 
         def do_copy(src_fname, dst_fname):
             src_blob_path = src_dir + src_fname
