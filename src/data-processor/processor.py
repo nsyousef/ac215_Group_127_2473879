@@ -13,15 +13,18 @@ class DatasetProcessor(ABC):
 
     @param image_dir: The path to the folder in the `raw` directory in the cloud containing your images. Do not include the bucket name.
     @param bucket_name: The name of the bucket
-    @param final_metadata_path: The path to the final metadata file.
-    @param final_image_path: The path to the folder where the final images are to be stored.
+    @param final_metadata_dir: The folder containing the final metadata file.
+    @param final_metadata_file: The name of the file containing the combined metadata from all datasets.
+    @param final_image_dir: The path to the folder where the final images are to be stored.
     """
     def __init__(self,
                  bucket_name = "derma-datasets-2", 
-                 final_metadata_path = "final/metadata_all.csv", 
-                 final_image_path: str = "final/imgs"):
+                 final_metadata_dir = "final/",
+                 final_metadata_file = "metadata_all.csv",
+                 final_image_path: str = "final/imgs/"):
         self.bucket_name = bucket_name
-        self.final_metadata_path = final_metadata_path
+        self.final_metadata_dir = final_metadata_dir
+        self.final_metadata_file = final_metadata_file
         self.final_image_path = final_image_path
         self.storage_client = storage.Client()
 
@@ -99,7 +102,8 @@ class DatasetProcessor(ABC):
         print("Copying dataset specific metadata")
         bucket = self.storage_client.bucket(self.bucket_name)
         source_blob = bucket.blob(dataset_meta)
-        bucket.copy_blob(source_blob, bucket, self.final_metadata_path)
+        destination_blob_name = self.final_metadata_dir.rstrip('/') + '/' + source_blob.name.split('/')[-1]
+        bucket.copy_blob(source_blob, bucket, destination_blob_name)
 
     ######## These are helper funcitons. Theyy are called by the functions above. You can use them to help you override the above functions if needed. ########
 
@@ -117,9 +121,10 @@ class DatasetProcessor(ABC):
 
         @param final_metadata: A dataframe containing the final metadata to upsert into the metadata.csv.
         """
+        final_metadata_path = os.path.join(self.final_metadata_dir, self.final_metadata_file)
         try:
             # Try to load existing metadata
-            old_meta = self._load_table_from_gcs(self.final_metadata_path)
+            old_meta = self._load_table_from_gcs(final_metadata_path)
 
             # Set indices to identifiers
             old_meta = old_meta.set_index(['dataset', 'image_id'], drop=False)
@@ -137,7 +142,7 @@ class DatasetProcessor(ABC):
             upserted = final_metadata.reset_index(drop=True)
 
         # Replace old file in Google Cloud with new one (or create new)
-        self._write_table_to_gcs(upserted, self.final_metadata_path)
+        self._write_table_to_gcs(upserted, final_metadata_path)
 
     def _update_images(self, image_names: list[str], raw_image_dir: str, dataset: str):
         """
