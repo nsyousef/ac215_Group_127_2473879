@@ -17,7 +17,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         print(raw_image_path)
         img_files = self._list_files_in_folder(raw_image_path, exclude_dir=True)
         print(img_files[0:10])
-        img_ids = [os.path.splittext(f)[0] for f in img_files]
+        img_ids = [os.path.splitext(f)[0] for f in img_files]
         return img_files, img_ids
 
     def filter_metadata(self, metadata: pd.DataFrame, raw_image_path: str) -> pd.DataFrame:
