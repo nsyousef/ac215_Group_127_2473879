@@ -105,7 +105,7 @@ class DatasetProcessor(ABC):
 
         # copy dataset-specific metadata to final folder
         print("Copying dataset specific metadata")
-        self._write_table_to_gcs(filt_meta, os.path.join(self.final_metadata_dir), filt_meta_name)
+        self._write_table_to_gcs(filt_meta, os.path.join(self.final_metadata_dir, filt_meta_name))
 
     ######## These are helper funcitons. Theyy are called by the functions above. You can use them to help you override the above functions if needed. ########
 
