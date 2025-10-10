@@ -55,7 +55,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         # add original filename column
         final_metadata = final_metadata.merge(id_name_map, how="left", left_on="image_id", right_index=True)
         final_metadata["dataset"] = [dataset] * final_metadata.shape[0]
-        final_metadata["filename"] = final_metadata.apply(lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x["orig_filename"])[1]}", axis=1)
+        final_metadata["filename"] = final_metadata.apply(lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x['orig_filename'])[1]}", axis=1)
         # NOTE: I am choosing this category since our goal is to have an ML app that identifies the disease and gives advice on it.
         # I think the collapsed categories are too broad for the model to be able to identify the disease and give good advice about it.
         final_metadata["label"] = metadata["label"]
