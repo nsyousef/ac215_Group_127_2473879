@@ -26,8 +26,8 @@ class DatasetProcessorFitz(DatasetProcessor):
         all_scap_ids = []
         for scap_dir in scap_raw_imgs_dirs:
             fitz_filepaths, fitz_img_ids = self._get_img_ids_names(scap_dir, include_prefixes=True)
-            all_scap_paths.append(fitz_filepaths)
-            all_scap_ids.append(fitz_img_ids)
+            all_scap_paths += fitz_filepaths
+            all_scap_ids += fitz_img_ids
 
         scap_name_path_map = pd.DataFrame({"scap_img_id": all_scap_ids, "scap_img_path": all_scap_paths})
 
