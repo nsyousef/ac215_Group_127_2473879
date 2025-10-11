@@ -1,8 +1,92 @@
 from processor import DatasetProcessor
 import pandas as pd
 import os
+import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class DatasetProcessorFitz(DatasetProcessor):
+    def expand_raw_fitz_from_skincap(self, scap_meta: pd.DataFrame, fitz_raw_imgs_dir: str, scap_raw_imgs_dirs: list[str]):
+        """
+        This function expands the raw Fitzpatrick data with the images in the SkinCAP dataset.
+
+        The SkinCAP dataset includes images from the Fitzpatrick dataset that are not able to be accessed via URL.
+        This function copies those images from the SkinCAP folder to the Fitzpatrick raw folder and renames them appropriately.
+        The reason I do it this way is so the rest of the pipeline can just worry about the raw Fitzpatrick images, without having to straddle two datasets.
+        In this way, if we ever remove the SkinCAP data, we won't need to rewrite this whole pipeline. We will just need to remove this step in the future and it will work.
+
+        @param fitz_meta: The raw metadata file for the Fitzpatrick dataset, as a Pandas DataFrame
+        @param scap_meta: The raw metadata file for the SkinCAP dataset, as a Pandas DataFrame
+        @param fitz_raw_imgs_dir: The directory where the raw Fitzpatrick images are stored
+        @param scap_raw_imgs_dirs: A list of directories where the raw SkinCAP images are stored
+        @returns: None. This function does not return anything. It just copies the images into the raw Fitzpatrick folder.
+        """
+
+        # record the names of the images in each of the two SkinCAP folders mapped to their paths
+        all_scap_paths = []
+        all_scap_ids = []
+        for scap_dir in scap_raw_imgs_dirs:
+            fitz_filepaths, fitz_img_ids = self._get_img_ids_names(scap_dir, include_prefixes=True)
+            all_scap_paths.append(fitz_filepaths)
+            all_scap_ids.append(fitz_img_ids)
+
+        scap_name_path_map = pd.DataFrame({"scap_img_id": all_scap_ids, "scap_img_path": all_scap_paths})
+
+        print(f"{scap_name_path_map.shape[0]} SkinCAP images found.")
+
+        # if two images have same ID, only keep one copy
+        scap_name_path_map = scap_name_path_map.drop_duplicates(subset=["image_id"])
+        print(f"{scap_name_path_map.shape[0]} SkinCAP images left after deduplicating by ID.")
+        print(scap_name_path_map.head())
+
+        # only keep necessary columns of SkinCAP metadata
+        scap_meta = scap_meta[["id", "skincap_file_path", "ori_file_path", "source"]]
+
+        # add md5hash to skincap metadata
+        scap_meta["md5hash"] = scap_meta["ori_file_path"].apply(lambda x: os.path.splitext(x)[0])
+
+        # merge filepaths with SkinCAP metadata
+        scap_meta = scap_meta.merge(scap_name_path_map, left_on="id", right_on="image_id", validate="1:1").drop("id", axis=1)
+
+        # filter to only include SkinCAP images from Fitzpatrick
+        scap_in_fitz_flg = scap_meta["source"] == "fitzpatrick17k"
+        scap_meta = scap_meta[scap_in_fitz_flg]
+        print(f"{scap_meta.shape[0]} SkinCAP images are from the Fitzpatrick dataset.")
+
+        # get list of Fitzpatrick images we have
+        fitz_filepaths, fitz_img_ids = self._get_img_ids_names(fitz_raw_imgs_dir, include_prefixes=True)
+        fitz_name_path_map = pd.DataFrame({"fitz_image_id": fitz_img_ids, "fitz_image_filepath": fitz_filepaths})
+        print(f"We have {fitz_name_path_map.shape[0]} images in our Fitzpatrick raw data folder before adding SkinCAP images.")
+
+        # merge Fitzpatrick images with SkinCAP mapping
+        full_mapping = scap_meta.merge(fitz_name_path_map, how="outer", on="md5hash", suffixes=["scap_", "fitz_"])
+
+        # filter for images for which we don't already have Fitzpatrick raw data (we only need to copy these)
+        no_fitz_raw_flg = full_mapping["fitz_image_id"].isna()
+        full_mapping = full_mapping[no_fitz_raw_flg]
+        print(full_mapping.head())
+
+        # strip full_mapping down to a simple map from source to destination
+
+        # get extension of SkinCAP image
+        full_mapping["extension"] = full_mapping["scap_img_path"].apply(lambda x: os.path.splitext(x)[1])
+
+        # construct final path for image to go
+        full_mapping["dest_dir"] = [fitz_raw_imgs_dir] * full_mapping.shape[0]
+        full_mapping["dest_path"] = full_mapping.apply(lambda x: os.path.join(x['dest_dir'], f"{x['md5hash']}{x['extension']}"), axis=1)
+
+        # simplify full_mapping
+        full_mapping = full_mapping[['scap_img_path', 'dest_path']]
+
+        # sanity checks (remove if it turns out SkinCAP dataset does not have all PNGs)
+        # NOTE: the purpose of these is to abort the copy if there is a bug in this code
+        assert full_mapping['scap_img_path'].str.endswith(".png").all(), "There are non-PNG images in the SkinCAP dataset"
+        assert full_mapping['dest_path'].str.endswith(".png").all(), "File extensions were changed incorrectly"
+
+        full_mapping.to_csv("tmp_full_mapping.csv")
+
+        # perform the copy
+        # self._bulk_copy_blobs(full_mapping["scap_img_path"].to_list(), full_mapping["dest_path"].to_list())
+
     def filter_metadata(self, metadata: pd.DataFrame, raw_image_path: str) -> pd.DataFrame:
         """
         Filter the metadata to remove images where the quality is scored as "wrongly labelled".
@@ -67,13 +151,53 @@ class DatasetProcessorFitz(DatasetProcessor):
         final_metadata = final_metadata[["image_id", "dataset", "filename", "orig_filename", "label", "text_desc"]]
 
         return final_metadata
+    
+    def _compute_md5_for_blob(self, blob):
+        md5 = hashlib.md5()
+        with blob.open("rb") as f:
+            while True:
+                data = f.read(8192)
+                if not data:
+                    break
+                md5.update(data)
+        return blob.name, md5.hexdigest()
+
+    def _compute_md5_gcs_list_parallel(self, bucket_name: str, file_list: list[str], max_workers: int=16):
+        """
+        Compute the MD5 hashes of a list of files (i.e. Google Cloud Storage blobs) in parallel using file streaming to save RAM.
+
+        @param bucket_name: The name of the bucket in which the files are stored.
+        @param file_list: A list of full file paths (from the root of the bucket) to all the files you want to hash.
+        @param max_workers: The maximum number of parallel workers to use.
+        """
+        client = self.storage_client
+        bucket = client.bucket(bucket_name)
+        # Prepare Blob objects for the paths provided
+        blobs = [bucket.blob(file_name) for file_name in file_list]
+        hashes = {}
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_blob = {executor.submit(self.compute_md5_for_blob, blob): blob for blob in blobs}
+            for future in as_completed(future_to_blob):
+                name, md5sum = future.result()
+                hashes[name] = md5sum
+
+        return hashes
 
 if __name__ == "__main__":
     dp = DatasetProcessorFitz()
     FITZ_BASE_PATH = "raw/fitzpatrick17k/"
+    SKINCAP_BASE_PATH = "raw/SkinCAP"
     FITZ_META_PATH = os.path.join(FITZ_BASE_PATH, "fitzpatrick17k.csv")
+    SKINCAP_META_PATH = os.path.join(SKINCAP_BASE_PATH, "skincap_v240623.csv")
     FITZ_IMG_PATH = os.path.join(FITZ_BASE_PATH, "images")
-    metadata = dp.load_metadata(FITZ_META_PATH)
-    metadata_filt = dp.filter_metadata(metadata, FITZ_IMG_PATH)
+    SKINCAP_IMG_PATH_1 = os.path.join(SKINCAP_BASE_PATH, "skincap")
+    SKINCAP_IMG_PATH_2 = os.path.join(SKINCAP_BASE_PATH, "skincap/not_include")
+    fitz_metadata = dp.load_metadata(FITZ_META_PATH)
+    scap_metadata = dp.load_metadata(SKINCAP_META_PATH)
+    # This function copies extra images from the SkinCAP directories into the RAW data directory for Fitzpatrick.
+    dp.expand_raw_fitz_from_skincap(fitz_metadata, scap_metadata, FITZ_IMG_PATH, [SKINCAP_IMG_PATH_1, SKINCAP_IMG_PATH_2])
+    # Filter and copy everything to final folder
+    metadata_filt = dp.filter_metadata(fitz_metadata, FITZ_IMG_PATH)
     metadata_ins = dp.format_metadata_csv(metadata_filt, "fitzpatrick17k", FITZ_IMG_PATH)
     dp.update_data(metadata_ins, metadata_filt, "fitzpatrick17k_metadata.csv", FITZ_IMG_PATH)

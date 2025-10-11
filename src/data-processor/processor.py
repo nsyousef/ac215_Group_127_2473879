@@ -252,6 +252,39 @@ class DatasetProcessor(ABC):
             files = [f[cut_len:] if f.startswith(folder_path) else f for f in files]
 
         return files
+    
+    def _bulk_copy_blobs(
+        self, 
+        source_blobs: list[str], 
+        destination_blobs: list[str], 
+        max_workers: int = 20
+    ):
+        """
+        Bulk copies blobs from source_blobs to destination_blobs within a Google Cloud Storage bucket.
+
+        @param source_blobs: List of fully-qualified source blob paths.
+        @param destination_blobs: List of fully-qualified destination blob paths (same index as sources).
+        @param max_workers: Number of worker threads (default 20).
+        @returns: None
+        """
+        if len(source_blobs) != len(destination_blobs):
+            raise ValueError("source_blobs and destination_blobs must have the same length.")
+
+        bucket = self.storage_client.bucket(self.bucket_name)
+
+        def do_copy(src_blob_path, dst_blob_path):
+            source_blob = bucket.blob(src_blob_path)
+            bucket.copy_blob(source_blob, bucket, dst_blob_path)
+            return dst_blob_path
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(do_copy, src, dst)
+                for src, dst in zip(source_blobs, destination_blobs)
+            ]
+            for _ in tqdm(as_completed(futures), total=len(futures), desc="Copying blobs", unit="file"):
+                pass  # Progress bar tick
+
 
     def _bulk_copy_files(self, file_list: list[str], src_dir: str, dst_dir: str, dest_names: list[str]=None, max_workers: int=20):
         """
@@ -295,19 +328,20 @@ class DatasetProcessor(ABC):
             for _ in tqdm(as_completed(futures), total=len(futures), desc="Copying files", unit="file"):
                 pass  # Just update the progress bar
 
-    def _get_img_ids_names(self, raw_image_path: str):
+    def _get_img_ids_names(self, raw_image_path: str, include_prefixes=False):
         """
         This function takes a path to the raw images (named by IDs) and gets a list of their IDs and filenames.
 
         Corresponding image IDs and filenames are at the same indices in the lists.
 
         @param raw_image_path: The path to the raw images.
-        @returns: A list containing the image IDs extracted from the filenames.
+        @param include_prefixes: If True, include the full path of folders (e.g. raw/images/img.png). If False, just return the image names (e..g img.png).
+        @returns: Two lists: the first containing the image file names and the second containing the image IDs.
         """
         if not raw_image_path.endswith('/'): raw_image_path += '/'
         print("Raw image path:")
         print(raw_image_path)
-        img_files = self._list_files_in_folder(raw_image_path, exclude_dir=True, include_prefixes=False)
+        img_files = self._list_files_in_folder(raw_image_path, exclude_dir=True, include_prefixes=include_prefixes)
         print(img_files[0:10])
         img_ids = [os.path.splitext(f)[0] for f in img_files]
         return img_files, img_ids
