@@ -34,7 +34,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         print(f"{scap_name_path_map.shape[0]} SkinCAP images found.")
 
         # if two images have same ID, only keep one copy
-        scap_name_path_map = scap_name_path_map.drop_duplicates(subset=["image_id"])
+        scap_name_path_map = scap_name_path_map.drop_duplicates(subset=["scap_img_id"])
         print(f"{scap_name_path_map.shape[0]} SkinCAP images left after deduplicating by ID.")
         print(scap_name_path_map.head())
 
