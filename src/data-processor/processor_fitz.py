@@ -68,27 +68,28 @@ class DatasetProcessorFitz(DatasetProcessor):
         full_mapping = full_mapping[no_fitz_raw_flg]
         print(full_mapping.head())
 
-        # strip full_mapping down to a simple map from source to destination
+        if full_mapping.shape[0] > 0:
+            # strip full_mapping down to a simple map from source to destination
 
-        # get extension of SkinCAP image
-        full_mapping["extension"] = full_mapping["scap_img_path"].apply(lambda x: os.path.splitext(x)[1])
+            # get extension of SkinCAP image
+            full_mapping["extension"] = full_mapping["scap_img_path"].apply(lambda x: os.path.splitext(x)[1])
 
-        # construct final path for image to go
-        full_mapping["dest_dir"] = [fitz_raw_imgs_dir] * full_mapping.shape[0]
-        full_mapping["dest_path"] = full_mapping.apply(lambda x: os.path.join(x['dest_dir'], f"{x['md5hash']}{x['extension']}"), axis=1)
+            # construct final path for image to go
+            full_mapping["dest_dir"] = [fitz_raw_imgs_dir] * full_mapping.shape[0]
+            full_mapping["dest_path"] = full_mapping.apply(lambda x: os.path.join(x['dest_dir'], f"{x['md5hash']}{x['extension']}"), axis=1)
 
-        # simplify full_mapping
-        full_mapping = full_mapping[['scap_img_path', 'dest_path']]
+            # simplify full_mapping
+            full_mapping = full_mapping[['scap_img_path', 'dest_path']]
 
-        # sanity checks (remove if it turns out SkinCAP dataset does not have all PNGs)
-        # NOTE: the purpose of these is to abort the copy if there is a bug in this code
-        assert full_mapping['scap_img_path'].str.endswith(".png").all(), "There are non-PNG images in the SkinCAP dataset"
-        assert full_mapping['dest_path'].str.endswith(".png").all(), "File extensions were changed incorrectly"
+            # sanity checks (remove if it turns out SkinCAP dataset does not have all PNGs)
+            # NOTE: the purpose of these is to abort the copy if there is a bug in this code
+            assert full_mapping['scap_img_path'].str.endswith(".png").all(), "There are non-PNG images in the SkinCAP dataset"
+            assert full_mapping['dest_path'].str.endswith(".png").all(), "File extensions were changed incorrectly"
 
-        full_mapping.to_csv("tmp_full_mapping.csv")
+            full_mapping.to_csv("tmp_full_mapping.csv")
 
-        # perform the copy
-        self._bulk_copy_blobs(full_mapping["scap_img_path"].to_list(), full_mapping["dest_path"].to_list())
+            # perform the copy
+            self._bulk_copy_blobs(full_mapping["scap_img_path"].to_list(), full_mapping["dest_path"].to_list())
 
     def filter_metadata(self, metadata: pd.DataFrame, raw_image_path: str) -> pd.DataFrame:
         """
