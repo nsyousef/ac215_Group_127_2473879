@@ -196,7 +196,7 @@ if __name__ == "__main__":
     fitz_metadata = dp.load_metadata(FITZ_META_PATH)
     scap_metadata = dp.load_metadata(SKINCAP_META_PATH)
     # This function copies extra images from the SkinCAP directories into the RAW data directory for Fitzpatrick.
-    dp.expand_raw_fitz_from_skincap(fitz_metadata, scap_metadata, FITZ_IMG_PATH, [SKINCAP_IMG_PATH_1, SKINCAP_IMG_PATH_2])
+    dp.expand_raw_fitz_from_skincap(scap_metadata, FITZ_IMG_PATH, [SKINCAP_IMG_PATH_1, SKINCAP_IMG_PATH_2])
     # Filter and copy everything to final folder
     metadata_filt = dp.filter_metadata(fitz_metadata, FITZ_IMG_PATH)
     metadata_ins = dp.format_metadata_csv(metadata_filt, "fitzpatrick17k", FITZ_IMG_PATH)
