@@ -45,7 +45,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         scap_meta["md5hash"] = scap_meta["ori_file_path"].apply(lambda x: os.path.splitext(x)[0])
 
         # merge filepaths with SkinCAP metadata
-        scap_meta = scap_meta.merge(scap_name_path_map, left_on="id", right_on="image_id", validate="1:1").drop("id", axis=1)
+        scap_meta = scap_meta.merge(scap_name_path_map, left_on="id", right_on="scap_img_id", validate="1:1").drop("id", axis=1)
 
         # filter to only include SkinCAP images from Fitzpatrick
         scap_in_fitz_flg = scap_meta["source"] == "fitzpatrick17k"
