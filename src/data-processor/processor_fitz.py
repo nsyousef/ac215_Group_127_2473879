@@ -26,9 +26,9 @@ class DatasetProcessorFitz(DatasetProcessor):
         all_scap_ids = []
         for scap_dir in scap_raw_imgs_dirs:
             fitz_filepaths, fitz_img_ids = self._get_img_ids_names(scap_dir, include_prefixes=True)
-            # drop .DS_Store
+            # drop .DS_Store and convert IDs to ints
             fitz_filepaths = [path for path in fitz_filepaths if not path.endswith(".DS_Store")]
-            fitz_img_ids = [id for id in fitz_img_ids if not id.endswith(".DS_Store")]
+            fitz_img_ids = [int(id) for id in fitz_img_ids if not id.endswith(".DS_Store")]
             all_scap_paths += fitz_filepaths
             all_scap_ids += fitz_img_ids
 
