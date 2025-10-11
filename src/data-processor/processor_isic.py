@@ -21,6 +21,9 @@ class DatasetProcessorIsic(DatasetProcessor):
         keep_flgs = metadata["diagnosis_3"].notna() & metadata['image_type'].astype(str).str.strip().isin(valid_types)
         metadata_filt = metadata[keep_flgs]
 
+        print("Filtered metadata shape:")
+        print(metadata_filt.shape)
+
         return metadata_filt
 
     def format_metadata_csv(self, metadata, dataset, raw_image_path, **kwargs):
