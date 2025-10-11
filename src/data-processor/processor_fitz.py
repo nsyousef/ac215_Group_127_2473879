@@ -44,8 +44,8 @@ class DatasetProcessorFitz(DatasetProcessor):
         # only keep necessary columns of SkinCAP metadata
         scap_meta = scap_meta[["id", "skincap_file_path", "ori_file_path", "source"]]
 
-        # add md5sum to skincap metadata
-        scap_meta["md5sum"] = scap_meta["ori_file_path"].apply(lambda x: os.path.splitext(x)[0])
+        # add md5hash to skincap metadata
+        scap_meta["md5hash"] = scap_meta["ori_file_path"].apply(lambda x: os.path.splitext(x)[0])
 
         # merge filepaths with SkinCAP metadata
         scap_meta = scap_meta.merge(scap_name_path_map, left_on="id", right_on="scap_img_id", validate="1:1").drop("id", axis=1)
@@ -61,7 +61,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         print(f"We have {fitz_name_path_map.shape[0]} images in our Fitzpatrick raw data folder before adding SkinCAP images.")
 
         # merge Fitzpatrick images with SkinCAP mapping
-        full_mapping = scap_meta.merge(fitz_name_path_map, how="outer", on="md5sum", suffixes=["scap_", "fitz_"])
+        full_mapping = scap_meta.merge(fitz_name_path_map, how="outer", left_on="md5hash", right_on="fitz_image_id" suffixes=["scap_", "fitz_"])
 
         # filter for images for which we don't already have Fitzpatrick raw data (we only need to copy these)
         no_fitz_raw_flg = full_mapping["fitz_image_id"].isna()
@@ -75,7 +75,7 @@ class DatasetProcessorFitz(DatasetProcessor):
 
         # construct final path for image to go
         full_mapping["dest_dir"] = [fitz_raw_imgs_dir] * full_mapping.shape[0]
-        full_mapping["dest_path"] = full_mapping.apply(lambda x: os.path.join(x['dest_dir'], f"{x['md5sum']}{x['extension']}"), axis=1)
+        full_mapping["dest_path"] = full_mapping.apply(lambda x: os.path.join(x['dest_dir'], f"{x['md5hash']}{x['extension']}"), axis=1)
 
         # simplify full_mapping
         full_mapping = full_mapping[['scap_img_path', 'dest_path']]
