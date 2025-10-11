@@ -335,7 +335,7 @@ class DatasetProcessor(ABC):
         Corresponding image IDs and filenames are at the same indices in the lists.
 
         @param raw_image_path: The path to the raw images.
-        @param include_prefixes: If True, include the full path of folders (e.g. raw/images/img.png). If False, just return the image names (e..g img.png).
+        @param include_prefixes: If True, include the full path of folders (e.g. raw/images/img.png). If False, just return the image names (e.g. img.png).
         @returns: Two lists: the first containing the image file names and the second containing the image IDs.
         """
         if not raw_image_path.endswith('/'): raw_image_path += '/'
