@@ -88,7 +88,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         full_mapping.to_csv("tmp_full_mapping.csv")
 
         # perform the copy
-        # self._bulk_copy_blobs(full_mapping["scap_img_path"].to_list(), full_mapping["dest_path"].to_list())
+        self._bulk_copy_blobs(full_mapping["scap_img_path"].to_list(), full_mapping["dest_path"].to_list())
 
     def filter_metadata(self, metadata: pd.DataFrame, raw_image_path: str) -> pd.DataFrame:
         """
