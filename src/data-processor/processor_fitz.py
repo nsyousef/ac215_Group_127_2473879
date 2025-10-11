@@ -61,7 +61,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         print(f"We have {fitz_name_path_map.shape[0]} images in our Fitzpatrick raw data folder before adding SkinCAP images.")
 
         # merge Fitzpatrick images with SkinCAP mapping
-        full_mapping = scap_meta.merge(fitz_name_path_map, how="outer", left_on="md5hash", right_on="fitz_image_id" suffixes=["scap_", "fitz_"])
+        full_mapping = scap_meta.merge(fitz_name_path_map, how="outer", left_on="md5hash", right_on="fitz_image_id", suffixes=["scap_", "fitz_"])
 
         # filter for images for which we don't already have Fitzpatrick raw data (we only need to copy these)
         no_fitz_raw_flg = full_mapping["fitz_image_id"].isna()
