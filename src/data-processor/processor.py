@@ -344,4 +344,6 @@ class DatasetProcessor(ABC):
         img_files = self._list_files_in_folder(raw_image_path, exclude_dir=True, include_prefixes=include_prefixes)
         print(img_files[0:10])
         img_ids = [os.path.splitext(f)[0] for f in img_files]
+        if include_prefixes:
+            img_ids = [id.split("/")[-1] for id in img_ids]
         return img_files, img_ids
