@@ -12,14 +12,19 @@ class DatasetProcessorIsic(DatasetProcessor):
         @param metadata: A DataFrame of the original metadata.
         @returns: The filtered metadata.
         """
+        # drop columns not needed
+        columns_to_drop = ['attribution', "copyright_license", "acquisition_day"]
+        metadata_filt = metadata.drop(columns=columns_to_drop)
+
+        # filter rows
         valid_types = [
             "clinical: close-up",
             "TBP tile: close-up",
             "clinical: overview",
         ]
 
-        keep_flgs = metadata["diagnosis_3"].notna() & metadata['image_type'].astype(str).str.strip().isin(valid_types)
-        metadata_filt = metadata[keep_flgs]
+        keep_flgs = metadata_filt["diagnosis_3"].notna() & metadata_filt['image_type'].astype(str).str.strip().isin(valid_types)
+        metadata_filt = metadata_filt[keep_flgs]
 
         print("Filtered metadata shape:")
         print(metadata_filt.shape)
