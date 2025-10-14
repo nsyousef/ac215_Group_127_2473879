@@ -2,7 +2,7 @@
 
 # Data source configuration
 data:
-  use_local: true
+  use_local: False
   metadata_path: "../../data/metadata_all_harmonized.csv"  # Override default if needed
   img_prefix: "../../data"  # Override default if needed
   min_samples_per_label: 10
@@ -10,7 +10,7 @@ data:
 # Training parameters
 training:
   batch_size: 32
-  num_workers: 4
+  num_workers: 0
   seed: 42
   prefetch_factor: 2
   num_epochs: 100
@@ -42,7 +42,7 @@ augmentation:
 
 # Statistics and sampling
 data_processing:
-  compute_stats: true
+  compute_stats: False
   weighted_sampling: true
   skip_errors: true
 
@@ -62,7 +62,7 @@ optimizer:
   weight_decay: 0.0001
   momentum: 0.9  # For SGD
   betas: [0.9, 0.999]  # For Adam/AdamW
-  eps: 1e-8
+  eps: 0.00000001
 
 # Output configuration
 output:

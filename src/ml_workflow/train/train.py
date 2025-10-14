@@ -112,25 +112,25 @@ class Trainer:
                           f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
                 
                     # Early stopping
-                    if val_loss < self.best_val_loss:
-                        self.best_val_loss = val_loss
-                        self.patience_counter = 0
-                        # Save best model
-                        self._save_checkpoint(epoch, val_loss, is_best=True)
-                    else:
-                        self.patience_counter += 1
+            if val_loss < self.best_val_loss:
+                self.best_val_loss = val_loss
+                self.patience_counter = 0
+                # Save best model
+                self._save_checkpoint(epoch, val_loss, is_best=True)
+            else:
+                self.patience_counter += 1
                         
-                    if self.patience_counter >= patience:
-                        logger.info(f"Early stopping at epoch {epoch+1}")
-                        break
-                else:
-                    logger.info(f"Epoch {epoch+1}/{num_epochs} - "
-                              f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
+            if self.patience_counter >= patience:
+                logger.info(f"Early stopping at epoch {epoch+1}")
+                break
+            else:
+                logger.info(f"Epoch {epoch+1}/{num_epochs} - "
+                    f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
                 
-                # Save regular checkpoint
-                save_frequency = self.checkpoint_config.get('save_frequency', 10)
-                if (epoch + 1) % save_frequency == 0:
-                    self._save_checkpoint(epoch, train_loss, is_best=False)
+            # Save regular checkpoint
+            save_frequency = self.checkpoint_config.get('save_frequency', 10)
+            if (epoch + 1) % save_frequency == 0:
+                self._save_checkpoint(epoch, train_loss, is_best=False)
             
             logger.info("Training completed!")
     

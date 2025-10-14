@@ -18,7 +18,7 @@ class ImageNetModel(nn.Module):
         Args:
             model_config: Dictionary containing model configuration parameters
         """
-        super(ImageNetModel, self).__init__()
+        super().__init__()
         
         # Extract configuration parameters
         self.model_name = model_config['name']
@@ -27,7 +27,7 @@ class ImageNetModel(nn.Module):
         self.hidden_sizes = model_config['hidden_sizes']
         self.activation = model_config['activation']
         self.dropout_rate = model_config['dropout_rate']
-        
+        self.img_size = model_config['img_size']
         # Initialize loss function
         self.loss_fn = nn.CrossEntropyLoss()
         

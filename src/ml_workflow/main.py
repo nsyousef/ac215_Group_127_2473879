@@ -13,7 +13,6 @@ from constants import (
     GCS_IMAGE_PREFIX,
 )
 
-
 def initialize_model(config_path):
     """Initialize model and training setup"""
     
@@ -55,7 +54,7 @@ def initialize_model(config_path):
         splits_config=splits_config,
         image_config=image_config,
         data_processing_config=data_processing_config,
-        augmentation_config=augmentation_config
+        augmentation_config=augmentation_config,
     )
     
     logger.info("DataLoader Info:")
@@ -63,8 +62,8 @@ def initialize_model(config_path):
     logger.info(f"  Train size: {info['train_size']}")
     logger.info(f"  Val size: {info['val_size']}")
     logger.info(f"  Test size: {info['test_size']}")
-    logger.info(f"  Mean: {info['mean']}")
-    logger.info(f"  Std: {info['std']}")
+    #logger.info(f"  Mean: {info['mean']}")
+    #logger.info(f"  Std: {info['std']}")
     logger.info(f"  Image size: {info['img_size']}")
     logger.info(f"  Batch size: {info['batch_size']}")
     logger.info("Dataloaders ready!")
@@ -72,6 +71,7 @@ def initialize_model(config_path):
     # Update model config with number of classes from data
     model_config = config['model'].copy()
     model_config['num_classes'] = info['num_classes']
+    model_config['img_size'] = config['image']['size']
     
     # Initialize model
     logger.info("Initializing model...")

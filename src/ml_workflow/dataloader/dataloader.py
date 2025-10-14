@@ -4,13 +4,13 @@ import pandas as pd
 from PIL import Image, UnidentifiedImageError
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from typing import Optional, List, Callable, Tuple, Dict, Any
-
+import torch 
 import fsspec
 
 from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL
 from utils import (logger, stratified_split)
 from .transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
-
+    
 class ImageDataset(Dataset):
     """PyTorch Dataset for images from GCS or local storage"""
     
@@ -58,6 +58,8 @@ class ImageDataset(Dataset):
         """Load and return image and label with error handling"""
         max_retries = 3
         attempts = 0
+        import time
+        stime = time.time()
         
         while attempts < max_retries:
             try:
@@ -89,7 +91,7 @@ class ImageDataset(Dataset):
                 
                 if self.transform:
                     img = self.transform(img)
-                
+                print(f"Time taken to get 1 image: {time.time() - stime}")
                 return img, label
                 
             except (FileNotFoundError, UnidentifiedImageError, OSError, ValueError, KeyError) as e:
@@ -116,6 +118,7 @@ class ImageDataset(Dataset):
         raise RuntimeError(f"Unable to load any image starting from index {idx}")
 
 
+
 def create_dataloaders(
     metadata_df: pd.DataFrame,
     img_prefix: str,
@@ -124,7 +127,7 @@ def create_dataloaders(
     splits_config: dict,
     image_config: dict,
     data_processing_config: dict,
-    augmentation_config: dict
+    augmentation_config: dict,
 ) -> Tuple[DataLoader, DataLoader, Optional[DataLoader], Dict[str, Any]]:
     """
     Create train, validation, and optional test DataLoaders.
@@ -138,7 +141,7 @@ def create_dataloaders(
         image_config: Image configuration dictionary
         data_processing_config: Data processing configuration dictionary
         augmentation_config: Augmentation configuration dictionary
-
+        worker_init_fn: Function to initialize worker
     Returns:
         (train_loader, val_loader, test_loader, info_dict)
         val_loader is None if val_size is not provided
@@ -159,7 +162,7 @@ def create_dataloaders(
     weighted_sampling = data_processing_config['weighted_sampling']
     skip_errors = data_processing_config['skip_errors']
     
-    # Determine image prefix
+    # Determine image prefix and adjust num_workers for GCS
     if use_local:
         img_prefix = local_img_dir
         logger.info(f"Using local images from: {img_prefix}")
@@ -192,7 +195,11 @@ def create_dataloaders(
         )
         mean, std = compute_dataset_stats(temp_loader)
     else:
-        raise ValueError("compute_stats must be True - mean/std computation is required")
+        # Use default ImageNet statistics if not computing from data
+        mean = [0.485, 0.456, 0.406]
+        std = [0.229, 0.224, 0.225]
+
+
     
     # Create datasets
     train_dataset = ImageDataset(
@@ -214,7 +221,7 @@ def create_dataloaders(
         val_dataset = None
     
     # Create dataloaders with optional weighted sampling
-    dataloader_kwargs = {'batch_size': batch_size, 'num_workers': num_workers, 'prefetch_factor': prefetch_factor, 'pin_memory': True}
+    dataloader_kwargs = {'batch_size': batch_size, 'num_workers': num_workers, 'prefetch_factor': prefetch_factor if num_workers > 0 else None, 'pin_memory': True}
     
     if weighted_sampling:
         # Compute class weights for balanced sampling
@@ -242,7 +249,7 @@ def create_dataloaders(
         'train_size': len(train_dataset), 
         'test_size': len(test_dataset),
         'val_size': len(val_dataset) if val_dataset is not None else 0,
-        'mean': mean, 'std': std, 'img_size': img_size, 'batch_size': batch_size,
+        'img_size': img_size, 'batch_size': batch_size,
         'failed_images': {
             'train': train_dataset.failed_images,
             'test': test_dataset.failed_images,
