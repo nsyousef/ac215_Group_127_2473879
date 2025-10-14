@@ -1,18 +1,14 @@
 """Utility functions for dataloader pipeline"""
-
 import logging
 import pandas as pd
 import torch
+import os
+from datetime import datetime
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-from typing import Tuple, List
-
-from config import (
-    MIN_IMAGES_PER_LABEL, DEFAULT_SEED, DEFAULT_IMAGE_SIZE,
-    BRIGHTNESS_JITTER, CONTRAST_JITTER, SATURATION_JITTER
-)
+from typing import Tuple, List, Dict, Any, Optional
 
 # Setup logging
 def setup_logger(name: str = __name__, level: int = logging.INFO) -> logging.Logger:
@@ -30,57 +26,7 @@ def setup_logger(name: str = __name__, level: int = logging.INFO) -> logging.Log
 
 logger = setup_logger()
 
-# Transform functions
-def get_basic_transform(img_size: Tuple[int, int] = DEFAULT_IMAGE_SIZE) -> transforms.Compose:
-    """Basic transform for computing statistics"""
-    return transforms.Compose([transforms.Resize(img_size), transforms.ToTensor()])
-
-def get_train_transform(mean: List[float], std: List[float], img_size: Tuple[int, int] = DEFAULT_IMAGE_SIZE,
-                       use_advanced_augmentation: bool = False) -> transforms.Compose:
-    """
-    Training transform with augmentation
-    
-    Args:
-        mean: Channel-wise mean for normalization
-        std: Channel-wise std for normalization
-        img_size: Target image size
-        use_advanced_augmentation: If True, use additional augmentations (rotation, random crops, etc.)
-    """
-    if use_advanced_augmentation:
-        transform_list = [
-            transforms.Resize(int(img_size[0] * 1.1)),  # Slightly larger for random crop
-            transforms.RandomCrop(img_size),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomVerticalFlip(p=0.5),
-            transforms.RandomRotation(degrees=20),
-            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
-            transforms.ColorJitter(brightness=BRIGHTNESS_JITTER, contrast=CONTRAST_JITTER, 
-                                 saturation=SATURATION_JITTER, hue=0.05),
-            transforms.RandomGrayscale(p=0.1),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std)
-        ]
-    else:
-        transform_list = [
-            transforms.Resize(img_size),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.ColorJitter(brightness=BRIGHTNESS_JITTER, contrast=CONTRAST_JITTER, saturation=SATURATION_JITTER),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std)
-        ]
-    
-    return transforms.Compose(transform_list)
-
-def get_test_valid_transform(mean: List[float], std: List[float], img_size: Tuple[int, int] = DEFAULT_IMAGE_SIZE) -> transforms.Compose:
-    """Validation transform without augmentation"""
-    return transforms.Compose([
-        transforms.Resize(img_size),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std)
-    ])
-
-def load_metadata(source: str, min_samples: int = MIN_IMAGES_PER_LABEL) -> pd.DataFrame:
+def load_metadata(source: str, min_samples: int) -> pd.DataFrame:
     """
     Load metadata from GCS or local file and filter by minimum samples
     
@@ -102,30 +48,7 @@ def load_metadata(source: str, min_samples: int = MIN_IMAGES_PER_LABEL) -> pd.Da
     
     return metadata
 
-def compute_dataset_stats(dataloader: DataLoader, num_channels: int = 3) -> Tuple[List[float], List[float]]:
-    """Compute channel-wise mean and std"""
-    logger.info("Computing dataset statistics...")
-    mean = torch.zeros(num_channels)
-    std = torch.zeros(num_channels)
-    total_images = 0
-
-    for imgs, _ in tqdm(dataloader, desc="Computing stats"):
-        batch_samples = imgs.size(0)
-        imgs = imgs.view(batch_samples, imgs.size(1), -1)
-        mean += imgs.mean(2).sum(0)
-        std += imgs.std(2).sum(0)
-        total_images += batch_samples
-
-    mean /= total_images
-    std /= total_images
-    mean_list, std_list = mean.tolist(), std.tolist()
-    
-    logger.info(f"Mean: {mean_list}")
-    logger.info(f"Std: {std_list}")
-    
-    return mean_list, std_list
-
-def stratified_split(df: pd.DataFrame, label_col: str = "label", test_size: float = 0.2, val_size: float = None, seed: int = DEFAULT_SEED) -> Tuple[pd.DataFrame, ...]:
+def stratified_split(df: pd.DataFrame, label_col: str = "label", test_size: float = 0.2, val_size: float = None, seed: int = 42) -> Tuple[pd.DataFrame, ...]:
     """Split data into train/test or train/val/test sets with stratification"""
     if val_size is None:
         train_df, test_df = train_test_split(df, test_size=test_size, stratify=df[label_col], random_state=seed)
@@ -154,3 +77,172 @@ def analyze_class_distribution(df: pd.DataFrame, label_col: str = "label") -> pd
     logger.info(f"Median samples per class: {distribution['count'].median():.1f}")
     
     return distribution
+
+
+def save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer, 
+                   epoch: int, loss: float, config: Dict[str, Any], 
+                   save_dir: str, experiment_name: str, is_best: bool = False,
+                   additional_info: Optional[Dict[str, Any]] = None) -> str:
+    """
+    Save model checkpoint
+    
+    Args:
+        model: PyTorch model
+        optimizer: PyTorch optimizer
+        epoch: Current epoch number
+        loss: Current loss value
+        config: Configuration dictionary
+        save_dir: Directory to save checkpoints
+        experiment_name: Name of the experiment
+        is_best: Whether this is the best model so far
+        additional_info: Additional information to save
+        
+    Returns:
+        Path to saved checkpoint
+    """
+    # Create save directory if it doesn't exist
+    os.makedirs(save_dir, exist_ok=True)
+    
+    # Prepare checkpoint data
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': loss,
+        'config': config,
+        'timestamp': datetime.now().isoformat(),
+        'experiment_name': experiment_name
+    }
+    
+    # Add additional info if provided
+    if additional_info:
+        checkpoint.update(additional_info)
+    
+    # Determine filename
+    if is_best:
+        filename = f"{experiment_name}_best.pth"
+    else:
+        filename = f"{experiment_name}_epoch_{epoch:03d}.pth"
+    
+    filepath = os.path.join(save_dir, filename)
+    
+    # Save checkpoint
+    torch.save(checkpoint, filepath)
+    
+    if is_best:
+        logger.info(f"Best model saved to: {filepath}")
+    else:
+        logger.info(f"Checkpoint saved to: {filepath}")
+    
+    return filepath
+
+
+def load_checkpoint(checkpoint_path: str, model: torch.nn.Module, 
+                   optimizer: Optional[torch.optim.Optimizer] = None,
+                   device: Optional[torch.device] = None) -> Dict[str, Any]:
+    """
+    Load model checkpoint
+    
+    Args:
+        checkpoint_path: Path to checkpoint file
+        model: PyTorch model to load state into
+        optimizer: PyTorch optimizer to load state into (optional)
+        device: Device to load checkpoint on (optional)
+        
+    Returns:
+        Dictionary containing checkpoint information
+    """
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    
+    logger.info(f"Loading checkpoint from: {checkpoint_path}")
+    
+    # Load checkpoint
+    if device is not None:
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+    else:
+        checkpoint = torch.load(checkpoint_path)
+    
+    # Load model state
+    model.load_state_dict(checkpoint['model_state_dict'])
+    
+    # Load optimizer state if provided
+    if optimizer is not None and 'optimizer_state_dict' in checkpoint:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    # Log checkpoint info
+    epoch = checkpoint.get('epoch', 'unknown')
+    loss = checkpoint.get('loss', 'unknown')
+    timestamp = checkpoint.get('timestamp', 'unknown')
+    
+    logger.info(f"Loaded checkpoint - Epoch: {epoch}, Loss: {loss}, Timestamp: {timestamp}")
+    
+    return checkpoint
+
+
+def get_latest_checkpoint(save_dir: str, experiment_name: str) -> Optional[str]:
+    """
+    Get the path to the latest checkpoint for an experiment
+    
+    Args:
+        save_dir: Directory containing checkpoints
+        experiment_name: Name of the experiment
+        
+    Returns:
+        Path to latest checkpoint or None if not found
+    """
+    if not os.path.exists(save_dir):
+        return None
+    
+    # Look for checkpoint files
+    checkpoint_files = []
+    for filename in os.listdir(save_dir):
+        if filename.startswith(experiment_name) and filename.endswith('.pth'):
+            filepath = os.path.join(save_dir, filename)
+            # Get modification time
+            mtime = os.path.getmtime(filepath)
+            checkpoint_files.append((filepath, mtime))
+    
+    if not checkpoint_files:
+        return None
+    
+    # Return the most recent checkpoint
+    latest_checkpoint = max(checkpoint_files, key=lambda x: x[1])
+    return latest_checkpoint[0]
+
+
+def cleanup_old_checkpoints(save_dir: str, experiment_name: str, keep_last: int = 5):
+    """
+    Clean up old checkpoint files, keeping only the most recent ones
+    
+    Args:
+        save_dir: Directory containing checkpoints
+        experiment_name: Name of the experiment
+        keep_last: Number of recent checkpoints to keep
+    """
+    if not os.path.exists(save_dir):
+        return
+    
+    # Get all checkpoint files (excluding best model)
+    checkpoint_files = []
+    for filename in os.listdir(save_dir):
+        if (filename.startswith(experiment_name) and 
+            filename.endswith('.pth') and 
+            'best' not in filename):
+            filepath = os.path.join(save_dir, filename)
+            mtime = os.path.getmtime(filepath)
+            checkpoint_files.append((filepath, mtime))
+    
+    if len(checkpoint_files) <= keep_last:
+        return
+    
+    # Sort by modification time (newest first)
+    checkpoint_files.sort(key=lambda x: x[1], reverse=True)
+    
+    # Remove old checkpoints
+    for filepath, _ in checkpoint_files[keep_last:]:
+        try:
+            os.remove(filepath)
+            logger.info(f"Removed old checkpoint: {filepath}")
+        except OSError as e:
+            logger.warning(f"Failed to remove checkpoint {filepath}: {e}")
