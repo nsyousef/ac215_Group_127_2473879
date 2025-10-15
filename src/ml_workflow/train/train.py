@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
 from utils import logger, save_checkpoint, load_checkpoint, cleanup_old_checkpoints
+import time
 
 
 class Trainer:
@@ -142,7 +143,9 @@ class Trainer:
         total = 0
         
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Training")
+        stime = time.time()
         for batch_idx, (data, target) in enumerate(pbar):
+            #print(f"Time taken: {time.time() - stime}")
             # Move data to device
             data, target = data.to(self.device), target.to(self.device)
             
@@ -168,6 +171,7 @@ class Trainer:
                 'Loss': f'{loss.item():.4f}',
                 'Acc': f'{100. * correct / total:.2f}%'
             })
+            stime = time.time()
         
         avg_loss = total_loss / len(self.train_loader)
         accuracy = 100. * correct / total

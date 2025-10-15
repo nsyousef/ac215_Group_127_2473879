@@ -10,7 +10,7 @@ data:
 # Training parameters
 training:
   batch_size: 16
-  num_workers: 0
+  num_workers: 4
   seed: 42
   prefetch_factor: 2
   num_epochs: 100

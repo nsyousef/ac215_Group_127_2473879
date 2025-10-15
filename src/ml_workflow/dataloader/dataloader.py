@@ -1,10 +1,11 @@
-"""DataLoader with support for both GCS and local file storage"""
+"""DataLoader with support for both GCS and local file storage - FIXED for multiprocessing"""
 
 import pandas as pd
 from PIL import Image, UnidentifiedImageError
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from typing import Optional, List, Callable, Tuple, Dict, Any
 import torch 
+import time
 import fsspec
 
 from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL
@@ -12,7 +13,7 @@ from utils import (logger, stratified_split)
 from dataloader.transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
     
 class ImageDataset(Dataset):
-    """PyTorch Dataset for images from GCS or local storage"""
+    """PyTorch Dataset for images from GCS or local storage - multiprocessing safe"""
     
     def __init__(self, df: pd.DataFrame, img_col: str, label_col: str, img_prefix: str = "", 
                  transform: Optional[Callable] = None, classes: Optional[List[str]] = None, 
@@ -28,19 +29,19 @@ class ImageDataset(Dataset):
             convert_mode: PIL image mode ('RGB' or 'L')
             skip_errors: If True, skip corrupted images and log warning; if False, raise error
         """
-        self.df = df
-        self.img_col = img_col
-        self.label_col = label_col
+        # Convert DataFrame to lists for faster, multiprocessing-safe access
+        self.image_paths = df[img_col].astype(str).tolist()
+        self.labels_raw = df[label_col].astype(str).tolist()
+        
         self.img_prefix = img_prefix.rstrip("/")
         self.convert_mode = convert_mode
         self.transform = transform
         self.skip_errors = skip_errors
-        self.failed_images = []
         
         # Determine if using GCS or local
         self.use_gcs = self.img_prefix.startswith("gs://")
         
-        self._fs = None
+        # Don't store filesystem - create per access to avoid pickling issues
         
         if self.use_gcs:
             logger.info("Using GCS storage")
@@ -49,34 +50,38 @@ class ImageDataset(Dataset):
 
         # Setup classes
         if classes is None:
-            classes = sorted(self.df[label_col].astype(str).unique().tolist())
+            classes = sorted(set(self.labels_raw))
         self.classes = list(classes)
         self.class_to_idx = {c: i for i, c in enumerate(self.classes)}
+        
+        # Pre-compute integer labels for faster access
+        self.labels = [self.class_to_idx[label] for label in self.labels_raw]
 
     def __len__(self) -> int:
-        return len(self.df)
+        return len(self.image_paths)
 
     def _get_fs(self):
-        """Lazy initialization of filesystem per worker"""
-        if self._fs is None and self.use_gcs:
-            self._fs = fsspec.filesystem("gs")
-        return self._fs
+        """Create filesystem instance per access - multiprocessing safe"""
+        if self.use_gcs:
+            return fsspec.filesystem("gs")
+        return None
     
-    def __getitem__(self, idx: int, _recursion_depth: int = 0):
+    def __getitem__(self, idx: int):
         """Load and return image and label with error handling"""
         max_retries = 3
-        max_recursion = 5
         attempts = 0
+        last_error = None
+        stime = time.time()
         
         while attempts < max_retries:
             path = "unknown"
             try:
-                # Get current index (may change if we skip)
-                current_idx = (idx + attempts) % len(self.df)
-                row = self.df.iloc[current_idx]
-                filename = str(row[self.img_col]).lstrip("/")
-                path = f"{self.img_prefix}/{filename}"
-                label = self.class_to_idx[str(row[self.label_col])]
+                # Try current index first, then nearby indices as fallback
+                current_idx = (idx + attempts) % len(self.image_paths)
+                
+                filename = self.image_paths[current_idx].lstrip("/")
+                path = f"{self.img_prefix}/{filename}" if self.img_prefix else filename
+                label = self.labels[current_idx]
                 
                 # Load image from GCS or local
                 if self.use_gcs:
@@ -87,38 +92,40 @@ class ImageDataset(Dataset):
                 else:
                     with open(path, "rb") as f:
                         img = Image.open(f).convert(self.convert_mode)
-                        img.load()  # Force load into memory
+                        img.load()
                 
                 if self.transform:
                     img = self.transform(img)
-                
+                #print(f"Time taken: {time.time() - stime}")
                 return img, label
                 
-            except (FileNotFoundError, UnidentifiedImageError, OSError, ValueError, KeyError) as e:
-                error_msg = f"Error loading image at index {current_idx} (path: {path}): {type(e).__name__}: {str(e)}"
-                
-                if current_idx not in self.failed_images:
-                    self.failed_images.append(current_idx)
-                    logger.warning(error_msg)
-                
-                if not self.skip_errors:
-                    raise RuntimeError(error_msg) from e
-                
-                # Try next image
+            except Exception as e:
+                last_error = e
                 attempts += 1
                 
-                if attempts >= max_retries:
-                    # Prevent infinite recursion
-                    if _recursion_depth >= max_recursion:
-                        raise RuntimeError(f"Max recursion depth reached. Too many corrupted images starting from index {idx}")
-                    
-                    # Return a random valid image as fallback
-                    logger.error(f"Failed to load image after {max_retries} attempts. Using fallback.")
-                    fallback_idx = (idx + max_retries) % len(self.df)
-                    return self.__getitem__(fallback_idx, _recursion_depth + 1)
+                # Only print on first attempt to reduce spam (use print, not logger, for multiprocessing)
+                if attempts == 1 and self.skip_errors:
+                    print(f"Warning: Failed to load image at idx {current_idx} ({path}): {type(e).__name__}")
+                
+                if not self.skip_errors:
+                    raise RuntimeError(f"Error loading image at index {idx} (path: {path}): {type(e).__name__}: {str(e)}") from e
         
-        # This should never be reached, but just in case
-        raise RuntimeError(f"Unable to load any image starting from index {idx}")
+        # If all retries failed
+        if self.skip_errors:
+            # Return a black/white image as fallback
+            print(f"Error: All retries failed for index {idx}, returning blank image")
+            if self.convert_mode == 'RGB':
+                img = Image.new('RGB', (224, 224), (0, 0, 0))
+            else:
+                img = Image.new('L', (224, 224), 0)
+            
+            if self.transform:
+                img = self.transform(img)
+            
+            return img, self.labels[idx % len(self.labels)]
+        else:
+            raise RuntimeError(f"Failed to load image at index {idx} after {max_retries} attempts") from last_error
+
 
 def create_dataloaders(
     metadata_df: pd.DataFrame,
@@ -148,7 +155,7 @@ def create_dataloaders(
     """
     logger.info("Creating DataLoaders")
     
-    # Extract values from config dictionaries (no defaults to prevent unintended errors)
+    # Extract values from config dictionaries
     use_local = data_config['use_local']
     local_img_dir = data_config['img_prefix']
     batch_size = training_config['batch_size']
@@ -169,7 +176,7 @@ def create_dataloaders(
     elif not img_prefix:
         logger.warning("No img_prefix provided, using paths as-is")
     
-    # Enable persistent_workers for better performance
+    # Enable persistent_workers for better performance (but only if num_workers > 0)
     use_persistent_workers = num_workers > 0
     
     # Split data (train/test or train/val/test)
@@ -222,12 +229,17 @@ def create_dataloaders(
         val_dataset = None
     
     # Create dataloaders with optional weighted sampling
+    # CRITICAL: Use 'spawn' for GCS to avoid fsspec connection issues
+    import multiprocessing
+    mp_context = multiprocessing.get_context('spawn') if num_workers > 0 else None
+    
     dataloader_kwargs = {
         'batch_size': batch_size, 
         'num_workers': num_workers, 
         'prefetch_factor': prefetch_factor if num_workers > 0 else None, 
         'pin_memory': torch.cuda.is_available(),
-        'persistent_workers': use_persistent_workers
+        'persistent_workers': use_persistent_workers,
+        'multiprocessing_context': mp_context
     }
     
     if weighted_sampling:
@@ -258,11 +270,6 @@ def create_dataloaders(
         'val_size': len(val_dataset) if val_dataset is not None else 0,
         'mean': mean, 'std': std,
         'img_size': img_size, 'batch_size': batch_size,
-        'failed_images': {
-            'train': train_dataset.failed_images,
-            'test': test_dataset.failed_images,
-            'val': val_dataset.failed_images if val_dataset is not None else []
-        }
     }
     
     if val_loader is not None:
