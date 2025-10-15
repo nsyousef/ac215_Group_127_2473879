@@ -1,6 +1,6 @@
 # data-processor
 
-The purpose of this microservice is to convert the raw datasets into a finalized format for processing.
+The purpose of this microservice is to convert the raw datasets into a standardized format and conduct label harmonization. The final output file, `metadata_all_harmonized.csv`,  contains all the formatted metadata that is needed to start model training.
 
 ## Instructions to Run the data-processor Pipeline
 
@@ -19,8 +19,6 @@ To run your code:
 1) Clone this repo in a GCP Virtual Machine (you are welcome to use `data-processor` as it already has many dependencies installed).
 2) Build and run the docker image in interactive mode (see below).
 3) Within the Docker image, manually run the Python file for your dataset to process the data.
-
-NOTE: eventually we should set up a script to automate building and running the Docker image and running all the Python files in one command. We could even potentially make the script create the Google Cloud VM and delete it once it is done if you guys want. We can save this as a task for later though.
 
 ### Main Functions in Workflow
 
