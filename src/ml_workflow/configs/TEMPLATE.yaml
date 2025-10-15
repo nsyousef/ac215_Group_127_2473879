@@ -8,8 +8,8 @@ data:
   min_samples_per_label: 10
   datasets:
     - fitzpatrick17k
-    - ddi
-    - isic
+#    - ddi
+#    - isic
 
 # Training parameters
 training:
