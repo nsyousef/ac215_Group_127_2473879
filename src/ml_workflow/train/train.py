@@ -144,6 +144,7 @@ class Trainer:
         total_loss = 0.0
         correct = 0
         total = 0
+        accuracies = []
         
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Training")
         stime = time.time()
@@ -166,11 +167,12 @@ class Trainer:
             # Statistics
             total_loss += loss.item()
             pred = output.argmax(dim=1, keepdim=True)
-            correct += pred.eq(target.view_as(pred)).sum().item()
-            total += target.size(0)
+            correct = pred.eq(target.view_as(pred)).sum().item()
+            total = target.size(0)
 
             avg_running_loss = total_loss / (batch_idx + 1)
-            avg_running_acc = 100. * correct / total
+            accuracies.append(100. * correct / total)
+            avg_running_acc = np.mean(accuracies)
             
             # Update progress bar
             pbar.set_postfix({
@@ -180,7 +182,7 @@ class Trainer:
             stime = time.time()
         
         avg_loss = total_loss / len(self.train_loader)
-        accuracy = 100. * correct / total
+        accuracy = np.mean(accuracies)
 
         return avg_loss, accuracy
     
