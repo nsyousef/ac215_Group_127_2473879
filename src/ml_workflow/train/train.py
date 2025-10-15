@@ -144,6 +144,7 @@ class Trainer:
         total_loss = 0.0
         correct = 0
         total = 0
+        total_correct = 0
         
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Training")
         stime = time.time()
@@ -181,7 +182,7 @@ class Trainer:
             stime = time.time()
         
         avg_loss = total_loss / len(self.train_loader)
-        avg_ccuracy = 100. * total_correct / total
+        avg_accuracy = 100. * total_correct / total
 
         return avg_loss, avg_accuracy
     
