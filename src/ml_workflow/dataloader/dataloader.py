@@ -9,7 +9,7 @@ import fsspec
 
 from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL
 from utils import (logger, stratified_split)
-from .transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
+from dataloader.transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
     
 class ImageDataset(Dataset):
     """PyTorch Dataset for images from GCS or local storage"""
@@ -39,8 +39,10 @@ class ImageDataset(Dataset):
         
         # Determine if using GCS or local
         self.use_gcs = self.img_prefix.startswith("gs://")
+        
+        self._fs = None
+        
         if self.use_gcs:
-            self.fs = fsspec.filesystem("gs")
             logger.info("Using GCS storage")
         else:
             logger.info(f"Using local storage: {self.img_prefix or 'relative paths'}")
@@ -54,14 +56,20 @@ class ImageDataset(Dataset):
     def __len__(self) -> int:
         return len(self.df)
 
-    def __getitem__(self, idx: int):
+    def _get_fs(self):
+        """Lazy initialization of filesystem per worker"""
+        if self._fs is None and self.use_gcs:
+            self._fs = fsspec.filesystem("gs")
+        return self._fs
+    
+    def __getitem__(self, idx: int, _recursion_depth: int = 0):
         """Load and return image and label with error handling"""
         max_retries = 3
+        max_recursion = 5
         attempts = 0
-        import time
-        stime = time.time()
         
         while attempts < max_retries:
+            path = "unknown"
             try:
                 # Get current index (may change if we skip)
                 current_idx = (idx + attempts) % len(self.df)
@@ -72,30 +80,21 @@ class ImageDataset(Dataset):
                 
                 # Load image from GCS or local
                 if self.use_gcs:
-                    with self.fs.open(path, "rb") as f:
+                    fs = self._get_fs()
+                    with fs.open(path, "rb") as f:
                         img = Image.open(f).convert(self.convert_mode)
+                        img.load()
                 else:
                     with open(path, "rb") as f:
                         img = Image.open(f).convert(self.convert_mode)
-                
-                # Verify image is valid
-                img.verify()
-                
-                # Reload image after verify
-                if self.use_gcs:
-                    with self.fs.open(path, "rb") as f:
-                        img = Image.open(f).convert(self.convert_mode)
-                else:
-                    with open(path, "rb") as f:
-                        img = Image.open(f).convert(self.convert_mode)
+                        img.load()  # Force load into memory
                 
                 if self.transform:
                     img = self.transform(img)
-                print(f"Time taken to get 1 image: {time.time() - stime}")
+                
                 return img, label
                 
             except (FileNotFoundError, UnidentifiedImageError, OSError, ValueError, KeyError) as e:
-
                 error_msg = f"Error loading image at index {current_idx} (path: {path}): {type(e).__name__}: {str(e)}"
                 
                 if current_idx not in self.failed_images:
@@ -109,15 +108,17 @@ class ImageDataset(Dataset):
                 attempts += 1
                 
                 if attempts >= max_retries:
+                    # Prevent infinite recursion
+                    if _recursion_depth >= max_recursion:
+                        raise RuntimeError(f"Max recursion depth reached. Too many corrupted images starting from index {idx}")
+                    
                     # Return a random valid image as fallback
                     logger.error(f"Failed to load image after {max_retries} attempts. Using fallback.")
                     fallback_idx = (idx + max_retries) % len(self.df)
-                    return self.__getitem__(fallback_idx)
+                    return self.__getitem__(fallback_idx, _recursion_depth + 1)
         
         # This should never be reached, but just in case
         raise RuntimeError(f"Unable to load any image starting from index {idx}")
-
-
 
 def create_dataloaders(
     metadata_df: pd.DataFrame,
@@ -141,7 +142,6 @@ def create_dataloaders(
         image_config: Image configuration dictionary
         data_processing_config: Data processing configuration dictionary
         augmentation_config: Augmentation configuration dictionary
-        worker_init_fn: Function to initialize worker
     Returns:
         (train_loader, val_loader, test_loader, info_dict)
         val_loader is None if val_size is not provided
@@ -162,12 +162,15 @@ def create_dataloaders(
     weighted_sampling = data_processing_config['weighted_sampling']
     skip_errors = data_processing_config['skip_errors']
     
-    # Determine image prefix and adjust num_workers for GCS
+    # Determine image prefix
     if use_local:
         img_prefix = local_img_dir
         logger.info(f"Using local images from: {img_prefix}")
     elif not img_prefix:
         logger.warning("No img_prefix provided, using paths as-is")
+    
+    # Enable persistent_workers for better performance
+    use_persistent_workers = num_workers > 0
     
     # Split data (train/test or train/val/test)
     split_result = stratified_split(metadata_df, LABEL_COL, test_size, val_size, seed)
@@ -198,8 +201,6 @@ def create_dataloaders(
         # Use default ImageNet statistics if not computing from data
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
-
-
     
     # Create datasets
     train_dataset = ImageDataset(
@@ -221,7 +222,13 @@ def create_dataloaders(
         val_dataset = None
     
     # Create dataloaders with optional weighted sampling
-    dataloader_kwargs = {'batch_size': batch_size, 'num_workers': num_workers, 'prefetch_factor': prefetch_factor if num_workers > 0 else None, 'pin_memory': True}
+    dataloader_kwargs = {
+        'batch_size': batch_size, 
+        'num_workers': num_workers, 
+        'prefetch_factor': prefetch_factor if num_workers > 0 else None, 
+        'pin_memory': torch.cuda.is_available(),
+        'persistent_workers': use_persistent_workers
+    }
     
     if weighted_sampling:
         # Compute class weights for balanced sampling
@@ -249,6 +256,7 @@ def create_dataloaders(
         'train_size': len(train_dataset), 
         'test_size': len(test_dataset),
         'val_size': len(val_dataset) if val_dataset is not None else 0,
+        'mean': mean, 'std': std,
         'img_size': img_size, 'batch_size': batch_size,
         'failed_images': {
             'train': train_dataset.failed_images,

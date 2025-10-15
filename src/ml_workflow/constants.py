@@ -5,6 +5,10 @@ GCS_BUCKET_NAME = "derma-datasets-2"
 GCS_METADATA_PATH = f"gs://derma-datasets-2/final/metadata_all_harmonized.csv"
 GCS_IMAGE_PREFIX = f"gs://derma-datasets-2/final/imgs"
 
+# Local Storage Configuration (for testing/development)
+LOCAL_DATA_DIR = '../../data'
+LOCAL_METADATA_PATH = '../../data/metadata_all_harmonized.csv'
+
 # Image Configuration (typically fixed)
 DEFAULT_IMAGE_MODE = "RGB"
 
