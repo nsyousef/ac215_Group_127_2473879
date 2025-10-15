@@ -25,4 +25,11 @@ COPY --chown=app:app secrets/ ./secrets/
 RUN uv sync
 
 ENTRYPOINT ["/bin/bash"]
-CMD ["-c", "source /app/.venv/bin/activate && exec bash"]
+CMD ["-c", "\
+    source /app/.venv/bin/activate && \
+    python processor_ddi.py && \
+    python processor_fitz.py && \
+    python processor_skincap.py && \
+    python processor_isic.py && \
+    python harmonize_labels.py \
+"]
