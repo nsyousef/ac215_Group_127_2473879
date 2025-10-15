@@ -12,6 +12,34 @@ from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL
 from utils import (logger, stratified_split)
 from dataloader.transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
     
+# top of your dataloader file
+import gcsfs
+_worker_fs = None
+
+def _get_worker_fs():
+    # One FS per worker process (safe with DataLoader(multiprocessing))
+    global _worker_fs
+    if _worker_fs is None:
+        _worker_fs = gcsfs.GCSFileSystem(
+            token="cloud",          # uses VM service account if on GCP
+            cache_timeout=600,      # reuse bucket metadata
+            default_block_size=2**22,   # 1MB blocks; tune if needed
+            retry_reads=True
+        )
+    return _worker_fs
+
+def _worker_init_fn(_):
+    global _worker_fs
+    _worker_fs = None
+    _ = _get_worker_fs()
+    try:
+        import torch
+        torch.set_num_threads(1)  # avoid oversubscribing CPU in workers
+    except Exception:
+        pass
+
+
+
 class ImageDataset(Dataset):
     """PyTorch Dataset for images from GCS or local storage - multiprocessing safe"""
     
@@ -61,9 +89,8 @@ class ImageDataset(Dataset):
         return len(self.image_paths)
 
     def _get_fs(self):
-        """Create filesystem instance per access - multiprocessing safe"""
         if self.use_gcs:
-            return fsspec.filesystem("gs")
+            return _get_worker_fs()
         return None
     
     def __getitem__(self, idx: int):
@@ -85,18 +112,24 @@ class ImageDataset(Dataset):
                 
                 # Load image from GCS or local
                 if self.use_gcs:
+                    ptime = time.time()
                     fs = self._get_fs()
+                    #print(f"Time taken to get fs: {time.time() - ptime}")
+                    qtime = time.time()
                     with fs.open(path, "rb") as f:
-                        img = Image.open(f).convert(self.convert_mode)
-                        img.load()
+                        img = Image.open(f)
+                        img = img.convert(self.convert_mode)
+                    #print(f"Time taken to open image: {time.time() - qtime}")
                 else:
                     with open(path, "rb") as f:
                         img = Image.open(f).convert(self.convert_mode)
                         img.load()
                 
+                ttime = time.time()
                 if self.transform:
                     img = self.transform(img)
-                #print(f"Time taken: {time.time() - stime}")
+                #print(f"Time taken to transform image: {time.time() - ttime}")
+                #print(f"Time taken to get image: {time.time() - stime}")
                 return img, label
                 
             except Exception as e:
@@ -239,7 +272,8 @@ def create_dataloaders(
         'prefetch_factor': prefetch_factor if num_workers > 0 else None, 
         'pin_memory': torch.cuda.is_available(),
         'persistent_workers': use_persistent_workers,
-        'multiprocessing_context': mp_context
+        'multiprocessing_context': mp_context,
+        'worker_init_fn': _worker_init_fn
     }
     
     if weighted_sampling:

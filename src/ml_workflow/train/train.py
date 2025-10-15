@@ -356,7 +356,7 @@ class Trainer:
         # Save checkpoint
         checkpoint_path = save_checkpoint(
             model=self.model,
-            optimizer=self.optimizer if self.optimizer is not None else None,
+            optimizer=None,
             epoch=epoch,
             loss=loss,
             config=self.config,
