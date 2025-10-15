@@ -136,7 +136,7 @@ class Trainer:
             if (epoch + 1) % save_frequency == 0:
                 self._save_checkpoint(epoch, train_loss, is_best=False)
             
-            logger.info("Training completed!")
+        logger.info("Training completed!")
     
     def _train_epoch(self):
         """Train for one epoch"""
@@ -168,18 +168,22 @@ class Trainer:
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
             total += target.size(0)
+            total_correct += correct
+
+            avg_running_loss = total_loss / (batch_idx + 1)
+            avg_running_acc = 100. * total_correct / total
             
             # Update progress bar
             pbar.set_postfix({
-                'Loss': f'{loss.item():.4f}',
-                'Acc': f'{100. * correct / total:.2f}%'
+                'Loss': f'{avg_running_loss:.4f}',
+                'Acc': f'{avg_running_acc:.2f}%'
             })
             stime = time.time()
         
         avg_loss = total_loss / len(self.train_loader)
-        accuracy = 100. * correct / total
-        
-        return avg_loss, accuracy
+        avg_ccuracy = 100. * total_correct / total
+
+        return avg_loss, avg_accuracy
     
     def validate(self):
         """Validation loop"""
