@@ -52,15 +52,15 @@ class MLP(nn.Module):
         # Hidden layers
         for hidden_size in self.hidden_sizes:
             layers.extend([
-                nn.Dropout(self.dropout_rate),
                 nn.Linear(current_size, hidden_size),
-                self._get_activation(self.activation)
+                nn.BatchNorm1d(hidden_size),  # Add BatchNorm
+                self._get_activation(self.activation),
+                nn.Dropout(self.dropout_rate),
             ])
             current_size = hidden_size
         
         # Output layer
         layers.extend([
-            nn.Dropout(self.dropout_rate),
             nn.Linear(current_size, self.output_size)
         ])
         
