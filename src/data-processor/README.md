@@ -2,7 +2,12 @@
 
 The purpose of this microservice is to convert the raw datasets into a finalized format for processing.
 
-## Instructions
+## Instructions to Run the data-processor Pipeline
+
+1) `cd` into the `src/data-processor/` folder.
+2) Run `./data_processor.sh`
+
+## Instructions to Create a Processor Script
 
 1) Please create a file called `processor_<your dataset name or abbrev>.py` with a class that is a child of `DatasetProcessor` (in `processor.py).
 2) Override and implement at least the `filter_metadata` and `format_metadata_csv` functions. You may also override other functions (including helper functions) as needed to make the process work for your dataset. If you need to make minor changes, I recommend just copying the existing implementation and changing what you need to change. You are welcome to use (or override) the helper functions in the base class as needed.
@@ -17,7 +22,7 @@ To run your code:
 
 NOTE: eventually we should set up a script to automate building and running the Docker image and running all the Python files in one command. We could even potentially make the script create the Google Cloud VM and delete it once it is done if you guys want. We can save this as a task for later though.
 
-## Main Functions in Workflow
+### Main Functions in Workflow
 
 `load_metadata`: The purpose of this function is to load the file containing your dataset's metadata from the bucket as a DataFrame for processing.
 
@@ -29,7 +34,7 @@ NOTE: eventually we should set up a script to automate building and running the 
 
 `update_data`: This function adds your data to the `metadata_all` CSV containing the pooled metadata from all datasets. If you implemented `format_metadata_csv` correctly, you should be able to just call the base class version of this function without modification. This function will add your images to the `metadata_all.csv` file in the `final` directory of the GCP bucket. It will not duplicate entries that already exist in that file, so if you run it multiple times on the same images, it will not duplicate those image entries. It will update the metadata for existing images if it is changed, however. This function also copies your images into the `final/imgs` folder and copies your dataset-specific metadata file to the `final` folder. It will override any image or metadata files that already exist there, as long as the filenames remain consistent.
 
-## Building and Running Docker Image
+## Building and Running the Docker Image
 
 ### Build Image
 ```bash
