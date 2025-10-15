@@ -5,7 +5,7 @@ data:
   use_local: False
   metadata_path: "../../data/metadata_all_harmonized.csv"  # Override default if needed
   img_prefix: "../../data"  # Override default if needed
-  min_samples_per_label: 100
+  min_samples_per_label: 10
   datasets:
     - fitzpatrick17k
 
@@ -32,21 +32,21 @@ image:
 # Augmentation parameters
 # Set to null to disable a transform, or provide a value to enable it
 augmentation:
-  brightness_jitter: null 
-  contrast_jitter: null
-  saturation_jitter: null
-  hue_jitter: null
-  rotation_degrees: null
+  brightness_jitter: 0.1
+  contrast_jitter: 0.1
+  saturation_jitter: 0.1
+  hue_jitter: 0.1
+  rotation_degrees: 15
   translate: null
-  scale: null
+  scale: [0.9, 1.1]
   grayscale_prob: null
-  horizontal_flip_prob: null
-  vertical_flip_prob: null
+  horizontal_flip_prob: 0.5
+  vertical_flip_prob: 0.5
 
 # Statistics and sampling
 data_processing:
   compute_stats: False
-  weighted_sampling: False
+  weighted_sampling: True
   skip_errors: true
 
 # Model configuration
@@ -58,13 +58,21 @@ model:
   activation: "relu"  # relu, gelu, swish, leaky_relu
   dropout_rate: 0.2
 
-# Optimizer configuration
-optimizer:
-  name: "adam"  # adam, sgd, adamw
+# Separate optimizers (override if provided). If omitted, falls back to single optimizer above
+optimizer_backbone:
+  name: "adamw"
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+  momentum: 0.9
+  betas: [0.9, 0.999]
+  eps: 0.00000001
+
+optimizer_head:
+  name: "adamw"
   learning_rate: 0.001
   weight_decay: 0.0001
-  momentum: 0.9  # For SGD
-  betas: [0.9, 0.999]  # For Adam/AdamW
+  momentum: 0.9
+  betas: [0.9, 0.999]
   eps: 0.00000001
 
 # Output configuration
@@ -75,6 +83,6 @@ output:
 
 # Checkpoint configuration
 checkpoint:
-  save_frequency: 10  # Save checkpoint every N epochs
-  keep_last: 5  # Keep last N checkpoints
+  save_frequency: 1000  # Save checkpoint every N epochs
+  keep_last: 1  # Keep last N checkpoints
   load_from: null  # Path to checkpoint to load from (null for no loading)

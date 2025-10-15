@@ -81,7 +81,7 @@ def analyze_class_distribution(df: pd.DataFrame, label_col: str = "label") -> pd
     return distribution
 
 
-def save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer, 
+def save_checkpoint(model: torch.nn.Module, optimizer: Optional[torch.optim.Optimizer], 
                    epoch: int, loss: float, config: Dict[str, Any], 
                    save_dir: str, experiment_name: str, is_best: bool = False,
                    additional_info: Optional[Dict[str, Any]] = None) -> str:
@@ -109,12 +109,15 @@ def save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer,
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
+        'optimizer_state_dict': (optimizer.state_dict() if optimizer is not None else None),
         'loss': loss,
         'config': config,
         'timestamp': datetime.now().isoformat(),
         'experiment_name': experiment_name
     }
+    # Support saving multiple optimizers if provided in additional_info
+    if additional_info and 'optimizers_state_dict' in additional_info:
+        checkpoint['optimizers_state_dict'] = additional_info['optimizers_state_dict']
     
     # Add additional info if provided
     if additional_info:
@@ -169,7 +172,7 @@ def load_checkpoint(checkpoint_path: str, model: torch.nn.Module,
     model.load_state_dict(checkpoint['model_state_dict'])
     
     # Load optimizer state if provided
-    if optimizer is not None and 'optimizer_state_dict' in checkpoint:
+    if optimizer is not None and 'optimizer_state_dict' in checkpoint and checkpoint['optimizer_state_dict'] is not None:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     
     # Log checkpoint info
