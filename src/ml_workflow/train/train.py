@@ -144,7 +144,6 @@ class Trainer:
         total_loss = 0.0
         correct = 0
         total = 0
-        total_correct = 0
         
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Training")
         stime = time.time()
@@ -169,10 +168,9 @@ class Trainer:
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
             total += target.size(0)
-            total_correct += correct
 
             avg_running_loss = total_loss / (batch_idx + 1)
-            avg_running_acc = 100. * total_correct / total
+            avg_running_acc = 100. * correct / total
             
             # Update progress bar
             pbar.set_postfix({
@@ -182,9 +180,9 @@ class Trainer:
             stime = time.time()
         
         avg_loss = total_loss / len(self.train_loader)
-        avg_accuracy = 100. * total_correct / total
+        accuracy = 100. * correct / total
 
-        return avg_loss, avg_accuracy
+        return avg_loss, accuracy
     
     def validate(self):
         """Validation loop"""
