@@ -42,7 +42,7 @@ def initialize_model(config_path):
         img_prefix = GCS_IMAGE_PREFIX
     
     logger.info(f"Loading metadata from: {metadata_path}")
-    metadata = load_metadata(metadata_path, min_samples=data_config['min_samples_per_label'])
+    metadata = load_metadata(metadata_path, min_samples=data_config['min_samples_per_label'], datasets=data_config['datasets'])
     
     # Create dataloaders
     logger.info("Creating dataloaders...")

@@ -6,15 +6,18 @@ data:
   metadata_path: "../../data/metadata_all_harmonized.csv"  # Override default if needed
   img_prefix: "../../data"  # Override default if needed
   min_samples_per_label: 100
+  datasets:
+    - fitzpatrick17k
 
 # Training parameters
 training:
   batch_size: 16
-  num_workers: 4
+  num_workers: 2
   seed: 42
-  prefetch_factor: 2
+  prefetch_factor: 1
   num_epochs: 100
   patience: 10
+  validation_interval: 5  # Run validation every N epochs (1 = every epoch)
 
 # Data splits
 splits:
@@ -43,17 +46,17 @@ augmentation:
 # Statistics and sampling
 data_processing:
   compute_stats: False
-  weighted_sampling: true
+  weighted_sampling: False
   skip_errors: true
 
 # Model configuration
 model:
-  name: "resnet50"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16
+  name: "densenet121"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16
   pretrained: true
   num_classes: null  # Will be inferred from data
   hidden_sizes: [512, 256]  # List of hidden layer sizes
   activation: "relu"  # relu, gelu, swish, leaky_relu
-  dropout_rate: 0.5
+  dropout_rate: 0.2
 
 # Optimizer configuration
 optimizer:

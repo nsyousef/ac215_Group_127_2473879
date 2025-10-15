@@ -26,7 +26,7 @@ def setup_logger(name: str = __name__, level: int = logging.INFO) -> logging.Log
 
 logger = setup_logger()
 
-def load_metadata(source: str, min_samples: int) -> pd.DataFrame:
+def load_metadata(source: str, min_samples: int, datasets: List[str] = None) -> pd.DataFrame:
     """
     Load metadata from GCS or local file and filter by minimum samples
     
@@ -44,7 +44,9 @@ def load_metadata(source: str, min_samples: int) -> pd.DataFrame:
     logger.info(f"Labels with >= {min_samples} images: {len(preserve_labels):,}")
     
     metadata = metadata[metadata['label'].isin(preserve_labels)].reset_index(drop=True)
+    metadata = metadata[metadata['dataset'].isin(datasets)]
     logger.info(f"Images after filtering: {len(metadata):,}")
+    logger.info(f"Datasets: {datasets}")
     
     return metadata
 

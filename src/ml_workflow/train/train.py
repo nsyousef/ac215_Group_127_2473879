@@ -92,6 +92,7 @@ class Trainer:
         """Main training loop"""
         num_epochs = self.training_config['num_epochs']
         patience = self.training_config['patience']
+        validation_interval = max(1, int(self.training_config.get('validation_interval', 1)))
         
         logger.info(f"Starting training for {num_epochs} epochs...")
         logger.info(f"Starting from epoch: {self.start_epoch}")
@@ -104,29 +105,31 @@ class Trainer:
             # Training phase
             train_loss, train_acc = self._train_epoch()
             
-            # Validation phase
-            if self.val_loader is not None:
+            ran_validation = False
+            val_loss = None
+            val_acc = None
+
+            # Validation phase only on interval
+            if self.val_loader is not None and ((epoch + 1) % validation_interval == 0):
+                ran_validation = True
                 val_loss, val_acc = self.validate()
-                
-                logger.info(f"Epoch {epoch+1}/{num_epochs} - "
-                          f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, "
-                          f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
-                
-                    # Early stopping
-            if val_loss < self.best_val_loss:
-                self.best_val_loss = val_loss
-                self.patience_counter = 0
-                # Save best model
-                self._save_checkpoint(epoch, val_loss, is_best=True)
-            else:
-                self.patience_counter += 1
-                        
-            if self.patience_counter >= patience:
-                logger.info(f"Early stopping at epoch {epoch+1}")
-                break
-            else:
-                logger.info(f"Epoch {epoch+1}/{num_epochs} - "
-                    f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
+                logger.info(f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+
+                # Early stopping only when validation runs
+                if val_loss < self.best_val_loss:
+                    self.best_val_loss = val_loss
+                    self.patience_counter = 0
+                    self._save_checkpoint(epoch, val_loss, is_best=True)
+                else:
+                    self.patience_counter += 1
+
+                if self.patience_counter >= patience:
+                    logger.info(f"Early stopping at epoch {epoch+1}")
+                    break
+
+            # If validation did not run, still log training metrics
+            if not ran_validation:
+                logger.info(f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
                 
             # Save regular checkpoint
             save_frequency = self.checkpoint_config.get('save_frequency', 10)

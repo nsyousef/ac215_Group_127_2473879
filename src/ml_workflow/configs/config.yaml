@@ -6,6 +6,8 @@ data:
   metadata_path: "../../data/metadata_all_harmonized.csv"  # Override default if needed
   img_prefix: "../../data"  # Override default if needed
   min_samples_per_label: 10
+  datasets:
+    - fitzpatrick17k
 
 # Training parameters
 training:
@@ -15,6 +17,7 @@ training:
   prefetch_factor: 2
   num_epochs: 100
   patience: 10
+  validation_interval: 1
 
 # Data splits
 splits:

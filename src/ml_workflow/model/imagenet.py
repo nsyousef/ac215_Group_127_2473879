@@ -4,6 +4,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from torchvision.models import (
+    ResNet50_Weights,
+    ResNet101_Weights,
+    DenseNet121_Weights,
+    EfficientNet_B0_Weights,
+    VGG16_Weights,
+)
 from typing import Dict, Any, Optional, List
 from .utils import MLP
 
@@ -49,21 +56,26 @@ class ImageNetModel(nn.Module):
     def _get_backbone(self, model_name: str, pretrained: bool) -> nn.Module:
         """Get the pretrained backbone model"""
         if model_name == "resnet50":
-            model = models.resnet50(pretrained=pretrained)
+            weights = ResNet50_Weights.DEFAULT if pretrained else None
+            model = models.resnet50(weights=weights)
             # Remove the original classifier
             model = nn.Sequential(*list(model.children())[:-1])
         elif model_name == "resnet101":
-            model = models.resnet101(pretrained=pretrained)
+            weights = ResNet101_Weights.DEFAULT if pretrained else None
+            model = models.resnet101(weights=weights)
             model = nn.Sequential(*list(model.children())[:-1])
         elif model_name == "densenet121":
-            model = models.densenet121(pretrained=pretrained)
+            weights = DenseNet121_Weights.DEFAULT if pretrained else None
+            model = models.densenet121(weights=weights)
             # Remove the original classifier
             model = nn.Sequential(*list(model.children())[:-1])
         elif model_name == "efficientnet_b0":
-            model = models.efficientnet_b0(pretrained=pretrained)
+            weights = EfficientNet_B0_Weights.DEFAULT if pretrained else None
+            model = models.efficientnet_b0(weights=weights)
             model = nn.Sequential(*list(model.children())[:-1])
         elif model_name == "vgg16":
-            model = models.vgg16(pretrained=pretrained)
+            weights = VGG16_Weights.DEFAULT if pretrained else None
+            model = models.vgg16(weights=weights)
             model = nn.Sequential(*list(model.children())[:-1])
         else:
             raise ValueError(f"Unsupported model: {model_name}")
