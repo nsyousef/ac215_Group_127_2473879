@@ -23,7 +23,7 @@ ml-workflow/
 └── requirements.txt           # Dependencies
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Training a Model
 
