@@ -1,0 +1,328 @@
+Building data-processor Docker container...
+Sending build context to Docker daemon  635.3MB
+Step 1/12 : FROM python:3.11-slim-bookworm
+ ---> 701ef80839e6
+Step 2/12 : ENV UV_LINK_MODE=copy
+ ---> Using cache
+ ---> 9c2e4b732de8
+Step 3/12 : ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+ ---> Using cache
+ ---> 5b84c5f21e21
+Step 4/12 : ENV GOOGLE_APPLICATION_CREDENTIALS=secrets/apcomp215.json
+ ---> Using cache
+ ---> e19a96e81f28
+Step 5/12 : RUN set -ex;     for i in $(seq 1 8); do mkdir -p "/usr/share/man/man${i}"; done &&     apt-get update &&     apt-get upgrade -y &&     apt-get install -y --no-install-recommends $DEBIAN_PACKAGES &&     apt-get clean &&     rm -rf /var/lib/apt/lists/* &&     pip install --no-cache-dir --upgrade pip &&     pip install uv &&     useradd -ms /bin/bash app -d /home/app -u 1000 &&     mkdir -p /app &&     chown app:app /app
+ ---> Using cache
+ ---> 546d114d624f
+Step 6/12 : USER app
+ ---> Using cache
+ ---> 246cc02c7a43
+Step 7/12 : WORKDIR /app
+ ---> Using cache
+ ---> 0d600ca2da71
+Step 8/12 : COPY --chown=app:app ac215_Group_127_2473879/src/data-processor ./
+ ---> 5b0b3f9658d7
+Step 9/12 : COPY --chown=app:app secrets/ ./secrets/
+ ---> 1c26c2e0830e
+Step 10/12 : RUN uv sync
+ ---> Running in 79010a6591aa
+[91mUsing CPython 3.11.13 interpreter at: /usr/local/bin/python3
+Creating virtual environment at: .venv
+[0m[91mResolved 27 packages in 310ms
+[0m[91mDownloading numpy (16.2MiB)
+[0m[91mDownloading pandas (12.2MiB)
+[0m[91m Downloading numpy
+[0m[91m Downloading pandas
+[0m[91mPrepared 25 packages in 1.57s
+[0m[91mInstalled 25 packages in 573ms
+[0m[91m + cachetools==6.[0m[91m2.0
+[0m[91m + [0m[91mcertifi==2025[0m[91m.10.5[0m[91m
+ +[0m[91m charset-normalizer==[0m[91m3.4.[0m[91m3
+ [0m[91m+ google-api-core==[0m[91m2.[0m[91m26.0
+[0m[91m + [0m[91mgoogle-auth==2.[0m[91m41.1[0m[91m
+ + [0m[91mgoogle-cloud-core==2[0m[91m.4.3[0m[91m
+ + [0m[91mgoogle-cloud-storage[0m[91m==[0m[91m3.4.1
+[0m[91m [0m[91m+[0m[91m google-crc32c==1.7.1
+ + google-resumable-media==2.7.2
+ + googleapis-common-protos==1.70.0
+ + idna==3.10
+ + numpy==2.3.3
+ + pandas==2.3.3
+ + proto-plus==1.26.1
+ + protobuf==6.32.1
+ + pyasn1==0.6.1
+ + pyasn1-modules==0.[0m[91m4.2
+ + python-dateutil==2.9.0.post0
+ + pytz==2025.[0m[91m2
+ + requests==2.32.5
+ + rsa==4.9.1
+ + six==1.17[0m[91m.0
+ + tqdm==4.67.1
+ + tzdata==2025.2
+ + urllib3==2.5[0m[91m.0
+[0mRemoving intermediate container 79010a6591aa
+ ---> 7947fb95ef13
+Step 11/12 : ENTRYPOINT ["/bin/bash"]
+ ---> Running in 9d362d4f4ffe
+Removing intermediate container 9d362d4f4ffe
+ ---> c75ecc313b37
+Step 12/12 : CMD ["-c", "    source /app/.venv/bin/activate &&     python processor_ddi.py &&     python processor_fitz.py &&     python processor_skincap.py &&     python processor_isic.py &&     python harmonize_labels.py &&     python verify_output.py "]
+ ---> Running in 06bfac1912c9
+Removing intermediate container 06bfac1912c9
+ ---> 1c2335f1d062
+Successfully built 1c2335f1d062
+Successfully tagged data-processor:latest
+
+Running data-processor...
+Loading metadata
+Formatting metadata
+Raw image path:
+raw/ddidiversedermatologyimages/
+['000001.png', '000002.png', '000003.png', '000004.png', '000005.png', '000006.png', '000007.png', '000008.png', '000009.png', '000010.png']
+       orig_filename
+000001    000001.png
+000002    000002.png
+000003    000003.png
+000004    000004.png
+000005    000005.png
+Updating general metadata
+Copying images
+Image names:
+['000001.png', '000002.png', '000003.png', '000004.png', '000005.png']
+Dataset:
+ddi
+Source dir:
+raw/ddidiversedermatologyimages/
+Dest dir:
+final/imgs/
+Copying files:   0%|          | 0/656 [00:00<?, ?file/s]Copying files:  10%|▉         | 65/656 [00:00<00:00, 625.63file/s]Copying files:  20%|█▉        | 128/656 [00:00<00:01, 422.80file/s]Copying files:  27%|██▋       | 174/656 [00:00<00:01, 381.92file/s]Copying files:  33%|███▎      | 214/656 [00:00<00:01, 365.56file/s]Copying files:  38%|███▊      | 252/656 [00:00<00:01, 349.44file/s]Copying files:  44%|████▍     | 288/656 [00:00<00:01, 348.70file/s]Copying files:  49%|████▉     | 324/656 [00:00<00:00, 341.17file/s]Copying files:  55%|█████▍    | 359/656 [00:00<00:00, 337.84file/s]Copying files:  60%|█████▉    | 393/656 [00:01<00:00, 334.07file/s]Copying files:  65%|██████▌   | 427/656 [00:01<00:00, 305.48file/s]Copying files:  70%|██████▉   | 458/656 [00:01<00:00, 289.94file/s]Copying files:  76%|███████▋  | 501/656 [00:01<00:00, 325.18file/s]Copying files:  82%|████████▏ | 536/656 [00:01<00:00, 331.72file/s]Copying files:  87%|████████▋ | 570/656 [00:01<00:00, 327.58file/s]Copying files:  92%|█████████▏| 604/656 [00:01<00:00, 330.10file/s]Copying files:  98%|█████████▊| 640/656 [00:01<00:00, 337.82file/s]Copying files: 100%|██████████| 656/656 [00:01<00:00, 343.08file/s]
+Copying dataset specific metadata
+/app/processor_fitz.py:48: SettingWithCopyWarning: 
+A value is trying to be set on a copy of a slice from a DataFrame.
+Try using .loc[row_indexer,col_indexer] = value instead
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  scap_meta["md5hash"] = scap_meta["ori_file_path"].apply(lambda x: os.path.splitext(x)[0])
+Loading metadata
+Loading metadata
+Raw image path:
+raw/SkinCAP/skincap/
+['raw/SkinCAP/skincap/.DS_Store', 'raw/SkinCAP/skincap/1.png', 'raw/SkinCAP/skincap/10.png', 'raw/SkinCAP/skincap/100.png', 'raw/SkinCAP/skincap/1000.png', 'raw/SkinCAP/skincap/1001.png', 'raw/SkinCAP/skincap/1002.png', 'raw/SkinCAP/skincap/1003.png', 'raw/SkinCAP/skincap/1004.png', 'raw/SkinCAP/skincap/1005.png']
+Raw image path:
+raw/SkinCAP/skincap/not_include/
+['raw/SkinCAP/skincap/not_include/.DS_Store', 'raw/SkinCAP/skincap/not_include/0.png', 'raw/SkinCAP/skincap/not_include/4001.png', 'raw/SkinCAP/skincap/not_include/4002.png', 'raw/SkinCAP/skincap/not_include/4003.png', 'raw/SkinCAP/skincap/not_include/4004.png', 'raw/SkinCAP/skincap/not_include/4005.png', 'raw/SkinCAP/skincap/not_include/4006.png', 'raw/SkinCAP/skincap/not_include/4007.png', 'raw/SkinCAP/skincap/not_include/4008.png']
+4692 SkinCAP images found.
+4346 SkinCAP images left after deduplicating by ID.
+   scap_img_id                 scap_img_path
+0            1     raw/SkinCAP/skincap/1.png
+1           10    raw/SkinCAP/skincap/10.png
+2          100   raw/SkinCAP/skincap/100.png
+3         1000  raw/SkinCAP/skincap/1000.png
+4         1001  raw/SkinCAP/skincap/1001.png
+3345 SkinCAP images are from the Fitzpatrick dataset.
+Raw image path:
+raw/fitzpatrick17k/images/
+['raw/fitzpatrick17k/images/000e8dd5ee75dd6668e978e7a4e6fe54.jpg', 'raw/fitzpatrick17k/images/001b1edd9c7a02e9381793f6e9081d20.jpg', 'raw/fitzpatrick17k/images/001d22ff2543f95d2d38c18da0446c84.png', 'raw/fitzpatrick17k/images/002714e65a78f16fb05bc0aa95ea9761.png', 'raw/fitzpatrick17k/images/002f4ec0b620339d58ccfa26c4268584.jpg', 'raw/fitzpatrick17k/images/0041c7551e027def40cf81ab8fe14a36.png', 'raw/fitzpatrick17k/images/0055bbe758e1f61904d462d966c5520e.png', 'raw/fitzpatrick17k/images/00591a0d2c107c55088ca8509c54d374.png', 'raw/fitzpatrick17k/images/005b804472c7a27908f99e3d6d6cf91c.png', 'raw/fitzpatrick17k/images/005c26fd71696854f7b4c9d80a5dc9d6.jpg']
+We have 6709 images in our Fitzpatrick raw data folder before adding SkinCAP images.
+Empty DataFrame
+Columns: [skincap_file_path, ori_file_path, source, md5hash, scap_img_id, scap_img_path, fitz_image_id, fitz_image_filepath]
+Index: []
+Filtering metadata
+Raw image path:
+raw/fitzpatrick17k/images/
+['000e8dd5ee75dd6668e978e7a4e6fe54.jpg', '001b1edd9c7a02e9381793f6e9081d20.jpg', '001d22ff2543f95d2d38c18da0446c84.png', '002714e65a78f16fb05bc0aa95ea9761.png', '002f4ec0b620339d58ccfa26c4268584.jpg', '0041c7551e027def40cf81ab8fe14a36.png', '0055bbe758e1f61904d462d966c5520e.png', '00591a0d2c107c55088ca8509c54d374.png', '005b804472c7a27908f99e3d6d6cf91c.png', '005c26fd71696854f7b4c9d80a5dc9d6.jpg']
+Image IDs:
+['000e8dd5ee75dd6668e978e7a4e6fe54', '001b1edd9c7a02e9381793f6e9081d20', '001d22ff2543f95d2d38c18da0446c84', '002714e65a78f16fb05bc0aa95ea9761', '002f4ec0b620339d58ccfa26c4268584', '0041c7551e027def40cf81ab8fe14a36', '0055bbe758e1f61904d462d966c5520e', '00591a0d2c107c55088ca8509c54d374', '005b804472c7a27908f99e3d6d6cf91c', '005c26fd71696854f7b4c9d80a5dc9d6']
+Original shape: (16577, 9)
+Final shape: (6703, 9)
+Formatting metadata
+Raw image path:
+raw/fitzpatrick17k/images/
+['000e8dd5ee75dd6668e978e7a4e6fe54.jpg', '001b1edd9c7a02e9381793f6e9081d20.jpg', '001d22ff2543f95d2d38c18da0446c84.png', '002714e65a78f16fb05bc0aa95ea9761.png', '002f4ec0b620339d58ccfa26c4268584.jpg', '0041c7551e027def40cf81ab8fe14a36.png', '0055bbe758e1f61904d462d966c5520e.png', '00591a0d2c107c55088ca8509c54d374.png', '005b804472c7a27908f99e3d6d6cf91c.png', '005c26fd71696854f7b4c9d80a5dc9d6.jpg']
+                                                         orig_filename
+000e8dd5ee75dd6668e978e7a4e6fe54  000e8dd5ee75dd6668e978e7a4e6fe54.jpg
+001b1edd9c7a02e9381793f6e9081d20  001b1edd9c7a02e9381793f6e9081d20.jpg
+001d22ff2543f95d2d38c18da0446c84  001d22ff2543f95d2d38c18da0446c84.png
+002714e65a78f16fb05bc0aa95ea9761  002714e65a78f16fb05bc0aa95ea9761.png
+002f4ec0b620339d58ccfa26c4268584  002f4ec0b620339d58ccfa26c4268584.jpg
+                            image_id  ... text_desc
+1   fa2911a9b13b6f8af79cb700937cc14f  ...      None
+11  e702b1a7dc40aa1d8e85ccdb019c4ab2  ...      None
+15  8438db40abd1eccfbc7ee4b469f1b6f1  ...      None
+29  9a3af1bc39e115bcc6931170cf8a00bb  ...      None
+38  59ccb668671950ca657b6bc48213b763  ...      None
+
+[5 rows x 6 columns]
+Updating general metadata
+Copying images
+Image names:
+['fa2911a9b13b6f8af79cb700937cc14f.png', 'e702b1a7dc40aa1d8e85ccdb019c4ab2.png', '8438db40abd1eccfbc7ee4b469f1b6f1.png', '9a3af1bc39e115bcc6931170cf8a00bb.png', '59ccb668671950ca657b6bc48213b763.png']
+Dataset:
+fitzpatrick17k
+Source dir:
+raw/fitzpatrick17k/images/
+Dest dir:
+final/imgs/
+Copying files:   0%|          | 0/6703 [00:00<?, ?file/s]Copying files:   1%|▏         | 90/6703 [00:00<00:07, 881.47file/s]Copying files:   3%|▎         | 179/6703 [00:00<00:14, 464.24file/s]Copying files:   4%|▎         | 236/6703 [00:00<00:15, 421.21file/s]Copying files:   4%|▍         | 284/6703 [00:00<00:16, 398.85file/s]Copying files:   5%|▍         | 327/6703 [00:00<00:16, 377.78file/s]Copying files:   5%|▌         | 367/6703 [00:00<00:17, 363.71file/s]Copying files:   6%|▌         | 405/6703 [00:01<00:17, 365.22file/s]Copying files:   7%|▋         | 443/6703 [00:01<00:17, 358.38file/s]Copying files:   7%|▋         | 480/6703 [00:01<00:17, 359.63file/s]Copying files:   8%|▊         | 517/6703 [00:01<00:17, 346.41file/s]Copying files:   8%|▊         | 552/6703 [00:01<00:18, 340.41file/s]Copying files:   9%|▉         | 587/6703 [00:01<00:18, 330.64file/s]Copying files:   9%|▉         | 621/6703 [00:01<00:18, 331.40file/s]Copying files:  10%|▉         | 655/6703 [00:01<00:18, 319.23file/s]Copying files:  10%|█         | 687/6703 [00:01<00:18, 319.14file/s]Copying files:  11%|█         | 719/6703 [00:01<00:18, 317.16file/s]Copying files:  11%|█         | 751/6703 [00:02<00:18, 316.32file/s]Copying files:  12%|█▏        | 785/6703 [00:02<00:18, 317.09file/s]Copying files:  12%|█▏        | 819/6703 [00:02<00:18, 320.62file/s]Copying files:  13%|█▎        | 853/6703 [00:02<00:18, 324.18file/s]Copying files:  13%|█▎        | 886/6703 [00:02<00:18, 307.81file/s]Copying files:  14%|█▎        | 917/6703 [00:02<00:18, 305.76file/s]Copying files:  14%|█▍        | 952/6703 [00:02<00:18, 314.23file/s]Copying files:  15%|█▍        | 985/6703 [00:02<00:18, 306.91file/s]Copying files:  15%|█▌        | 1016/6703 [00:02<00:18, 305.46file/s]Copying files:  16%|█▌        | 1049/6703 [00:03<00:18, 309.13file/s]Copying files:  16%|█▌        | 1080/6703 [00:03<00:19, 295.42file/s]Copying files:  17%|█▋        | 1110/6703 [00:03<00:19, 280.81file/s]Copying files:  17%|█▋        | 1139/6703 [00:03<00:19, 281.64file/s]Copying files:  17%|█▋        | 1168/6703 [00:03<00:20, 274.83file/s]Copying files:  18%|█▊        | 1196/6703 [00:03<00:20, 269.92file/s]Copying files:  18%|█▊        | 1226/6703 [00:03<00:19, 274.25file/s]Copying files:  19%|█▊        | 1255/6703 [00:03<00:19, 277.97file/s]Copying files:  19%|█▉        | 1283/6703 [00:03<00:20, 266.40file/s]Copying files:  20%|█▉        | 1310/6703 [00:04<00:20, 259.90file/s]Copying files:  20%|█▉        | 1337/6703 [00:04<00:20, 260.84file/s]Copying files:  20%|██        | 1365/6703 [00:04<00:20, 263.65file/s]Copying files:  21%|██        | 1394/6703 [00:04<00:19, 270.80file/s]Copying files:  21%|██        | 1422/6703 [00:04<00:19, 270.16file/s]Copying files:  22%|██▏       | 1451/6703 [00:04<00:19, 263.94file/s]Copying files:  22%|██▏       | 1484/6703 [00:04<00:19, 266.79file/s]Copying files:  23%|██▎       | 1517/6703 [00:04<00:18, 278.16file/s]Copying files:  23%|██▎       | 1548/6703 [00:04<00:17, 286.82file/s]Copying files:  24%|██▎       | 1577/6703 [00:05<00:18, 275.88file/s]Copying files:  24%|██▍       | 1606/6703 [00:05<00:18, 277.68file/s]Copying files:  24%|██▍       | 1635/6703 [00:05<00:18, 273.23file/s]Copying files:  25%|██▍       | 1667/6703 [00:05<00:17, 285.02file/s]Copying files:  25%|██▌       | 1696/6703 [00:05<00:18, 276.56file/s]Copying files:  26%|██▌       | 1725/6703 [00:05<00:17, 277.74file/s]Copying files:  26%|██▌       | 1753/6703 [00:05<00:17, 275.12file/s]Copying files:  27%|██▋       | 1781/6703 [00:05<00:17, 275.70file/s]Copying files:  27%|██▋       | 1815/6703 [00:05<00:16, 291.28file/s]Copying files:  28%|██▊       | 1847/6703 [00:05<00:16, 297.81file/s]Copying files:  28%|██▊       | 1877/6703 [00:06<00:16, 289.00file/s]Copying files:  28%|██▊       | 1907/6703 [00:06<00:16, 291.42file/s]Copying files:  29%|██▉       | 1937/6703 [00:06<00:16, 289.02file/s]Copying files:  29%|██▉       | 1967/6703 [00:06<00:16, 291.22file/s]Copying files:  30%|██▉       | 1997/6703 [00:06<00:16, 284.30file/s]Copying files:  30%|███       | 2027/6703 [00:06<00:16, 288.03file/s]Copying files:  31%|███       | 2056/6703 [00:06<00:16, 285.81file/s]Copying files:  31%|███       | 2085/6703 [00:06<00:16, 282.35file/s]Copying files:  32%|███▏      | 2117/6703 [00:06<00:15, 291.20file/s]Copying files:  32%|███▏      | 2147/6703 [00:06<00:15, 285.55file/s]Copying files:  32%|███▏      | 2176/6703 [00:07<00:16, 278.43file/s]Copying files:  33%|███▎      | 2204/6703 [00:07<00:16, 275.35file/s]Copying files:  33%|███▎      | 2232/6703 [00:07<00:16, 269.45file/s]Copying files:  34%|███▎      | 2259/6703 [00:07<00:16, 264.51file/s]Copying files:  34%|███▍      | 2286/6703 [00:07<00:16, 265.93file/s]Copying files:  35%|███▍      | 2315/6703 [00:07<00:16, 268.69file/s]Copying files:  35%|███▌      | 2349/6703 [00:07<00:15, 286.08file/s]Copying files:  36%|███▌      | 2381/6703 [00:07<00:14, 292.88file/s]Copying files:  36%|███▌      | 2411/6703 [00:07<00:14, 289.11file/s]Copying files:  36%|███▋      | 2443/6703 [00:08<00:14, 294.98file/s]Copying files:  37%|███▋      | 2473/6703 [00:08<00:15, 281.41file/s]Copying files:  37%|███▋      | 2506/6703 [00:08<00:15, 277.64file/s]Copying files:  38%|███▊      | 2540/6703 [00:08<00:14, 281.91file/s]Copying files:  38%|███▊      | 2569/6703 [00:08<00:16, 247.91file/s]Copying files:  39%|███▊      | 2597/6703 [00:08<00:16, 254.90file/s]Copying files:  39%|███▉      | 2624/6703 [00:08<00:15, 258.53file/s]Copying files:  40%|███▉      | 2655/6703 [00:08<00:14, 271.38file/s]Copying files:  40%|████      | 2683/6703 [00:08<00:14, 268.82file/s]Copying files:  40%|████      | 2713/6703 [00:09<00:14, 272.25file/s]Copying files:  41%|████      | 2741/6703 [00:09<00:24, 162.63file/s]Copying files:  41%|████▏     | 2770/6703 [00:09<00:21, 180.14file/s]Copying files:  42%|████▏     | 2807/6703 [00:09<00:17, 217.80file/s]Copying files:  42%|████▏     | 2835/6703 [00:09<00:16, 230.83file/s]Copying files:  43%|████▎     | 2868/6703 [00:09<00:15, 253.29file/s]Copying files:  43%|████▎     | 2897/6703 [00:09<00:14, 258.53file/s]Copying files:  44%|████▎     | 2929/6703 [00:10<00:13, 274.72file/s]Copying files:  44%|████▍     | 2959/6703 [00:10<00:14, 260.58file/s]Copying files:  45%|████▍     | 2991/6703 [00:10<00:13, 269.95file/s]Copying files:  45%|████▌     | 3019/6703 [00:10<00:13, 268.00file/s]Copying files:  45%|████▌     | 3047/6703 [00:10<00:13, 265.96file/s]Copying files:  46%|████▌     | 3081/6703 [00:10<00:12, 284.50file/s]Copying files:  46%|████▋     | 3113/6703 [00:10<00:12, 294.49file/s]Copying files:  47%|████▋     | 3145/6703 [00:10<00:12, 295.63file/s]Copying files:  47%|████▋     | 3175/6703 [00:10<00:11, 294.70file/s]Copying files:  48%|████▊     | 3208/6703 [00:11<00:11, 301.14file/s]Copying files:  48%|████▊     | 3239/6703 [00:11<00:11, 302.84file/s]Copying files:  49%|████▉     | 3271/6703 [00:11<00:11, 305.75file/s]Copying files:  49%|████▉     | 3303/6703 [00:11<00:11, 307.93file/s]Copying files:  50%|████▉     | 3334/6703 [00:11<00:10, 308.37file/s]Copying files:  50%|█████     | 3365/6703 [00:11<00:11, 302.75file/s]Copying files:  51%|█████     | 3399/6703 [00:11<00:10, 311.70file/s]Copying files:  51%|█████     | 3431/6703 [00:11<00:10, 300.37file/s]Copying files:  52%|█████▏    | 3462/6703 [00:11<00:10, 294.99file/s]Copying files:  52%|█████▏    | 3492/6703 [00:11<00:11, 291.01file/s]Copying files:  53%|█████▎    | 3525/6703 [00:12<00:10, 296.78file/s]Copying files:  53%|█████▎    | 3555/6703 [00:12<00:11, 285.80file/s]Copying files:  54%|█████▎    | 3587/6703 [00:12<00:10, 294.48file/s]Copying files:  54%|█████▍    | 3620/6703 [00:12<00:10, 304.65file/s]Copying files:  55%|█████▍    | 3655/6703 [00:12<00:09, 312.83file/s]Copying files:  55%|█████▌    | 3687/6703 [00:12<00:09, 311.14file/s]Copying files:  56%|█████▌    | 3723/6703 [00:12<00:09, 319.78file/s]Copying files:  56%|█████▌    | 3756/6703 [00:13<00:25, 116.00file/s]Copying files:  56%|█████▋    | 3780/6703 [00:13<00:23, 122.12file/s]Copying files:  57%|█████▋    | 3802/6703 [00:13<00:22, 128.54file/s]Copying files:  57%|█████▋    | 3822/6703 [00:13<00:22, 129.13file/s]Copying files:  57%|█████▋    | 3840/6703 [00:14<00:23, 121.38file/s]Copying files:  58%|█████▊    | 3856/6703 [00:14<00:22, 125.64file/s]Copying files:  58%|█████▊    | 3886/6703 [00:14<00:17, 159.94file/s]Copying files:  58%|█████▊    | 3919/6703 [00:14<00:14, 196.91file/s]Copying files:  59%|█████▉    | 3948/6703 [00:14<00:12, 215.02file/s]Copying files:  59%|█████▉    | 3983/6703 [00:14<00:11, 246.77file/s]Copying files:  60%|█████▉    | 4017/6703 [00:14<00:09, 271.07file/s]Copying files:  60%|██████    | 4050/6703 [00:14<00:09, 286.06file/s]Copying files:  61%|██████    | 4083/6703 [00:14<00:08, 291.94file/s]Copying files:  61%|██████▏   | 4120/6703 [00:15<00:08, 313.67file/s]Copying files:  62%|██████▏   | 4153/6703 [00:15<00:08, 316.96file/s]Copying files:  62%|██████▏   | 4186/6703 [00:15<00:08, 309.94file/s]Copying files:  63%|██████▎   | 4220/6703 [00:15<00:07, 317.75file/s]Copying files:  63%|██████▎   | 4253/6703 [00:15<00:07, 307.95file/s]Copying files:  64%|██████▍   | 4288/6703 [00:15<00:07, 317.22file/s]Copying files:  64%|██████▍   | 4321/6703 [00:15<00:07, 320.42file/s]Copying files:  65%|██████▍   | 4354/6703 [00:15<00:07, 321.98file/s]Copying files:  65%|██████▌   | 4388/6703 [00:15<00:07, 321.02file/s]Copying files:  66%|██████▌   | 4425/6703 [00:15<00:06, 327.12file/s]Copying files:  67%|██████▋   | 4462/6703 [00:16<00:06, 330.21file/s]Copying files:  67%|██████▋   | 4496/6703 [00:16<00:06, 323.96file/s]Copying files:  68%|██████▊   | 4532/6703 [00:16<00:06, 333.84file/s]Copying files:  68%|██████▊   | 4568/6703 [00:16<00:06, 339.25file/s]Copying files:  69%|██████▊   | 4602/6703 [00:16<00:06, 338.78file/s]Copying files:  69%|██████▉   | 4636/6703 [00:16<00:06, 332.55file/s]Copying files:  70%|██████▉   | 4670/6703 [00:16<00:06, 323.09file/s]Copying files:  70%|███████   | 4705/6703 [00:16<00:06, 328.47file/s]Copying files:  71%|███████   | 4738/6703 [00:16<00:06, 316.97file/s]Copying files:  71%|███████   | 4770/6703 [00:17<00:06, 310.51file/s]Copying files:  72%|███████▏  | 4802/6703 [00:17<00:06, 306.35file/s]Copying files:  72%|███████▏  | 4835/6703 [00:17<00:06, 307.19file/s]Copying files:  73%|███████▎  | 4871/6703 [00:17<00:05, 319.07file/s]Copying files:  73%|███████▎  | 4903/6703 [00:17<00:05, 314.50file/s]Copying files:  74%|███████▎  | 4936/6703 [00:17<00:05, 318.21file/s]Copying files:  74%|███████▍  | 4970/6703 [00:17<00:05, 321.44file/s]Copying files:  75%|███████▍  | 5003/6703 [00:17<00:05, 323.87file/s]Copying files:  75%|███████▌  | 5037/6703 [00:17<00:05, 328.46file/s]Copying files:  76%|███████▌  | 5072/6703 [00:17<00:04, 332.83file/s]Copying files:  76%|███████▌  | 5106/6703 [00:18<00:04, 328.04file/s]Copying files:  77%|███████▋  | 5139/6703 [00:18<00:04, 317.68file/s]Copying files:  77%|███████▋  | 5177/6703 [00:18<00:04, 332.61file/s]Copying files:  78%|███████▊  | 5211/6703 [00:18<00:04, 332.64file/s]Copying files:  78%|███████▊  | 5245/6703 [00:18<00:04, 328.73file/s]Copying files:  79%|███████▊  | 5278/6703 [00:18<00:04, 327.81file/s]Copying files:  79%|███████▉  | 5314/6703 [00:18<00:04, 337.17file/s]Copying files:  80%|███████▉  | 5348/6703 [00:18<00:04, 335.21file/s]Copying files:  80%|████████  | 5382/6703 [00:18<00:04, 308.43file/s]Copying files:  81%|████████  | 5428/6703 [00:19<00:03, 349.82file/s]Copying files:  82%|████████▏ | 5464/6703 [00:19<00:03, 334.50file/s]Copying files:  82%|████████▏ | 5500/6703 [00:19<00:03, 339.52file/s]Copying files:  83%|████████▎ | 5535/6703 [00:19<00:03, 337.21file/s]Copying files:  83%|████████▎ | 5569/6703 [00:19<00:03, 326.70file/s]Copying files:  84%|████████▎ | 5608/6703 [00:19<00:03, 343.95file/s]Copying files:  84%|████████▍ | 5643/6703 [00:19<00:03, 327.91file/s]Copying files:  85%|████████▍ | 5677/6703 [00:19<00:03, 328.74file/s]Copying files:  85%|████████▌ | 5713/6703 [00:19<00:03, 327.94file/s]Copying files:  86%|████████▌ | 5746/6703 [00:19<00:03, 318.99file/s]Copying files:  86%|████████▌ | 5781/6703 [00:20<00:02, 322.08file/s]Copying files:  87%|████████▋ | 5814/6703 [00:20<00:02, 321.19file/s]Copying files:  87%|████████▋ | 5847/6703 [00:20<00:02, 320.01file/s]Copying files:  88%|████████▊ | 5880/6703 [00:20<00:02, 317.89file/s]Copying files:  88%|████████▊ | 5915/6703 [00:20<00:02, 324.30file/s]Copying files:  89%|████████▉ | 5950/6703 [00:20<00:02, 330.24file/s]Copying files:  89%|████████▉ | 5984/6703 [00:20<00:02, 332.30file/s]Copying files:  90%|████████▉ | 6018/6703 [00:20<00:02, 331.77file/s]Copying files:  90%|█████████ | 6052/6703 [00:20<00:01, 330.40file/s]Copying files:  91%|█████████ | 6086/6703 [00:21<00:01, 313.85file/s]Copying files:  91%|█████████▏| 6120/6703 [00:21<00:01, 319.35file/s]Copying files:  92%|█████████▏| 6153/6703 [00:21<00:01, 311.67file/s]Copying files:  92%|█████████▏| 6187/6703 [00:21<00:01, 317.68file/s]Copying files:  93%|█████████▎| 6219/6703 [00:21<00:01, 310.98file/s]Copying files:  93%|█████████▎| 6254/6703 [00:21<00:01, 314.18file/s]Copying files:  94%|█████████▍| 6292/6703 [00:21<00:01, 332.08file/s]Copying files:  94%|█████████▍| 6326/6703 [00:21<00:01, 323.70file/s]Copying files:  95%|█████████▍| 6360/6703 [00:21<00:01, 325.08file/s]Copying files:  95%|█████████▌| 6393/6703 [00:22<00:00, 323.68file/s]Copying files:  96%|█████████▌| 6426/6703 [00:22<00:00, 324.60file/s]Copying files:  96%|█████████▋| 6463/6703 [00:22<00:00, 337.75file/s]Copying files:  97%|█████████▋| 6497/6703 [00:22<00:00, 326.30file/s]Copying files:  97%|█████████▋| 6532/6703 [00:22<00:00, 331.65file/s]Copying files:  98%|█████████▊| 6566/6703 [00:22<00:00, 332.01file/s]Copying files:  98%|█████████▊| 6602/6703 [00:22<00:00, 335.93file/s]Copying files:  99%|█████████▉| 6636/6703 [00:22<00:00, 332.80file/s]Copying files: 100%|█████████▉| 6670/6703 [00:22<00:00, 332.97file/s]Copying files: 100%|██████████| 6703/6703 [00:22<00:00, 292.33file/s]
+Copying dataset specific metadata
+Loading metadata
+Updating general metadata
+Copying dataset specific metadata
+/app/processor.py:193: DtypeWarning: Columns (6,8,9,11,12,13,14,15,16,17,18,21,23,24,25,26,31) have mixed types. Specify dtype option on import or set low_memory=False.
+  return read_func(file_like, **kwargs)
+Loading metadata
+Filtered metadata shape:
+(9028, 29)
+Raw image path:
+raw/isic/isic/
+['ISIC_0000000.jpg', 'ISIC_0000001.jpg', 'ISIC_0000002.jpg', 'ISIC_0000003.jpg', 'ISIC_0000004.jpg', 'ISIC_0000005.jpg', 'ISIC_0000006.jpg', 'ISIC_0000007.jpg', 'ISIC_0000008.jpg', 'ISIC_0000009.jpg']
+Updating general metadata
+Copying images
+Image names:
+['ISIC_0024207.jpg', 'ISIC_0024208.jpg', 'ISIC_0024209.jpg', 'ISIC_0024210.jpg', 'ISIC_0024211.jpg']
+Dataset:
+isic
+Source dir:
+raw/isic/isic/
+Dest dir:
+final/imgs/
+Copying files:   0%|          | 0/9028 [00:00<?, ?file/s]Copying files:   1%|          | 100/9028 [00:00<00:09, 977.38file/s]Copying files:   2%|▏         | 198/9028 [00:00<00:19, 441.91file/s]Copying files:   3%|▎         | 257/9028 [00:00<00:21, 399.08file/s]Copying files:   3%|▎         | 305/9028 [00:00<00:23, 371.69file/s]Copying files:   4%|▍         | 347/9028 [00:00<00:24, 356.71file/s]Copying files:   4%|▍         | 385/9028 [00:00<00:24, 345.96file/s]Copying files:   5%|▍         | 421/9028 [00:01<00:26, 322.60file/s]Copying files:   5%|▌         | 454/9028 [00:01<00:26, 323.98file/s]Copying files:   5%|▌         | 487/9028 [00:01<00:26, 317.98file/s]Copying files:   6%|▌         | 526/9028 [00:01<00:25, 335.69file/s]Copying files:   6%|▌         | 561/9028 [00:01<00:24, 338.86file/s]Copying files:   7%|▋         | 598/9028 [00:01<00:24, 345.81file/s]Copying files:   7%|▋         | 633/9028 [00:01<00:24, 342.44file/s]Copying files:   7%|▋         | 670/9028 [00:01<00:24, 344.88file/s]Copying files:   8%|▊         | 705/9028 [00:01<00:24, 340.61file/s]Copying files:   8%|▊         | 741/9028 [00:02<00:24, 343.52file/s]Copying files:   9%|▊         | 776/9028 [00:02<00:25, 326.09file/s]Copying files:   9%|▉         | 812/9028 [00:02<00:25, 328.27file/s]Copying files:   9%|▉         | 848/9028 [00:02<00:24, 335.94file/s]Copying files:  10%|▉         | 882/9028 [00:02<00:24, 335.59file/s]Copying files:  10%|█         | 920/9028 [00:02<00:23, 347.29file/s]Copying files:  11%|█         | 955/9028 [00:02<00:23, 339.56file/s]Copying files:  11%|█         | 993/9028 [00:02<00:23, 346.85file/s]Copying files:  11%|█▏        | 1028/9028 [00:02<00:23, 337.73file/s]Copying files:  12%|█▏        | 1062/9028 [00:03<00:23, 333.25file/s]Copying files:  12%|█▏        | 1097/9028 [00:03<00:23, 331.72file/s]Copying files:  13%|█▎        | 1131/9028 [00:03<00:23, 333.45file/s]Copying files:  13%|█▎        | 1168/9028 [00:03<00:22, 343.28file/s]Copying files:  13%|█▎        | 1203/9028 [00:03<00:23, 332.98file/s]Copying files:  14%|█▎        | 1237/9028 [00:03<00:23, 330.02file/s]Copying files:  14%|█▍        | 1271/9028 [00:03<00:24, 322.21file/s]Copying files:  14%|█▍        | 1304/9028 [00:03<00:23, 323.70file/s]Copying files:  15%|█▍        | 1337/9028 [00:03<00:24, 310.98file/s]Copying files:  15%|█▌        | 1369/9028 [00:03<00:24, 309.99file/s]Copying files:  16%|█▌        | 1401/9028 [00:04<00:25, 293.35file/s]Copying files:  16%|█▌        | 1434/9028 [00:04<00:25, 303.32file/s]Copying files:  16%|█▌        | 1465/9028 [00:04<00:25, 299.50file/s]Copying files:  17%|█▋        | 1496/9028 [00:04<00:24, 302.02file/s]Copying files:  17%|█▋        | 1528/9028 [00:04<00:24, 302.52file/s]Copying files:  17%|█▋        | 1559/9028 [00:04<00:24, 301.68file/s]Copying files:  18%|█▊        | 1590/9028 [00:04<00:25, 294.83file/s]Copying files:  18%|█▊        | 1621/9028 [00:04<00:25, 289.97file/s]Copying files:  18%|█▊        | 1653/9028 [00:04<00:24, 296.58file/s]Copying files:  19%|█▊        | 1683/9028 [00:05<00:25, 293.14file/s]Copying files:  19%|█▉        | 1716/9028 [00:05<00:25, 290.07file/s]Copying files:  19%|█▉        | 1746/9028 [00:05<00:25, 290.92file/s]Copying files:  20%|█▉        | 1778/9028 [00:05<00:24, 297.83file/s]Copying files:  20%|██        | 1808/9028 [00:05<00:25, 283.62file/s]Copying files:  20%|██        | 1839/9028 [00:05<00:25, 287.53file/s]Copying files:  21%|██        | 1868/9028 [00:05<00:25, 282.87file/s]Copying files:  21%|██        | 1900/9028 [00:05<00:24, 292.57file/s]Copying files:  21%|██▏       | 1930/9028 [00:05<00:24, 288.27file/s]Copying files:  22%|██▏       | 1959/9028 [00:06<00:26, 271.19file/s]Copying files:  22%|██▏       | 1996/9028 [00:06<00:23, 297.44file/s]Copying files:  22%|██▏       | 2027/9028 [00:06<00:23, 300.74file/s]Copying files:  23%|██▎       | 2058/9028 [00:06<00:23, 302.05file/s]Copying files:  23%|██▎       | 2089/9028 [00:06<00:22, 304.23file/s]Copying files:  23%|██▎       | 2120/9028 [00:06<00:22, 300.46file/s]Copying files:  24%|██▍       | 2151/9028 [00:06<00:23, 295.94file/s]Copying files:  24%|██▍       | 2181/9028 [00:06<00:23, 295.54file/s]Copying files:  25%|██▍       | 2216/9028 [00:06<00:21, 310.24file/s]Copying files:  25%|██▍       | 2248/9028 [00:06<00:22, 295.17file/s]Copying files:  25%|██▌       | 2278/9028 [00:07<00:24, 280.94file/s]Copying files:  26%|██▌       | 2308/9028 [00:07<00:23, 284.55file/s]Copying files:  26%|██▌       | 2337/9028 [00:07<00:23, 283.24file/s]Copying files:  26%|██▋       | 2370/9028 [00:07<00:22, 293.20file/s]Copying files:  27%|██▋       | 2402/9028 [00:07<00:22, 294.09file/s]Copying files:  27%|██▋       | 2432/9028 [00:07<00:23, 286.33file/s]Copying files:  27%|██▋       | 2462/9028 [00:07<00:22, 288.36file/s]Copying files:  28%|██▊       | 2491/9028 [00:07<00:22, 285.75file/s]Copying files:  28%|██▊       | 2521/9028 [00:07<00:22, 288.36file/s]Copying files:  28%|██▊       | 2552/9028 [00:08<00:22, 293.89file/s]Copying files:  29%|██▊       | 2582/9028 [00:08<00:22, 288.09file/s]Copying files:  29%|██▉       | 2613/9028 [00:08<00:21, 294.16file/s]Copying files:  29%|██▉       | 2643/9028 [00:08<00:22, 287.30file/s]Copying files:  30%|██▉       | 2677/9028 [00:08<00:21, 297.81file/s]Copying files:  30%|██▉       | 2708/9028 [00:08<00:21, 296.80file/s]Copying files:  30%|███       | 2738/9028 [00:08<00:21, 292.76file/s]Copying files:  31%|███       | 2768/9028 [00:08<00:21, 287.85file/s]Copying files:  31%|███       | 2801/9028 [00:08<00:21, 293.87file/s]Copying files:  31%|███▏      | 2831/9028 [00:08<00:20, 295.52file/s]Copying files:  32%|███▏      | 2861/9028 [00:09<00:21, 285.68file/s]Copying files:  32%|███▏      | 2890/9028 [00:09<00:21, 285.55file/s]Copying files:  32%|███▏      | 2919/9028 [00:09<00:22, 273.84file/s]Copying files:  33%|███▎      | 2953/9028 [00:09<00:21, 288.03file/s]Copying files:  33%|███▎      | 2986/9028 [00:09<00:20, 289.20file/s]Copying files:  33%|███▎      | 3015/9028 [00:09<00:20, 287.70file/s]Copying files:  34%|███▎      | 3044/9028 [00:09<00:21, 281.26file/s]Copying files:  34%|███▍      | 3073/9028 [00:09<00:21, 281.80file/s]Copying files:  34%|███▍      | 3102/9028 [00:09<00:20, 283.03file/s]Copying files:  35%|███▍      | 3134/9028 [00:10<00:20, 293.72file/s]Copying files:  35%|███▌      | 3164/9028 [00:10<00:20, 288.24file/s]Copying files:  35%|███▌      | 3193/9028 [00:10<00:20, 278.07file/s]Copying files:  36%|███▌      | 3224/9028 [00:10<00:20, 286.81file/s]Copying files:  36%|███▌      | 3253/9028 [00:10<00:20, 281.24file/s]Copying files:  36%|███▋      | 3283/9028 [00:10<00:20, 285.80file/s]Copying files:  37%|███▋      | 3312/9028 [00:10<00:36, 158.72file/s]Copying files:  37%|███▋      | 3343/9028 [00:11<00:30, 185.09file/s]Copying files:  37%|███▋      | 3374/9028 [00:11<00:26, 210.94file/s]Copying files:  38%|███▊      | 3406/9028 [00:11<00:23, 235.85file/s]Copying files:  38%|███▊      | 3435/9028 [00:11<00:23, 237.87file/s]Copying files:  38%|███▊      | 3464/9028 [00:11<00:22, 248.71file/s]Copying files:  39%|███▊      | 3497/9028 [00:11<00:20, 267.05file/s]Copying files:  39%|███▉      | 3527/9028 [00:11<00:20, 274.81file/s]Copying files:  39%|███▉      | 3559/9028 [00:11<00:19, 285.41file/s]Copying files:  40%|███▉      | 3589/9028 [00:11<00:19, 273.56file/s]Copying files:  40%|████      | 3618/9028 [00:12<00:19, 277.92file/s]Copying files:  40%|████      | 3648/9028 [00:12<00:19, 282.30file/s]Copying files:  41%|████      | 3684/9028 [00:12<00:17, 302.44file/s]Copying files:  41%|████      | 3715/9028 [00:12<00:17, 299.79file/s]Copying files:  41%|████▏     | 3746/9028 [00:12<00:17, 300.41file/s]Copying files:  42%|████▏     | 3779/9028 [00:12<00:16, 308.93file/s]Copying files:  42%|████▏     | 3811/9028 [00:12<00:17, 303.76file/s]Copying files:  43%|████▎     | 3843/9028 [00:12<00:16, 308.10file/s]Copying files:  43%|████▎     | 3874/9028 [00:12<00:17, 300.04file/s]Copying files:  43%|████▎     | 3908/9028 [00:12<00:16, 311.40file/s]Copying files:  44%|████▎     | 3940/9028 [00:13<00:16, 303.31file/s]Copying files:  44%|████▍     | 3977/9028 [00:13<00:15, 321.86file/s]Copying files:  44%|████▍     | 4010/9028 [00:13<00:15, 318.41file/s]Copying files:  45%|████▍     | 4042/9028 [00:13<00:16, 307.50file/s]Copying files:  45%|████▌     | 4073/9028 [00:13<00:16, 305.56file/s]Copying files:  45%|████▌     | 4105/9028 [00:13<00:15, 309.61file/s]Copying files:  46%|████▌     | 4137/9028 [00:13<00:15, 308.56file/s]Copying files:  46%|████▌     | 4169/9028 [00:13<00:15, 311.03file/s]Copying files:  47%|████▋     | 4201/9028 [00:13<00:15, 308.61file/s]Copying files:  47%|████▋     | 4232/9028 [00:13<00:15, 301.19file/s]Copying files:  47%|████▋     | 4263/9028 [00:14<00:15, 300.85file/s]Copying files:  48%|████▊     | 4294/9028 [00:14<00:15, 299.74file/s]Copying files:  48%|████▊     | 4327/9028 [00:14<00:15, 307.49file/s]Copying files:  48%|████▊     | 4358/9028 [00:14<00:16, 290.04file/s]Copying files:  49%|████▊     | 4388/9028 [00:14<00:15, 290.73file/s]Copying files:  49%|████▉     | 4419/9028 [00:14<00:15, 293.59file/s]Copying files:  49%|████▉     | 4450/9028 [00:14<00:15, 294.01file/s]Copying files:  50%|████▉     | 4482/9028 [00:14<00:15, 298.84file/s]Copying files:  50%|█████     | 4515/9028 [00:14<00:14, 305.34file/s]Copying files:  50%|█████     | 4546/9028 [00:15<00:14, 305.75file/s]Copying files:  51%|█████     | 4578/9028 [00:15<00:14, 306.58file/s]Copying files:  51%|█████     | 4612/9028 [00:15<00:14, 312.87file/s]Copying files:  51%|█████▏    | 4644/9028 [00:15<00:14, 301.51file/s]Copying files:  52%|█████▏    | 4677/9028 [00:15<00:14, 305.63file/s]Copying files:  52%|█████▏    | 4709/9028 [00:15<00:13, 309.24file/s]Copying files:  53%|█████▎    | 4741/9028 [00:15<00:13, 309.45file/s]Copying files:  53%|█████▎    | 4772/9028 [00:15<00:14, 298.38file/s]Copying files:  53%|█████▎    | 4805/9028 [00:15<00:14, 297.75file/s]Copying files:  54%|█████▎    | 4839/9028 [00:16<00:13, 309.09file/s]Copying files:  54%|█████▍    | 4871/9028 [00:16<00:13, 299.73file/s]Copying files:  54%|█████▍    | 4902/9028 [00:16<00:13, 301.84file/s]Copying files:  55%|█████▍    | 4933/9028 [00:16<00:13, 302.11file/s]Copying files:  55%|█████▌    | 4966/9028 [00:16<00:13, 308.43file/s]Copying files:  55%|█████▌    | 4998/9028 [00:16<00:12, 311.18file/s]Copying files:  56%|█████▌    | 5030/9028 [00:16<00:12, 313.37file/s]Copying files:  56%|█████▌    | 5062/9028 [00:16<00:13, 303.07file/s]Copying files:  56%|█████▋    | 5093/9028 [00:16<00:12, 304.50file/s]Copying files:  57%|█████▋    | 5129/9028 [00:16<00:12, 318.38file/s]Copying files:  57%|█████▋    | 5161/9028 [00:17<00:12, 300.91file/s]Copying files:  58%|█████▊    | 5192/9028 [00:17<00:12, 298.98file/s]Copying files:  58%|█████▊    | 5226/9028 [00:17<00:12, 310.17file/s]Copying files:  58%|█████▊    | 5261/9028 [00:17<00:11, 316.31file/s]Copying files:  59%|█████▊    | 5293/9028 [00:17<00:12, 304.43file/s]Copying files:  59%|█████▉    | 5327/9028 [00:17<00:11, 313.71file/s]Copying files:  59%|█████▉    | 5359/9028 [00:17<00:11, 313.36file/s]Copying files:  60%|█████▉    | 5391/9028 [00:17<00:11, 309.15file/s]Copying files:  60%|██████    | 5422/9028 [00:17<00:11, 308.51file/s]Copying files:  60%|██████    | 5453/9028 [00:17<00:11, 308.66file/s]Copying files:  61%|██████    | 5487/9028 [00:18<00:11, 315.12file/s]Copying files:  61%|██████    | 5519/9028 [00:18<00:11, 315.87file/s]Copying files:  62%|██████▏   | 5554/9028 [00:18<00:10, 324.70file/s]Copying files:  62%|██████▏   | 5587/9028 [00:18<00:11, 309.81file/s]Copying files:  62%|██████▏   | 5623/9028 [00:18<00:10, 321.87file/s]Copying files:  63%|██████▎   | 5656/9028 [00:18<00:10, 316.22file/s]Copying files:  63%|██████▎   | 5688/9028 [00:18<00:10, 316.57file/s]Copying files:  63%|██████▎   | 5721/9028 [00:18<00:10, 317.21file/s]Copying files:  64%|██████▎   | 5754/9028 [00:18<00:10, 318.58file/s]Copying files:  64%|██████▍   | 5786/9028 [00:19<00:10, 312.06file/s]Copying files:  64%|██████▍   | 5818/9028 [00:19<00:10, 302.82file/s]Copying files:  65%|██████▍   | 5851/9028 [00:19<00:10, 308.21file/s]Copying files:  65%|██████▌   | 5882/9028 [00:19<00:10, 307.70file/s]Copying files:  65%|██████▌   | 5913/9028 [00:19<00:10, 305.80file/s]Copying files:  66%|██████▌   | 5944/9028 [00:19<00:10, 293.52file/s]Copying files:  66%|██████▌   | 5977/9028 [00:19<00:10, 297.76file/s]Copying files:  67%|██████▋   | 6007/9028 [00:19<00:10, 283.79file/s]Copying files:  67%|██████▋   | 6044/9028 [00:19<00:09, 307.46file/s]Copying files:  67%|██████▋   | 6076/9028 [00:20<00:09, 300.67file/s]Copying files:  68%|██████▊   | 6109/9028 [00:20<00:09, 296.82file/s]Copying files:  68%|██████▊   | 6142/9028 [00:20<00:09, 299.22file/s]Copying files:  68%|██████▊   | 6177/9028 [00:20<00:09, 310.50file/s]Copying files:  69%|██████▉   | 6209/9028 [00:20<00:09, 307.42file/s]Copying files:  69%|██████▉   | 6241/9028 [00:20<00:09, 309.42file/s]Copying files:  69%|██████▉   | 6273/9028 [00:20<00:08, 307.08file/s]Copying files:  70%|██████▉   | 6305/9028 [00:20<00:08, 309.28file/s]Copying files:  70%|███████   | 6336/9028 [00:20<00:08, 307.00file/s]Copying files:  71%|███████   | 6367/9028 [00:20<00:09, 294.88file/s]Copying files:  71%|███████   | 6398/9028 [00:21<00:08, 296.99file/s]Copying files:  71%|███████   | 6431/9028 [00:21<00:08, 305.16file/s]Copying files:  72%|███████▏  | 6462/9028 [00:21<00:08, 305.60file/s]Copying files:  72%|███████▏  | 6493/9028 [00:21<00:08, 302.29file/s]Copying files:  72%|███████▏  | 6524/9028 [00:21<00:08, 293.19file/s]Copying files:  73%|███████▎  | 6558/9028 [00:21<00:08, 305.04file/s]Copying files:  73%|███████▎  | 6589/9028 [00:21<00:08, 299.37file/s]Copying files:  73%|███████▎  | 6622/9028 [00:21<00:07, 303.94file/s]Copying files:  74%|███████▎  | 6653/9028 [00:21<00:08, 296.58file/s]Copying files:  74%|███████▍  | 6685/9028 [00:22<00:07, 301.62file/s]Copying files:  74%|███████▍  | 6717/9028 [00:22<00:07, 301.28file/s]Copying files:  75%|███████▍  | 6750/9028 [00:22<00:07, 305.51file/s]Copying files:  75%|███████▌  | 6781/9028 [00:22<00:07, 300.54file/s]Copying files:  75%|███████▌  | 6812/9028 [00:22<00:07, 299.35file/s]Copying files:  76%|███████▌  | 6845/9028 [00:22<00:07, 307.64file/s]Copying files:  76%|███████▌  | 6876/9028 [00:22<00:07, 301.08file/s]Copying files:  77%|███████▋  | 6907/9028 [00:22<00:07, 301.32file/s]Copying files:  77%|███████▋  | 6940/9028 [00:22<00:06, 308.73file/s]Copying files:  77%|███████▋  | 6974/9028 [00:22<00:06, 315.74file/s]Copying files:  78%|███████▊  | 7006/9028 [00:23<00:06, 308.32file/s]Copying files:  78%|███████▊  | 7037/9028 [00:23<00:06, 303.87file/s]Copying files:  78%|███████▊  | 7069/9028 [00:23<00:06, 306.31file/s]Copying files:  79%|███████▊  | 7100/9028 [00:23<00:06, 303.65file/s]Copying files:  79%|███████▉  | 7131/9028 [00:23<00:06, 303.40file/s]Copying files:  79%|███████▉  | 7164/9028 [00:23<00:05, 310.82file/s]Copying files:  80%|███████▉  | 7196/9028 [00:23<00:05, 309.67file/s]Copying files:  80%|████████  | 7229/9028 [00:23<00:05, 310.36file/s]Copying files:  80%|████████  | 7261/9028 [00:23<00:05, 309.53file/s]Copying files:  81%|████████  | 7292/9028 [00:24<00:05, 305.41file/s]Copying files:  81%|████████  | 7323/9028 [00:24<00:05, 298.30file/s]Copying files:  81%|████████▏ | 7353/9028 [00:24<00:05, 298.58file/s]Copying files:  82%|████████▏ | 7385/9028 [00:24<00:05, 302.93file/s]Copying files:  82%|████████▏ | 7416/9028 [00:24<00:05, 299.47file/s]Copying files:  82%|████████▏ | 7447/9028 [00:24<00:05, 296.46file/s]Copying files:  83%|████████▎ | 7477/9028 [00:24<00:05, 295.66file/s]Copying files:  83%|████████▎ | 7511/9028 [00:24<00:04, 307.21file/s]Copying files:  84%|████████▎ | 7542/9028 [00:24<00:04, 302.05file/s]Copying files:  84%|████████▍ | 7573/9028 [00:24<00:04, 292.39file/s]Copying files:  84%|████████▍ | 7605/9028 [00:25<00:04, 290.38file/s]Copying files:  85%|████████▍ | 7635/9028 [00:25<00:04, 290.20file/s]Copying files:  85%|████████▍ | 7666/9028 [00:25<00:04, 289.48file/s]Copying files:  85%|████████▌ | 7699/9028 [00:25<00:04, 300.19file/s]Copying files:  86%|████████▌ | 7730/9028 [00:25<00:04, 297.66file/s]Copying files:  86%|████████▌ | 7761/9028 [00:25<00:04, 300.28file/s]Copying files:  86%|████████▋ | 7792/9028 [00:25<00:04, 299.58file/s]Copying files:  87%|████████▋ | 7824/9028 [00:25<00:03, 301.59file/s]Copying files:  87%|████████▋ | 7857/9028 [00:25<00:03, 306.04file/s]Copying files:  87%|████████▋ | 7888/9028 [00:26<00:03, 305.86file/s]Copying files:  88%|████████▊ | 7919/9028 [00:26<00:03, 303.34file/s]Copying files:  88%|████████▊ | 7950/9028 [00:26<00:03, 297.00file/s]Copying files:  88%|████████▊ | 7981/9028 [00:26<00:03, 296.12file/s]Copying files:  89%|████████▉ | 8014/9028 [00:26<00:03, 303.61file/s]Copying files:  89%|████████▉ | 8045/9028 [00:26<00:03, 297.13file/s]Copying files:  89%|████████▉ | 8075/9028 [00:26<00:03, 293.50file/s]Copying files:  90%|████████▉ | 8107/9028 [00:26<00:03, 300.89file/s]Copying files:  90%|█████████ | 8138/9028 [00:26<00:02, 298.05file/s]Copying files:  90%|█████████ | 8169/9028 [00:26<00:02, 301.31file/s]Copying files:  91%|█████████ | 8200/9028 [00:27<00:02, 303.21file/s]Copying files:  91%|█████████ | 8231/9028 [00:27<00:02, 304.02file/s]Copying files:  92%|█████████▏| 8263/9028 [00:27<00:02, 303.89file/s]Copying files:  92%|█████████▏| 8297/9028 [00:27<00:02, 313.76file/s]Copying files:  92%|█████████▏| 8329/9028 [00:27<00:02, 315.06file/s]Copying files:  93%|█████████▎| 8361/9028 [00:27<00:02, 312.76file/s]Copying files:  93%|█████████▎| 8394/9028 [00:27<00:01, 317.34file/s]Copying files:  93%|█████████▎| 8428/9028 [00:27<00:01, 319.94file/s]Copying files:  94%|█████████▎| 8463/9028 [00:27<00:01, 328.24file/s]Copying files:  94%|█████████▍| 8496/9028 [00:27<00:01, 315.40file/s]Copying files:  94%|█████████▍| 8528/9028 [00:28<00:01, 311.09file/s]Copying files:  95%|█████████▍| 8560/9028 [00:28<00:01, 312.33file/s]Copying files:  95%|█████████▌| 8595/9028 [00:28<00:01, 318.61file/s]Copying files:  96%|█████████▌| 8629/9028 [00:28<00:01, 321.44file/s]Copying files:  96%|█████████▌| 8662/9028 [00:28<00:01, 320.75file/s]Copying files:  96%|█████████▋| 8696/9028 [00:28<00:01, 324.63file/s]Copying files:  97%|█████████▋| 8729/9028 [00:28<00:00, 310.58file/s]Copying files:  97%|█████████▋| 8766/9028 [00:28<00:00, 322.09file/s]Copying files:  97%|█████████▋| 8799/9028 [00:28<00:00, 318.79file/s]Copying files:  98%|█████████▊| 8833/9028 [00:29<00:00, 320.59file/s]Copying files:  98%|█████████▊| 8866/9028 [00:29<00:00, 322.68file/s]Copying files:  99%|█████████▊| 8901/9028 [00:29<00:00, 323.20file/s]Copying files:  99%|█████████▉| 8938/9028 [00:29<00:00, 336.36file/s]Copying files:  99%|█████████▉| 8972/9028 [00:29<00:00, 325.42file/s]Copying files: 100%|█████████▉| 9006/9028 [00:29<00:00, 323.15file/s]Copying files: 100%|██████████| 9028/9028 [00:33<00:00, 269.53file/s]
+Copying dataset specific metadata
+Original labels:
+['melanoma-in-situ' 'mycosis-fungoides' 'squamous-cell-carcinoma-in-situ'
+ 'basal-cell-carcinoma' 'squamous-cell-carcinoma'
+ 'melanoma-acral-lentiginous' 'basal-cell-carcinoma-superficial'
+ 'squamous-cell-carcinoma-keratoacanthoma' 'subcutaneous-t-cell-lymphoma'
+ 'melanocytic-nevi' 'seborrheic-keratosis-irritated'
+ 'focal-acral-hyperkeratosis' 'hyperpigmentation' 'lipoma'
+ 'foreign-body-granuloma' 'blue-nevus' 'verruca-vulgaris' 'acrochordon'
+ 'wart' 'abrasions-ulcerations-and-physical-injuries'
+ 'basal-cell-carcinoma-nodular' 'epidermal-cyst'
+ 'acquired-digital-fibrokeratoma' 'epidermal-nevus' 'seborrheic-keratosis'
+ 'trichilemmoma' 'pyogenic-granuloma' 'neurofibroma'
+ 'syringocystadenoma-papilliferum' 'nevus-lipomatosus-superficialis'
+ 'benign-keratosis' 'inverted-follicular-keratosis' 'onychomycosis'
+ 'dermatofibroma' 'trichofolliculoma' 'lymphocytic-infiltrations'
+ 'prurigo-nodularis' 'kaposi-sarcoma' 'scar' 'eccrine-poroma'
+ 'angioleiomyoma' 'keloid' 'hematoma' 'metastatic-carcinoma' 'melanoma'
+ 'angioma' 'folliculitis' 'atypical-spindle-cell-nevus-of-reed'
+ 'xanthogranuloma' 'eczema-spongiotic-dermatitis'
+ 'arteriovenous-hemangioma' 'acne-cystic' 'verruciform-xanthoma'
+ 'molluscum-contagiosum' 'condyloma-accuminatum' 'morphea' 'neuroma'
+ 'dysplastic-nevus' 'nodular-melanoma-(nm)' 'actinic-keratosis'
+ 'pigmented-spindle-cell-nevus-of-reed' 'dermatomyositis' 'glomangioma'
+ 'cellular-neurothekeoma' 'fibrous-papule' 'graft-vs-host-disease'
+ 'lichenoid-keratosis' 'reactive-lymphoid-hyperplasia'
+ 'coccidioidomycosis' 'leukemia-cutis' 'sebaceous-carcinoma'
+ 'chondroid-syringoma' 'tinea-pedis' 'solar-lentigo'
+ 'clear-cell-acanthoma' 'abscess'
+ 'blastic-plasmacytoid-dendritic-cell-neoplasm' 'acral-melanotic-macule'
+ 'photodermatoses' 'neutrophilic dermatoses' 'necrobiosis lipoidica'
+ 'seborrheic dermatitis' 'pityriasis rosea' 'stevens johnson syndrome'
+ 'acrodermatitis enteropathica' 'scabies' 'porphyria'
+ 'porokeratosis of mibelli' 'psoriasis' 'pilar cyst' 'pustular psoriasis'
+ 'rhinophyma' 'basal cell carcinoma' 'allergic contact dermatitis'
+ 'sarcoidosis' 'milia' 'lentigo maligna' 'behcets disease' 'drug eruption'
+ 'lichen simplex' 'squamous cell carcinoma' 'halo nevus' 'acne vulgaris'
+ 'basal cell carcinoma morpheiform' 'lichen planus' 'tick bite'
+ 'scleroderma' 'cheilitis' 'fixed eruptions' 'telangiectases'
+ 'erythema annulare centrifigum' 'mycosis fungoides' 'actinic keratosis'
+ 'aplasia cutis' 'lyme disease' 'kaposi sarcoma' 'erythema multiforme'
+ 'granuloma annulare' 'nevus sebaceous of jadassohn' 'granuloma pyogenic'
+ 'keratosis pilaris' 'striae' 'neurodermatitis' 'lupus erythematosus'
+ 'perioral dermatitis' 'incontinentia pigmenti' 'vitiligo' 'stasis edema'
+ 'acanthosis nigricans' 'prurigo nodularis' 'dyshidrotic eczema'
+ 'lymphangioma' 'paronychia' 'urticaria' 'xeroderma pigmentosum'
+ 'juvenile xanthogranuloma' 'eczema'
+ 'papilomatosis confluentes and reticulate' 'urticaria pigmentosa' 'acne'
+ 'mucous cyst' 'lichen amyloidosis' 'pityriasis rubra pilaris' 'xanthomas'
+ 'rosacea' 'becker nevus' 'ehlers danlos syndrome' 'tuberous sclerosis'
+ 'dariers disease' 'mucinosis' 'hailey hailey disease'
+ 'erythema elevatum diutinum' 'nematode infection' 'epidermal nevus'
+ 'congenital nevus' 'pediculosis lids' 'malignant melanoma'
+ 'superficial spreading melanoma ssm' 'lupus subacute'
+ 'porokeratosis actinic'
+ 'acquired autoimmune bullous diseaseherpes gestationis'
+ 'sun damaged skin' 'factitial dermatitis' 'calcinosis cutis'
+ 'naevus comedonicus' 'livedo reticularis' 'pyogenic granuloma'
+ 'pityriasis lichenoides chronica' 'fordyce spots' 'hidradenitis'
+ 'neurotic excoriations' 'nevocytic nevus' 'epidermolysis bullosa'
+ 'myiasis' 'tungiasis' 'neurofibromatosis' 'langerhans cell histiocytosis'
+ 'erythema nodosum' 'port wine stain' 'scleromyxedema'
+ 'seborrheic keratosis' 'drug induced pigmentary changes'
+ 'solid cystic basal cell carcinoma' 'disseminated actinic porokeratosis'
+ 'pilomatricoma' 'ichthyosis vulgaris' 'syringoma' 'Melanoma Invasive'
+ 'Basal cell carcinoma' 'Squamous cell carcinoma, NOS' 'Melanoma in situ'
+ 'Nevus' 'Melanoma, NOS' 'Solar lentigo' 'Lichen planus like keratosis'
+ 'Solar or actinic keratosis' 'Seborrheic keratosis' 'Dermatofibroma'
+ 'Squamous cell carcinoma in situ' 'Squamous cell carcinoma, Invasive'
+ 'Lentigo NOS' 'Atypical melanocytic neoplasm'
+ 'Atypical intraepithelial melanocytic proliferation'
+ 'Pigmented benign keratosis' 'Verruca' 'Hemangioma' 'Angiofibroma'
+ 'Melanoma metastasis' 'Trichilemmal or isthmic-catagen or pilar cyst'
+ 'Hidradenoma' 'Scar' 'Fibroepithelial polyp' 'Keratoacanthoma'
+ 'Juvenile xanthogranuloma' 'Angiokeratoma' 'Pyogenic granuloma'
+ 'Porokeratosis' 'Trichoblastoma' 'Ink-spot lentigo'
+ 'Mucosal melanotic macule' 'Sebaceous hyperplasia' 'Clear cell acanthoma'
+ 'Mastocytosis' 'Supernumerary nipple' 'Infundibular or epidermal cyst'
+ 'Molluscum']
+# of labels: 226
+
+Harmonized labels:
+['melanoma' 'mycosis-fungoides' 'squamous-cell-carcinoma'
+ 'basal-cell-carcinoma' 'hematologic-malignancy' 'benign-nevus'
+ 'seborrheic-keratosis' 'benign-keratosis' 'pigmentary-disorder' 'lipoma'
+ 'granuloma-annulare' 'wart' 'skin-tag' 'trauma' 'epidermal-cyst'
+ 'dermatofibroma' 'adnexal-tumor' 'pyogenic-granuloma' 'neurofibroma'
+ 'fungal-infection' 'inflammatory-dermatosis' 'prurigo-nodularis'
+ 'kaposi-sarcoma' 'scar' 'hemangioma' 'scar-keloid' 'metastatic-carcinoma'
+ 'folliculitis' 'atypical-nevus' 'xanthogranuloma' 'eczema' 'acne'
+ 'xanthoma' 'molluscum-contagiosum' 'wart-genital' 'scleroderma'
+ 'dysplastic-nevus' 'actinic-keratosis' 'dermatomyositis'
+ 'graft-vs-host-disease' 'lichenoid-keratosis' 'benign-tumor'
+ 'sebaceous-carcinoma' 'solar-lentigo' 'clear-cell-acanthoma'
+ 'bacterial-infection' 'melanotic-macule' 'photodermatitis'
+ 'necrobiosis-lipoidica' 'seborrheic-dermatitis' 'pityriasis-rosea'
+ 'stevens-johnson-syndrome' 'acrodermatitis-enteropathica'
+ 'parasitic-infection' 'porphyria' 'porokeratosis' 'psoriasis'
+ 'pilar-cyst' 'psoriasis-pustular' 'rhinophyma' 'contact-dermatitis'
+ 'sarcoidosis' 'milia' 'melanoma-in-situ' 'behcets-disease'
+ 'drug-reaction' 'lichen-simplex' 'lichen-planus' 'tick-bite' 'cheilitis'
+ 'fixed-drug-eruption' 'telangiectases' 'erythema-annulare-centrifigum'
+ 'aplasia-cutis' 'lyme-disease' 'erythema-multiforme' 'nevus-sebaceous'
+ 'keratosis-pilaris' 'striae' 'neurodermatitis' 'lupus-erythematosus'
+ 'perioral-dermatitis' 'incontinentia-pigmenti' 'vitiligo' 'stasis-edema'
+ 'acanthosis-nigricans' 'eczema-dyshidrotic' 'vascular-malformation'
+ 'urticaria' 'xeroderma-pigmentosum' 'papillomatosis-confluent-reticulate'
+ 'urticaria-pigmentosa' 'mucous-cyst' 'lichen-amyloidosis'
+ 'pityriasis-rubra-pilaris' 'rosacea' 'ehlers-danlos-syndrome'
+ 'tuberous-sclerosis' 'dariers-disease' 'mucinosis'
+ 'hailey-hailey-disease' 'erythema-elevatum-diutinum'
+ 'acquired autoimmune bullous diseaseherpes gestationis' 'sun-damage'
+ 'dermatitis-factitia' 'calcinosis-cutis' 'livedo-reticularis'
+ 'pyogenic granuloma' 'pityriasis-lichenoides-chronica' 'fordyce-spots'
+ 'hidradenitis-suppurativa' 'neurotic-excoriations'
+ 'epidermolysis-bullosa' 'neurofibromatosis'
+ 'langerhans-cell-histiocytosis' 'erythema-nodosum' 'scleromyxedema'
+ 'ichthyosis-vulgaris' 'lentigo' 'angiofibroma' 'melanoma-metastatic'
+ 'angiokeratoma' 'mastocytosis' 'supernumerary-nipple']
+# of labels: 124
+
+10 diseases have less than 5 images
+label
+fungal-infection          4
+trauma                    4
+hematologic-malignancy    3
+benign-tumor              3
+wart-genital              2
+graft-vs-host-disease     2
+mastocytosis              2
+angiofibroma              2
+sebaceous-carcinoma       1
+supernumerary-nipple      1
+Name: count, dtype: int64
+Successfully wrote DataFrame to gs://derma-datasets-2/final/metadata_all_harmonized.csv
+=== PIPELINE OUTPUT VERIFICATION ===
+Harmonized metadata file found in GCS
+    Size: 2237104 bytes
+    Updated: 2025-10-15 20:49:00.310000+00:00
