@@ -1,9 +1,8 @@
-"""Training class for skin disease classification"""
-
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
@@ -45,14 +44,16 @@ class Trainer:
         self.output_config = config['output']
         self.checkpoint_config = config['checkpoint']
         
-        # Initialize optimizers (requires separate backbone and head)
         self.optimizer_backbone, self.optimizer_head = self._initialize_optimizers()
+        self.scheduler_backbone, self.scheduler_head = self._initialize_schedulers()
         
-        # Training state
         self.current_epoch = 0
         self.best_val_loss = float('inf')
         self.patience_counter = 0
         self.start_epoch = 0
+        
+        self.n_warmup_epochs = self.training_config['n_warmup_epochs']
+        self.backbone_frozen = False
     
     
     def _make_optimizer(self, name_cfg, lr, wd, betas, eps, momentum, params):
@@ -92,6 +93,55 @@ class Trainer:
         optimizer_head = self._make_optimizer(oh_name, oh_lr, oh_wd, oh_betas, oh_eps, oh_momentum, head_params)
         return optimizer_backbone, optimizer_head
     
+    def _initialize_schedulers(self):
+        """Initialize cosine annealing schedulers for both optimizers."""
+        num_epochs = self.training_config['num_epochs']
+        
+        # Get scheduler configuration
+        scheduler_config = self.training_config.get('scheduler', {})
+        use_cosine_annealing = scheduler_config.get('use_cosine_annealing', True)
+        
+        if use_cosine_annealing:
+            # Cosine annealing schedulers
+            scheduler_backbone = CosineAnnealingLR(
+                self.optimizer_backbone, 
+                T_max=num_epochs,
+                eta_min=scheduler_config.get('backbone_eta_min', 0.0)
+            )
+            scheduler_head = CosineAnnealingLR(
+                self.optimizer_head, 
+                T_max=num_epochs,
+                eta_min=scheduler_config.get('head_eta_min', 0.0)
+            )
+        else:
+            # No schedulers (step function that does nothing)
+            scheduler_backbone = None
+            scheduler_head = None
+            
+        return scheduler_backbone, scheduler_head
+    
+    def _freeze_backbone(self):
+        """Freeze backbone parameters to prevent gradient updates."""
+        if not self.backbone_frozen:
+            for param in self.model.backbone.parameters():
+                param.requires_grad = False
+            self.backbone_frozen = True
+            logger.info("Backbone frozen - only classifier will be trained")
+    
+    def _unfreeze_backbone(self):
+        """Unfreeze backbone parameters to allow gradient updates."""
+        if self.backbone_frozen:
+            for param in self.model.backbone.parameters():
+                param.requires_grad = True
+            self.backbone_frozen = False
+            logger.info("Backbone unfrozen - both backbone and classifier will be trained")
+    
+    def _update_backbone_freeze_state(self, epoch):
+        """Update backbone freeze state based on current epoch."""
+        if epoch < self.n_warmup_epochs and not self.backbone_frozen:
+            self._freeze_backbone()
+        elif epoch >= self.n_warmup_epochs and self.backbone_frozen:
+            self._unfreeze_backbone()
     
     def train(self):
         """Main training loop"""
@@ -107,6 +157,9 @@ class Trainer:
         
         for epoch in range(self.start_epoch, num_epochs):
             self.current_epoch = epoch
+            
+            # Update backbone freeze state
+            self._update_backbone_freeze_state(epoch)
             
             # Training phase
             train_loss, train_acc, train_f1 = self._train_epoch()
@@ -143,6 +196,12 @@ class Trainer:
             if (epoch + 1) % save_frequency == 0:
                 self._save_checkpoint(epoch, train_loss, is_best=False)
             
+            # Step schedulers
+            if self.scheduler_backbone is not None:
+                self.scheduler_backbone.step()
+            if self.scheduler_head is not None:
+                self.scheduler_head.step()
+            
         logger.info("Training completed!")
     
     def _train_epoch(self):
@@ -164,7 +223,8 @@ class Trainer:
             data, target = data.to(self.device, non_blocking=True), target.to(self.device, non_blocking=True)
             
             # Zero gradients
-            self.optimizer_backbone.zero_grad()
+            if not self.backbone_frozen:
+                self.optimizer_backbone.zero_grad()
             self.optimizer_head.zero_grad()
             
             # Forward pass
@@ -173,7 +233,8 @@ class Trainer:
             
             # Backward pass
             loss.backward()
-            self.optimizer_backbone.step()
+            if not self.backbone_frozen:
+                self.optimizer_backbone.step()
             self.optimizer_head.step()
             
             # Statistics
@@ -352,6 +413,18 @@ class Trainer:
                 'backbone': self.optimizer_backbone.state_dict(),
                 'head': self.optimizer_head.state_dict(),
             }
+        
+        # Include scheduler states
+        if self.scheduler_backbone is not None or self.scheduler_head is not None:
+            additional_info['schedulers_state_dict'] = {}
+            if self.scheduler_backbone is not None:
+                additional_info['schedulers_state_dict']['backbone'] = self.scheduler_backbone.state_dict()
+            if self.scheduler_head is not None:
+                additional_info['schedulers_state_dict']['head'] = self.scheduler_head.state_dict()
+        
+        # Include backbone freeze state
+        additional_info['backbone_frozen'] = self.backbone_frozen
+        additional_info['n_warmup_epochs'] = self.n_warmup_epochs
         
         # Save checkpoint
         checkpoint_path = save_checkpoint(

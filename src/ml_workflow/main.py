@@ -14,13 +14,11 @@ from constants import (
 )
 
 def initialize_model(config_path):
-    """Initialize model and training setup"""
+    """This function will initialize everything needed for training based on config being used"""
     
-    # Detect device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using device: {device}")
     
-    # Load configuration
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     logger.info(f"Loaded configuration from: {config_path}")
@@ -33,7 +31,7 @@ def initialize_model(config_path):
     data_processing_config = config['data_processing']
     augmentation_config = config['augmentation']
     
-    # Determine metadata path
+    # Determine metadata path depending on training using GCP or local data
     if data_config.get('use_local'):
         metadata_path = data_config['metadata_path']
         img_prefix = data_config['img_prefix']
@@ -41,11 +39,11 @@ def initialize_model(config_path):
         metadata_path = GCS_METADATA_PATH
         img_prefix = GCS_IMAGE_PREFIX
     
-    logger.info(f"Loading metadata from: {metadata_path}")
+    # This will load the metadata file and filter it
+    # This decides what we train on 
     metadata = load_metadata(metadata_path, min_samples=data_config['min_samples_per_label'], datasets=data_config['datasets'])
     
-    # Create dataloaders
-    logger.info("Creating dataloaders...")
+    # Create dataloaders with splits
     train_loader, val_loader, test_loader, info = create_dataloaders(
         metadata_df=metadata,
         img_prefix=img_prefix,
@@ -57,21 +55,13 @@ def initialize_model(config_path):
         augmentation_config=augmentation_config,
     )
     
-    logger.info("DataLoader Info:")
-    logger.info(f"  Number of classes: {info['num_classes']}")
-    logger.info(f"  Train size: {info['train_size']}")
-    logger.info(f"  Val size: {info['val_size']}")
-    logger.info(f"  Test size: {info['test_size']}")
-    #logger.info(f"  Mean: {info['mean']}")
-    #logger.info(f"  Std: {info['std']}")
     logger.info(f"  Image size: {info['img_size']}")
-    logger.info(f"  Batch size: {info['batch_size']}")
-    logger.info("Dataloaders ready!")
-    
+    logger.info(f"  Batch size: {info['batch_size']}")    
     # Update model config with number of classes from data
     model_config = config['model'].copy()
     model_config['num_classes'] = info['num_classes']
     model_config['img_size'] = config['image']['size']
+    model_config['sample_weights'] = info['sample_weights']
     
     # Initialize model
     logger.info("Initializing model...")
@@ -87,7 +77,15 @@ def initialize_model(config_path):
     logger.info(f"Activation: {model_info['activation']}")
     
     # Initialize trainer with dataloaders, model, and device
-    trainer = Trainer(config, train_loader, val_loader, test_loader, info, model, device)
+    trainer = Trainer(
+                config = config, 
+                train_loader = train_loader, 
+                val_loader = val_loader, 
+                test_loader = test_loader, 
+                info = info, 
+                model = model, 
+                device = device
+                )
     
     # Load checkpoint if specified
     checkpoint_config = config.get('checkpoint', {})
@@ -105,6 +103,19 @@ def initialize_model(config_path):
             trainer.start_epoch = checkpoint.get('epoch', 0) + 1
             trainer.best_val_loss = checkpoint.get('best_val_loss', float('inf'))
             trainer.patience_counter = checkpoint.get('patience_counter', 0)
+            
+            # Load scheduler states if available
+            schedulers_state_dict = checkpoint.get('schedulers_state_dict')
+            if schedulers_state_dict:
+                if trainer.scheduler_backbone is not None and 'backbone' in schedulers_state_dict:
+                    trainer.scheduler_backbone.load_state_dict(schedulers_state_dict['backbone'])
+                if trainer.scheduler_head is not None and 'head' in schedulers_state_dict:
+                    trainer.scheduler_head.load_state_dict(schedulers_state_dict['head'])
+                logger.info("Scheduler states loaded from checkpoint")
+            
+            # Load backbone freeze state
+            trainer.backbone_frozen = checkpoint.get('backbone_frozen', False)
+            trainer.n_warmup_epochs = checkpoint.get('n_warmup_epochs', 0)
             
         except Exception as e:
             logger.error(f"Error loading checkpoint: {e}")

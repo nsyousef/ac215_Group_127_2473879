@@ -65,10 +65,10 @@ model:
   hidden_sizes: [512, 256]  # List of hidden layer sizes
   activation: "relu"  # relu, gelu, swish, leaky_relu
   dropout_rate: 0.6
-  label_smoothing: 0.1  # Label smoothing factor for cross entropy loss (0.0 = no smoothing)
+  label_smoothing: 0.15  # Label smoothing factor for cross entropy loss (0.0 = no smoothing)
   loss_fn: "cross_entropy"
-  pooling_type: "max"
-  unfreeze_layers: 20
+  pooling_type: "concat"
+  unfreeze_layers: -1
 
 
 # Separate optimizers (override if provided). If omitted, falls back to single optimizer above

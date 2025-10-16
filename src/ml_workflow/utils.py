@@ -28,11 +28,12 @@ logger = setup_logger()
 
 def load_metadata(source: str, min_samples: int, datasets: List[str] = None) -> pd.DataFrame:
     """
-    Load metadata from GCS or local file and filter by minimum samples
+    Load metadata from GCS or local file and filter by minimum samples and datasets to be used
     
     Args:
         source: Path to CSV (gs://bucket/path or local/path.csv)
         min_samples: Minimum images per label
+        datasets: List of datasets to be used
     """
     logger.info(f"Loading metadata from: {source}")
     metadata = pd.read_csv(source)
@@ -44,7 +45,8 @@ def load_metadata(source: str, min_samples: int, datasets: List[str] = None) -> 
     logger.info(f"Labels with >= {min_samples} images: {len(preserve_labels):,}")
     
     metadata = metadata[metadata['label'].isin(preserve_labels)].reset_index(drop=True)
-    metadata = metadata[metadata['dataset'].isin(datasets)]
+    if datasets is not None:
+        metadata = metadata[metadata['dataset'].isin(datasets)].reset_index(drop=True)
     logger.info(f"Images after filtering: {len(metadata):,}")
     logger.info(f"Datasets: {datasets}")
     

@@ -9,11 +9,11 @@ from torchvision.models import (
     ResNet101_Weights,
     DenseNet121_Weights,
     EfficientNet_B0_Weights,
+    EfficientNet_B4_Weights,
     VGG16_Weights,
 )
 from typing import Dict, Any, Optional, List
-from .utils import MLP
-
+from .utils import MLP, FocalLoss
 
 class ImageNetModel(nn.Module):
     """Transfer learning model based on ImageNet pretrained architectures"""
@@ -35,16 +35,36 @@ class ImageNetModel(nn.Module):
         self.activation = model_config['activation']
         self.dropout_rate = model_config['dropout_rate']
         self.img_size = model_config['img_size']
-        # Initialize loss function
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.pooling_type = model_config.get('pooling_type')  # 'avg', 'max', 'concat'
+        self.unfreeze_layers = model_config.get('unfreeze_layers', 0)  # Number of layers to unfreeze from the end
         
-        # Load pretrained backbone
+        # Initialize loss function with label smoothing
+        self.loss_fn = model_config['loss_fn']
+        if self.loss_fn == 'cross_entropy':
+            self.label_smoothing = model_config.get('label_smoothing', 0.0)
+            self.loss_fn = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
+        elif self.loss_fn == 'focal':
+            if 'alpha' in model_config:
+                self.alpha = model_config['alpha']
+            else:
+                self.alpha = model_config['sample_weights']
+            self.gamma = model_config['gamma']
+            self.reduction = model_config['reduction']
+            self.loss_fn = FocalLoss(alpha=self.alpha, gamma=self.gamma, reduction=self.reduction)
+        else:
+            raise ValueError(f"Unsupported loss function: {self.loss_fn}")    
+               
         self.backbone = self._get_backbone(self.model_name, self.pretrained)
         
-        # Get the number of features from the backbone
+        # Apply layer freezing/unfreezing
+        self._freeze_layers()
+        
+        # Add pooling layers
+        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.max_pool = nn.AdaptiveMaxPool2d((1, 1))
+        
         self.num_features = self._get_num_features()
         
-        # Replace classifier with custom MLP
         self.classifier = MLP(
             input_size=self.num_features,
             hidden_sizes=self.hidden_sizes,
@@ -58,29 +78,82 @@ class ImageNetModel(nn.Module):
         if model_name == "resnet50":
             weights = ResNet50_Weights.DEFAULT if pretrained else None
             model = models.resnet50(weights=weights)
-            # Remove the original classifier
-            model = nn.Sequential(*list(model.children())[:-1])
+            # Remove the original classifier and pooling
+            model = nn.Sequential(*list(model.children())[:-2])
         elif model_name == "resnet101":
             weights = ResNet101_Weights.DEFAULT if pretrained else None
             model = models.resnet101(weights=weights)
-            model = nn.Sequential(*list(model.children())[:-1])
+            model = nn.Sequential(*list(model.children())[:-2])
         elif model_name == "densenet121":
             weights = DenseNet121_Weights.DEFAULT if pretrained else None
             model = models.densenet121(weights=weights)
             # Remove the original classifier
-            model = nn.Sequential(*list(model.children())[:-1])
+            model.features = model.features
+            model = model.features
         elif model_name == "efficientnet_b0":
             weights = EfficientNet_B0_Weights.DEFAULT if pretrained else None
             model = models.efficientnet_b0(weights=weights)
-            model = nn.Sequential(*list(model.children())[:-1])
+            # Remove classifier and pooling
+            model = model.features
+        elif model_name == "efficientnet_b4":
+            weights = EfficientNet_B4_Weights.DEFAULT if pretrained else None
+            model = models.efficientnet_b4(weights=weights)
+            # Remove classifier and pooling
+            model = model.features
         elif model_name == "vgg16":
             weights = VGG16_Weights.DEFAULT if pretrained else None
             model = models.vgg16(weights=weights)
-            model = nn.Sequential(*list(model.children())[:-1])
+            model = model.features
         else:
             raise ValueError(f"Unsupported model: {model_name}")
             
         return model
+    
+    def _freeze_layers(self):
+        """
+        Freeze layers in the backbone based on unfreeze_layers parameter
+        unfreeze_layers: 0 means all layers frozen, -1 means all unfrozen,
+                        positive number means unfreeze that many layers from the end
+        """
+        if self.unfreeze_layers == -1:
+            # Unfreeze all layers
+            for param in self.backbone.parameters():
+                param.requires_grad = True
+            return
+        
+        # First freeze all layers
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+        
+        if self.unfreeze_layers == 0:
+            # Keep all layers frozen
+            return
+        
+        # Get all modules/layers in the backbone
+        all_modules = list(self.backbone.modules())
+        
+        # For Sequential models, get direct children
+        if isinstance(self.backbone, nn.Sequential):
+            layers = list(self.backbone.children())
+        else:
+            layers = list(self.backbone.children())
+        
+        # Calculate number of layers to unfreeze
+        num_layers = len(layers)
+        if self.unfreeze_layers > num_layers:
+            print(f"Warning: unfreeze_layers ({self.unfreeze_layers}) is greater than total layers ({num_layers}). Unfreezing all layers.")
+            layers_to_unfreeze = layers
+        else:
+            layers_to_unfreeze = layers[-self.unfreeze_layers:]
+        
+        # Unfreeze the specified layers
+        for layer in layers_to_unfreeze:
+            for param in layer.parameters():
+                param.requires_grad = True
+        
+        # Print freeze status
+        trainable_layers = sum(1 for layer in layers if any(p.requires_grad for p in layer.parameters()))
+        print(f"Backbone: {num_layers} total layers, {trainable_layers} unfrozen layers")
     
     def _get_num_features(self) -> int:
         """Get the number of output features from the backbone"""
@@ -88,25 +161,42 @@ class ImageNetModel(nn.Module):
         dummy_input = torch.randn(1, 3, self.img_size[0], self.img_size[1])
         with torch.no_grad():
             features = self.backbone(dummy_input)
-            return features.view(features.size(0), -1).size(1)
+            
+            # Apply pooling based on pooling_type
+            if self.pooling_type == 'avg':
+                pooled = self.avg_pool(features)
+            elif self.pooling_type == 'max':
+                pooled = self.max_pool(features)
+            elif self.pooling_type == 'concat':
+                avg_pooled = self.avg_pool(features)
+                max_pooled = self.max_pool(features)
+                pooled = torch.cat([avg_pooled, max_pooled], dim=1)
+            else:
+                raise ValueError(f"Unsupported pooling type: {self.pooling_type}")
+            
+            return pooled.view(pooled.size(0), -1).size(1)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through the model
-        
-        Args:
-            x: Input tensor of shape (batch_size, 3, height, width)
-            
-        Returns:
-            Output tensor of shape (batch_size, num_classes)
         """
         # Extract features using backbone
         features = self.backbone(x)
         
+        # Apply pooling based on pooling_type
+        if self.pooling_type == 'avg':
+            features = self.avg_pool(features)
+        elif self.pooling_type == 'max':
+            features = self.max_pool(features)
+        elif self.pooling_type == 'concat':
+            avg_pooled = self.avg_pool(features)
+            max_pooled = self.max_pool(features)
+            features = torch.cat([avg_pooled, max_pooled], dim=1)
+        else:
+            features = features
+        
         # Flatten features
         features = features.view(features.size(0), -1)
-        
-        # Pass through classifier
         output = self.classifier(features)
         
         return output
@@ -114,25 +204,28 @@ class ImageNetModel(nn.Module):
     def loss(self, outputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """
         Compute loss between predictions and targets
-        
-        Args:
-            outputs: Model predictions of shape (batch_size, num_classes)
-            targets: Ground truth labels of shape (batch_size,)
-            
-        Returns:
-            Loss tensor
         """
         return self.loss_fn(outputs, targets)
+    
+    def unfreeze_more_layers(self, num_additional_layers: int):
+        """
+        Unfreeze additional layers during training (for progressive unfreezing)
+        
+        Args:
+            num_additional_layers: Number of additional layers to unfreeze from the end
+        """
+        self.unfreeze_layers += num_additional_layers
+        self._freeze_layers()
+        print(f"Unfroze {num_additional_layers} additional layers. Total unfrozen: {self.unfreeze_layers}")
     
     def get_model_info(self) -> Dict[str, Any]:
         """
         Get model information
-        
-        Returns:
-            Dictionary with model information
         """
         total_params = sum(p.numel() for p in self.parameters())
         trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        backbone_params = sum(p.numel() for p in self.backbone.parameters())
+        backbone_trainable = sum(p.numel() for p in self.backbone.parameters() if p.requires_grad)
         
         return {
             'model_name': self.model_name,
@@ -141,7 +234,12 @@ class ImageNetModel(nn.Module):
             'hidden_sizes': self.hidden_sizes,
             'activation': self.activation,
             'dropout_rate': self.dropout_rate,
+            'pooling_type': self.pooling_type,
+            'unfreeze_layers': self.unfreeze_layers,
             'num_features': self.num_features,
             'total_parameters': total_params,
-            'trainable_parameters': trainable_params
+            'trainable_parameters': trainable_params,
+            'backbone_parameters': backbone_params,
+            'backbone_trainable_parameters': backbone_trainable,
+            'trainable_percentage': f"{(trainable_params/total_params)*100:.2f}%"
         }

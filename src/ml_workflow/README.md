@@ -1,6 +1,8 @@
-Complete PyTorch ML workflow for skin disease classification with **transfer learning**, **checkpointing**, and **evaluation**.
+# ML Workflow for Skin Disease Classification
 
-## Structure
+A configurable machine learning pipeline for skin disease classification built for APCOMP215.
+
+## 📁 Directory Structure
 
 ```
 ml-workflow/
@@ -9,40 +11,33 @@ ml-workflow/
 ├── constants.py               # Project constants
 ├── utils.py                   # Utilities, checkpointing & data analysis
 ├── configs/
-│   └── config.yaml           # Configuration file
+│   └── TEMPLATE.yaml          # Configuration template
 ├── dataloader/
-│   ├── dataloader.py         # ImageDataset & create_dataloaders
-│   └── transform_utils.py    # Image transformations
+│   ├── dataloader.py          # ImageDataset & create_dataloaders
+│   └── transform_utils.py     # Image transformations
 ├── model/
-│   ├── imagenet.py           # Transfer learning model
-│   └── utils.py              # Model utilities (MLP)
+│   ├── imagenet.py            # Transfer learning model
+│   └── utils.py               # Model utilities (MLP)
 ├── train/
-│   └── train.py              # Training class
-└── requirements.txt          # Dependencies
+│   └── train.py               # Training class
+└── requirements.txt           # Dependencies
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
 ### 1. Training a Model
 
-```bash
-# Train with default configuration
-python main.py --config configs/config.yaml
+Set your parameters in the config file and run:
 
-# Train with custom configuration
+```bash
 python main.py --config path/to/your/config.yaml
 ```
 
 ### 2. Evaluating a Model
 
+Enter the checkpoint path in the config and run:
+
 ```bash
-# Evaluate with plots
-python eval.py --config configs/config.yaml
-
-# Evaluate without plots
-python eval.py --config configs/config.yaml --no-plots
-
-# Custom plot directory
 python eval.py --config configs/config.yaml --plot-dir ./my_plots
 ```
 
@@ -57,109 +52,135 @@ trainer = return_dict['trainer']
 model = return_dict['model']
 test_loader = return_dict['test_loader']
 
-# Train the model
+# Train the model or evaluate as required
 trainer.train()
-
-# Or just load a pre-trained model for inference
-# (set checkpoint.load_from in config.yaml)
 ```
 
-## Configuration
+## ⚙️ Configuration
 
-The workflow is fully configurable via `configs/config.yaml`:
+The workflow is fully configurable via YAML files in the `configs/` directory.
 
-### Key Configuration Sections:
+### Data Source Configuration
 
-```yaml
-# Data source
-data:
-  use_local: true
-  metadata_path: "../../data/metadata_all_harmonized.csv"
-  img_prefix: "../../data"
+| Parameter | Description |
+|-----------|-------------|
+| `use_local` | Whether to load data from local storage instead of cloud or remote sources |
+| `metadata_path` | Path to the metadata CSV that defines image paths and labels (only used if `use_local` is True) |
+| `img_prefix` | Directory for image files |
+| `min_samples_per_label` | Minimum number of images required for a label to be included |
+| `datasets` | List of datasets to include (e.g., Fitzpatrick17k, DDI, ISIC) |
 
-# Model architecture
-model:
-  name: "resnet50"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16
-  pretrained: true
-  hidden_sizes: [512, 256]
-  activation: "relu"
+### Training Parameters
 
-# Training parameters
-training:
-  batch_size: 32
-  num_epochs: 100
-  patience: 10
+| Parameter | Description |
+|-----------|-------------|
+| `batch_size` | Number of samples per batch |
+| `num_workers` | Number of CPU threads used for data loading |
+| `seed` | Random seed for reproducibility |
+| `prefetch_factor` | Controls how many batches each worker preloads |
+| `num_epochs` | Maximum number of training epochs |
+| `patience` | Number of epochs to wait before early stopping if validation doesn't improve |
+| `validation_interval` | Frequency (in epochs) to run validation |
+| `n_warmup_epochs` | Number of epochs to freeze the backbone |
 
-# Checkpointing
-checkpoint:
-  save_frequency: 10
-  keep_last: 5
-  load_from: null  # Path to checkpoint to resume from
-```
+#### Scheduler
 
-## Features
+| Parameter | Description |
+|-----------|-------------|
+| `use_cosine_annealing` | Enables cosine annealing learning rate scheduler |
+| `backbone_eta_min` | Minimum learning rate for backbone during cosine annealing |
+| `head_eta_min` | Minimum learning rate for classification head during cosine annealing |
 
-### ✅ **Complete ML Pipeline**
-- **Data Loading**: GCS and local storage support
-- **Transfer Learning**: ImageNet pretrained models
-- **Training**: Full training/validation/test loops
-- **Checkpointing**: Save/load with resume capability
-- **Evaluation**: Comprehensive metrics and visualizations
+### Data Splits
 
-### ✅ **Model Architectures**
-- ResNet50, ResNet101
-- DenseNet121
-- EfficientNet-B0
-- VGG16
+| Parameter | Description |
+|-----------|-------------|
+| `test_size` | Fraction of data reserved for testing |
+| `val_size` | Fraction of data reserved for validation |
 
-### ✅ **Data Augmentation**
-- Color jittering (brightness, contrast, saturation, hue)
-- Geometric transforms (rotation, translation, scaling)
-- Random flips and grayscale conversion
-- Configurable augmentation parameters
+### Image Configuration
 
-### ✅ **Evaluation Metrics**
-- Accuracy, Precision, Recall, F1-Score
-- Per-class performance analysis
-- Confusion matrix visualization
-- Class distribution plots
-- Overall performance summary
+| Parameter | Description |
+|-----------|-------------|
+| `size` | Image dimensions `[height, width]` |
+| `mode` | Image color mode (e.g., RGB or grayscale) |
 
-### ✅ **Device Support**
-- Automatic CUDA detection
-- CPU fallback
-- Device-agnostic code
+### Augmentation Parameters
 
-## Advanced Usage
+| Parameter | Description |
+|-----------|-------------|
+| `brightness_jitter` | Random brightness perturbations for robustness (set to `null` to disable) |
+| `contrast_jitter` | Random contrast perturbations |
+| `saturation_jitter` | Random saturation perturbations |
+| `hue_jitter` | Random hue perturbations |
+| `rotation_degrees` | Random rotation range in degrees |
+| `scale` | Random scaling range (e.g., `[0.8, 1.1]`) |
+| `horizontal_flip_prob` | Probability of horizontal flipping |
+| `vertical_flip_prob` | Probability of vertical flipping |
+| `translate` | Translation range |
+| `grayscale_prob` | Probability of converting to grayscale |
 
-### Custom Model Configuration
+### Data Processing
 
-```yaml
-model:
-  name: "efficientnet_b0"
-  pretrained: true
-  hidden_sizes: [1024, 512, 256]  # Deeper classifier
-  activation: "gelu"
-  dropout_rate: 0.3
-```
+| Parameter | Description |
+|-----------|-------------|
+| `compute_stats` | Whether to recompute dataset statistics (mean, std). If false, uses precomputed ImageNet statistics |
+| `weighted_sampling` | Balances image sampling frequency inversely to class counts for class imbalance correction |
 
-### Advanced Augmentation
+### Model Configuration
 
-```yaml
-augmentation:
-  brightness_jitter: 0.2
-  contrast_jitter: 0.2
-  rotation_degrees: 30
-  translate: [0.2, 0.2]
-  scale: [0.8, 1.2]
-  grayscale_prob: 0.2
-```
+| Parameter | Description |
+|-----------|-------------|
+| `name` | Model backbone (e.g., "resnet101", "densenet121", "resnet50") |
+| `pretrained` | Whether to load pretrained weights |
+| `num_classes` | Number of output classes (set to `null` for auto-inference based on data) |
+| `hidden_sizes` | Sizes of hidden layers in classification head |
+| `activation` | Non-linear activation function (e.g., "relu") |
+| `dropout_rate` | Fraction of neurons dropped during training for regularization |
+| `label_smoothing` | Smooths target labels to reduce overconfidence (used with cross entropy loss) |
+| `loss_fn` | Type of loss function (e.g., "cross_entropy", "focal") |
+| `pooling_type` | Type of feature pooling (e.g., "max" or "sum") |
+| `unfreeze_layers` | Number of final backbone layers to unfreeze during fine-tuning |
 
-### Checkpoint Management
+### Optimizer Configuration
+
+Separate configurations can be set for backbone and head optimizers:
+
+| Parameter | Description |
+|-----------|-------------|
+| `name` | Optimizer algorithm (e.g., "adam", "adamw") |
+| `learning_rate` | Initial learning rate (separate values can be used for backbone and head) |
+| `weight_decay` | L2 regularization coefficient |
+| `momentum` | Momentum term (used in SGD) |
+| `betas` | Exponential decay rates for first and second moment estimates (Adam-family) |
+| `eps` | Small constant added for numerical stability |
+
+### Output and Checkpointing
+
+| Parameter | Description |
+|-----------|-------------|
+| `save_dir` | Directory to save model checkpoints |
+| `log_dir` | Directory to store logs and metrics |
+| `experiment_name` | Label for the experiment (used for naming files) |
+| `save_frequency` | Frequency (in epochs) for saving checkpoints |
+| `keep_last` | Number of most recent checkpoints to keep |
+| `load_from` | Path to a pretrained checkpoint to resume from |
+
+### Example Checkpoint Configuration
+
+The model automatically keeps the checkpoint with the best validation accuracy. You can continue training from a checkpoint by specifying the path:
 
 ```yaml
 checkpoint:
   save_frequency: 5    # Save every 5 epochs
   keep_last: 10        # Keep last 10 checkpoints
   load_from: "./checkpoints/best_model.pth"  # Resume from checkpoint
+```
+
+## 📋 Requirements
+
+Install dependencies with:
+
+```bash
+pip install -r requirements.txt
 ```

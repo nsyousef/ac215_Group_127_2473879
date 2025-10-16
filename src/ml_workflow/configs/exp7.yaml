@@ -11,14 +11,19 @@ data:
 
 # Training parameters
 training:
-  batch_size: 32
+  batch_size: 64
   num_workers: 0
   seed: 42
   prefetch_factor: 2
   num_epochs: 100
   patience: 10
   validation_interval: 1
-
+  n_warmup_epochs: 5  # Number of epochs to freeze backbone (0 = no freezing)
+  # Scheduler configuration
+  scheduler:
+    use_cosine_annealing: true  # Enable cosine annealing learning rate scheduler
+    backbone_eta_min: 0.0000001  # Minimum learning rate for backbone optimizer
+    head_eta_min: 0.0000001  # Minimum learning rate for head optimizer
 # Data splits
 splits:
   test_size: 0.2
@@ -26,51 +31,43 @@ splits:
 
 # Image configuration
 image:
-  size: [224, 224]  # [height, width]
+  size: [348, 348]  # [height, width]
   mode: "RGB"
 
 # Augmentation parameters
 # Set to null to disable a transform, or provide a value to enable it
 augmentation:
-  brightness_jitter: 0.1
-  contrast_jitter: 0.1
-  saturation_jitter: 0.1
+  brightness_jitter: 0.2
+  contrast_jitter: 0.2
+  saturation_jitter: 0.2
   hue_jitter: 0.05
   rotation_degrees: 20
-  translate: [0.1, 0.1]
-  scale: [0.9, 1.1]
-  grayscale_prob: 0.1
+  translate: null
+  scale: [0.85, 1.15]
+  grayscale_prob: null
   horizontal_flip_prob: 0.5
-  vertical_flip_prob: 0.5
+  vertical_flip_prob: 0.2
 
 # Statistics and sampling
 data_processing:
   compute_stats: False
-  weighted_sampling: true
+  weighted_sampling: False
   skip_errors: true
 
 # Model configuration
 model:
-  name: "resnet50"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16
+  name: "resnet101"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16
   pretrained: true
   num_classes: null  # Will be inferred from data
   hidden_sizes: [512, 256]  # List of hidden layer sizes
   activation: "relu"  # relu, gelu, swish, leaky_relu
-  dropout_rate: 0.5
-
-# Optimizer configuration
-optimizer:
-  name: "adam"  # adam, sgd, adamw
-  learning_rate: 0.001
-  weight_decay: 0.0001
-  momentum: 0.9  # For SGD
-  betas: [0.9, 0.999]  # For Adam/AdamW
-  eps: 0.00000001
+  dropout_rate: 0.35
+  label_smoothing: 0.1
 
 # Separate optimizers (override if provided). If omitted, falls back to single optimizer above
 optimizer_backbone:
   name: "adam"
-  learning_rate: 0.0001
+  learning_rate: 0.00007
   weight_decay: 0.0001
   momentum: 0.9
   betas: [0.9, 0.999]

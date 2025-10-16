@@ -15,3 +15,6 @@ DEFAULT_IMAGE_MODE = "RGB"
 # Column names (fixed for this project)
 IMG_COL = "filename"
 LABEL_COL = "label"
+
+MAX_RETRIES = 3
+

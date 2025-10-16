@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import List
+import torch.nn.functional as F
 
 
 class MLP(nn.Module):
@@ -69,3 +70,41 @@ class MLP(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through MLP"""
         return self.layers(x)
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=1.0, gamma=2.0, reduction='mean'):
+        """
+        Args:
+            alpha (float or list): balancing factor for classes (scalar or per-class tensor)
+            gamma (float): focusing parameter
+            reduction (str): 'none' | 'mean' | 'sum'
+        """
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        """
+        Args:
+            inputs: raw logits (batch_size, num_classes)
+            targets: ground truth labels (batch_size)
+        """
+        logpt = F.log_softmax(inputs, dim=1)
+        pt = torch.exp(logpt)
+        logpt = logpt.gather(1, targets.unsqueeze(1)).squeeze(1)
+        pt = pt.gather(1, targets.unsqueeze(1)).squeeze(1)
+        
+        if isinstance(self.alpha, (list, torch.Tensor)):
+            at = torch.tensor(self.alpha, device=inputs.device)[targets]
+        else:
+            at = self.alpha
+        
+        loss = -at * (1 - pt) ** self.gamma * logpt
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:
+            return loss
