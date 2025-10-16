@@ -1,0 +1,78 @@
+Experiment ID,Date,Dataset / Classes,Number of Classes,Model Version,Img Size,Key Hyperparameter changes,Train Acc,Val Acc,Val F1,Notes
+exp0,2025-10-14,Fitzpatrick17k,104,ResNet-50,224×224,"• Optimizer: Adam, LR: 1e-3
+• Batch size: 16  
+• No augmentation 
+• Head: MLP[512, 256], dropout 0.5 
+• No BatchNorm 
+• Weighted sampling on",15 %,10 %,—,"• Initial pipeline check run
+• Clear underfit indicating possible issues with architecture
+"
+exp1,2025-10-14,Fitzpatrick17k ,24,DenseNet-121 (ImageNet),224×224,"• Optimizer: AdamW
+• Batch size: 32 
+• Light data augmentation, such as jitter/flips
+• Added BatchNorm",~45 %,~30 %,0.25,"• Data Augmentation definitely important
+• BatchNorm also important for performance
+• Reducing classes for now to test architectures, models may find it hard to predict 114 classes
+"
+exp2,2025-10-15,Fitzpatrick17k,24,ResNet-101,224×224,"• Separated optimizer for head classifier and backbone pretrained model 
+• Head [1024, 256], Dropout 0.3 to make classifier stronger",90.0 %,63.1 %,0.54,"• Strong baseline
+• overfit after ~ep9
+• Beneficial to have separate optimizers"
+exp3,2025-10-15,"- Fitzpatrick17k
+- DDI
+- ISIC",26,ResNet-101,224×224,"• Head [1024,512]
+• Drop 0.4 (to prevent overfit)
+• Jitter/hue 0.2, Rot 20°, Flip 0.5 (Stronger augmentations to prevent overfit)",80.3 %,65.6 %,0.575,• More data stronger aug 
+exp4,2025-10-16,Fitzpatrick17k,40,ResNet-101,224×224,"• Batch size 96 
+• Head [2048,1024,512] 
+• Drop 0.5 
+• Label smooth 0.1 
+",62.9 %,≈60 %,—,"• Larger batch + heavier head
+• Label smoothing for better classification accounting for class imbalance"
+exp5,2025-10-15,"- Fitzpatrick17k
+- DDI
+- ISIC",66,ResNet-101,348×348,"• Added warmup of 10 epochs where backbone is not trained but head is trained
+• Decreased Optimizer LR: 7e-4 / 7e-5 
+• Increased resolution, may be useful for dermatology tasks
+",95.1 %,64.75 %,0.525,"
+• Highest Validation f1 score
+• Increased resolution seems useful"
+exp6,2025-10-15→16,"- Fitzpatrick17k
+- DDI
+- ISIC",66,ResNet-101,348×348,• Added Cosine annealing,92.6 %,64.05,0.485,"• Similar results, train loss a bit higher"
+exp7,2025-10-16,"- Fitzpatrick17k
+- DDI
+- ISIC",104,ResNet-101,448×448,"• Batch size back to 64 (memory issues)
+• Reduce Warmup to 5 ep
+• Increase res further",97.97 %,64.72 %,0.487,"•  This architecture seems to work with more labels as well, which is great
+• Increased res doesnt seem to help"
+exp8,2025-10-16,"- Fitzpatrick17k
+- DDI
+- ISIC",104,ResNet-101,448×448,"
+• Head [512], Drop 0.5 (to prevent overfit)
+• Label smooth 0.15 
+• Batch 64 
+• Stronger Aug: Jitter/Contrast/Sat 0.25, Rot 25°, Scale [0.8,1.1], Flips",97 %,63 %,0.48,• Classifier overfits despite weak head
+exp9,2025-10-16,"- Fitzpatrick17k
+- DDI
+- ISIC",104,ResNet-101,384×384,"• Added Focal loss instead of cross entropy with equal class weightage
+",47.5 %,43.6 %,0.097,• Poorer performance in comparison to cross entropy
+exp10,2025-10-16,"- Fitzpatrick17k
+- DDI
+- ISIC",104,ResNet-101,384×384,"• Focal class with weights inverse proportional to class frequency
+",92.3 %,64.4 %,0.45,"•  Does not help. Revert to cross entropy, maybe do further analysis with focal loss later since studies do show this is supposed to help"
+exp11,2025-10-16,"- Fitzpatrick17k
+- DDI
+- ISIC",114,ResNet-101,384×384,"• Reverted CrossEntropy 
+• Adding pooling before classifier
+• More data classes",95.5 %,65.0 %,0.46,"• F1 drops (expected, as we introduce several rare classes), but otherwise performance remains similar, quicker convergence"
+exp12,2025-10-16,"- Fitzpatrick17k
+- DDI
+- ISIC",114,ResNet-101,384×384,"• We unfreeze only the last 20 layers of the pretrained model instead of unfreezing all
+",97.3 %,65.6 %,0.48,• Partial unfreeze improved regularization and F1
+exp13,2025-10-16,"- Fitzpatrick17k
+- DDI
+- ISIC",114,EfficientNet-B0,384×384,• Same config as Run 12 but EffNet-B0 backbone,79.9 %,61.4 %,0.35,Test of EffNet family; lower capacity vs ResNet-101; next try B2/B4 for higher res.
+exp14,2025-10-16,"- Fitzpatrick17k
+- DDI
+- ISIC",114,EfficientNet-B4,384×384,• Same config as Run 12 but EffNet-B4 backbone,75%,60.4 %,0.4,Resnet seems to be better
