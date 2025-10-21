@@ -124,9 +124,6 @@ def create_dataloaders(
                 img_prefix: str,
                 data_config: dict,
                 training_config: dict,
-                splits_config: dict,
-                image_config: dict,
-                data_processing_config: dict,
                 augmentation_config: dict) -> Tuple[DataLoader, DataLoader, Optional[DataLoader], Dict[str, Any]]:
     """Create train, validation, and optional test DataLoaders with stratification"""
     logger.info("Creating DataLoaders")
@@ -134,12 +131,12 @@ def create_dataloaders(
     batch_size = training_config['batch_size']
     num_workers = training_config['num_workers']
     prefetch_factor = training_config['prefetch_factor']
-    test_size = splits_config['test_size']
-    val_size = splits_config['val_size']
-    seed = training_config['seed']
-    compute_stats = data_processing_config['compute_stats']
-    img_size = tuple(image_config['size'])
-    weighted_sampling = data_processing_config['weighted_sampling']
+    test_size = data_config['test_size']
+    val_size = data_config['val_size']
+    seed = data_config['seed']
+    compute_stats = training_config['compute_stats']
+    img_size = tuple(data_config['img_size'])
+    weighted_sampling = training_config['weighted_sampling']
     use_local = data_config['use_local']
     
     # Determine image prefix

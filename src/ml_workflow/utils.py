@@ -83,10 +83,12 @@ def analyze_class_distribution(df: pd.DataFrame, label_col: str = "label") -> pd
     return distribution
 
 
-def save_checkpoint(model: torch.nn.Module, optimizer: Optional[torch.optim.Optimizer], 
+def save_checkpoint(model: Optional[torch.nn.Module], optimizer: Optional[torch.optim.Optimizer], 
                    epoch: int, loss: float, config: Dict[str, Any], 
                    save_dir: str, experiment_name: str, is_best: bool = False,
-                   additional_info: Optional[Dict[str, Any]] = None) -> str:
+                   additional_info: Optional[Dict[str, Any]] = None, 
+                   vision_model: Optional[torch.nn.Module] = None,
+                   classifier: Optional[torch.nn.Module] = None) -> str:
     """
     Save model checkpoint
     
@@ -110,13 +112,24 @@ def save_checkpoint(model: torch.nn.Module, optimizer: Optional[torch.optim.Opti
     # Prepare checkpoint data
     checkpoint = {
         'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': (optimizer.state_dict() if optimizer is not None else None),
         'loss': loss,
         'config': config,
         'timestamp': datetime.now().isoformat(),
         'experiment_name': experiment_name
     }
+    
+    # Handle model state dicts
+    if model is not None:
+        checkpoint['model_state_dict'] = model.state_dict()
+    elif vision_model is not None and classifier is not None:
+        checkpoint['vision_model_state_dict'] = vision_model.state_dict()
+        checkpoint['classifier_state_dict'] = classifier.state_dict()
+    else:
+        raise ValueError("Either model or both vision_model and classifier must be provided")
+    
+    # Handle optimizer state dict
+    if optimizer is not None:
+        checkpoint['optimizer_state_dict'] = optimizer.state_dict()
     # Support saving multiple optimizers if provided in additional_info
     if additional_info and 'optimizers_state_dict' in additional_info:
         checkpoint['optimizers_state_dict'] = additional_info['optimizers_state_dict']
@@ -144,9 +157,11 @@ def save_checkpoint(model: torch.nn.Module, optimizer: Optional[torch.optim.Opti
     return filepath
 
 
-def load_checkpoint(checkpoint_path: str, model: torch.nn.Module, 
+def load_checkpoint(checkpoint_path: str, model: Optional[torch.nn.Module] = None, 
                    optimizer: Optional[torch.optim.Optimizer] = None,
-                   device: Optional[torch.device] = None) -> Dict[str, Any]:
+                   device: Optional[torch.device] = None,
+                   vision_model: Optional[torch.nn.Module] = None,
+                   classifier: Optional[torch.nn.Module] = None) -> Dict[str, Any]:
     """
     Load model checkpoint
     
@@ -171,7 +186,15 @@ def load_checkpoint(checkpoint_path: str, model: torch.nn.Module,
         checkpoint = torch.load(checkpoint_path)
     
     # Load model state
-    model.load_state_dict(checkpoint['model_state_dict'])
+    if model is not None and 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    elif vision_model is not None and classifier is not None:
+        if 'vision_model_state_dict' in checkpoint:
+            vision_model.load_state_dict(checkpoint['vision_model_state_dict'])
+        if 'classifier_state_dict' in checkpoint:
+            classifier.load_state_dict(checkpoint['classifier_state_dict'])
+    else:
+        raise ValueError("Either model or both vision_model and classifier must be provided")
     
     # Load optimizer state if provided
     if optimizer is not None and 'optimizer_state_dict' in checkpoint and checkpoint['optimizer_state_dict'] is not None:

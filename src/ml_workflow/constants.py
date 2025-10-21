@@ -11,6 +11,7 @@ LOCAL_METADATA_PATH = '../../data/metadata_all_harmonized.csv'
 
 # Image Configuration (typically fixed)
 DEFAULT_IMAGE_MODE = "RGB"
+DEFAULT_IMAGE_SIZE = (224, 224)
 
 # Column names (fixed for this project)
 IMG_COL = "filename"
