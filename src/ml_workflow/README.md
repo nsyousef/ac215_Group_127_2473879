@@ -65,10 +65,11 @@ The workflow is fully configurable via YAML files in the `configs/` directory.
 | Parameter | Description |
 |-----------|-------------|
 | `use_local` | Whether to load data from local storage instead of cloud or remote sources |
-| `metadata_path` | Path to the metadata CSV that defines image paths and labels (only used if `use_local` is True) |
+| `metadata_path` | Path to the metadata CSV that defines image paths, labels, and text descriptions (only used if `use_local` is True) |
 | `img_prefix` | Directory for image files |
 | `min_samples_per_label` | Minimum number of images required for a label to be included |
 | `datasets` | List of datasets to include (e.g., Fitzpatrick17k, DDI, ISIC) |
+| `has_text` | If `True`, only include data with text descriptions; if `False`, only include data without text descriptions; if `None`, do not filter on presence of text descriptions. |
 
 ### Training Parameters
 

@@ -7,7 +7,7 @@ import time
 import fsspec
 import multiprocessing
 
-from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES
+from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, TEXT_DESC_COL, MAX_RETRIES
 from utils import (logger, stratified_split)
 from dataloader.transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
     
@@ -45,6 +45,7 @@ class ImageDataset(Dataset):
                  df: pd.DataFrame, 
                  img_col: str, 
                  label_col: str, 
+                 text_desc_col: str,
                  img_prefix: str = "", 
                  transform: Optional[Callable] = None, 
                  classes: Optional[List[str]] = None, 
@@ -55,6 +56,7 @@ class ImageDataset(Dataset):
             df: DataFrame with image paths and labels
             img_col: Column name for image paths
             label_col: Column name for labels
+            text_desc_col: Column name for text descriptions
             img_prefix: Prefix for image paths (GCS bucket or local dir)
             transform: Optional transform to apply to images
             classes: Fixed class list (inferred if None)
@@ -62,6 +64,7 @@ class ImageDataset(Dataset):
         # Convert DataFrame to lists for faster, multiprocessing-safe access
         self.image_paths = df[img_col].astype(str).tolist()
         self.labels_raw = df[label_col].astype(str).tolist()
+        self.text_desc_raw = df[text_desc_col].astype(str).tolist()
         self.max_retries = MAX_RETRIES
         
         self.img_prefix = img_prefix.rstrip("/")
@@ -85,7 +88,7 @@ class ImageDataset(Dataset):
         return None
     
     def __getitem__(self, idx: int):
-        """Load and return image and label"""
+        """Load and return image, label, and text"""
         attempts = 0
         last_error = None
 
@@ -95,6 +98,7 @@ class ImageDataset(Dataset):
                 filename = self.image_paths[current_idx].lstrip("/")
                 path = f"{self.img_prefix}/{filename}" if self.img_prefix else filename
                 label = self.labels[current_idx]
+                text = self.text_desc_raw[current_idx]
                 
                 # Load image from GCS or local
                 if not self.use_local:
@@ -109,7 +113,7 @@ class ImageDataset(Dataset):
                 
                 if self.transform:
                     img = self.transform(img)
-                return img, label
+                return img, label, text
                 
             except Exception as e:
                 last_error = e
@@ -167,6 +171,7 @@ def create_dataloaders(
                                 df=train_df, 
                                 img_col=IMG_COL, 
                                 label_col=LABEL_COL, 
+                                text_desc_col=TEXT_DESC_COL,
                                 img_prefix=img_prefix, 
                                 use_local=use_local,
                                 transform=get_basic_transform(img_size), 
@@ -189,6 +194,7 @@ def create_dataloaders(
                         df=train_df, 
                         img_col=IMG_COL, 
                         label_col=LABEL_COL, 
+                        text_desc_col=TEXT_DESC_COL,
                         img_prefix=img_prefix, 
                         use_local=use_local,
                         transform=get_train_transform(mean, std, img_size, augmentation_config), 
@@ -199,6 +205,7 @@ def create_dataloaders(
                         df=test_df, 
                         img_col=IMG_COL, 
                         label_col=LABEL_COL, 
+                        text_desc_col=TEXT_DESC_COL,
                         img_prefix=img_prefix, 
                         use_local=use_local,
                         transform=get_test_valid_transform(mean, std, img_size), 
@@ -210,6 +217,7 @@ def create_dataloaders(
                         df=val_df, 
                         img_col=IMG_COL, 
                         label_col=LABEL_COL, 
+                        text_desc_col=TEXT_DESC_COL,
                         img_prefix=img_prefix, 
                         use_local=use_local,
                         transform=get_test_valid_transform(mean, std, img_size), 
