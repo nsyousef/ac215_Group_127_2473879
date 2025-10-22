@@ -51,7 +51,7 @@ def initialize_model(config_path):
     
     # This will load the metadata file and filter it
     # This decides what we train on 
-    metadata = load_metadata(metadata_path, min_samples=data_config['min_samples_per_label'], datasets=data_config['datasets'])
+    metadata = load_metadata(metadata_path, min_samples=data_config['min_samples_per_label'], datasets=data_config['datasets'], has_text=data_config['has_text'])
     
     # Create dataloaders with splits
     train_loader, val_loader, test_loader, info = create_dataloaders(
@@ -172,4 +172,3 @@ if __name__ == "__main__":
 
     trainer = return_dict['trainer']
     trainer.train()
-

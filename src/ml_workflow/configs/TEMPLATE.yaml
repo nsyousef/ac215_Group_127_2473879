@@ -10,6 +10,7 @@ data:
     - fitzpatrick17k
     # - ddi
     # - isic
+  has_text: null # True to filter for only datasets with text descriptions; False to filter for datasets without text descriptions.
   
   # Data splits
   test_size: 0.2
@@ -101,4 +102,3 @@ checkpoint:
   save_frequency: 1000  # Save checkpoint every N epochs (it saves the best model anyway)
   keep_last: 1  # Keep last N checkpoints
   load_from: null  # Path to checkpoint to load from (null for no loading)
-

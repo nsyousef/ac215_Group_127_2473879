@@ -16,6 +16,6 @@ DEFAULT_IMAGE_SIZE = (224, 224)
 # Column names (fixed for this project)
 IMG_COL = "filename"
 LABEL_COL = "label"
+TEXT_DESC_COL = "text_desc"
 
 MAX_RETRIES = 3
-
