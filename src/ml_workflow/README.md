@@ -49,7 +49,7 @@ from main import initialize_model
 # Initialize model and data
 return_dict = initialize_model('configs/config.yaml')
 trainer = return_dict['trainer']
-model = return_dict['model']
+model = return_dict['vision_model']
 test_loader = return_dict['test_loader']
 
 # Train the model or evaluate as required
