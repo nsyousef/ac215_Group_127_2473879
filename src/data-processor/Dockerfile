@@ -31,6 +31,7 @@ CMD ["-c", "\
     python processor_fitz.py && \
     python processor_skincap.py && \
     python processor_isic.py && \
+    python processor_derm1m.py && \
     python harmonize_labels.py && \
     python verify_output.py \
 "]
