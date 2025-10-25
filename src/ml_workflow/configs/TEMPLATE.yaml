@@ -72,6 +72,15 @@ classifier:
   label_smoothing: 0.1  # Label smoothing factor for cross entropy loss (0.0 = no smoothing)
   loss_fn: "cross_entropy"  # cross_entropy, focal
 
+# Encoder configuration
+encoder:
+  pre_existing_path: "../../../embeddings.parquet" # The path to which to store the embeddings (to store in Google cloud, begin path with gs://<bucket-name>/)
+  model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
+  max_length: 512 # Maximum sequence length
+  pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
+  batch_size: 32 # The batch size to use when creating embeddings
+  qwen_instr: "Represent the patient's description and characteristics (including clinical details, age, sex, and symptoms) as a semantic embedding suitable for clinical classification. Return an embedding." # The instructions for the QWEN embedding to use (allows us to experiment with different instructions; ignored if model is not QWEN)
+
 # Optimizer configuration
 optimizer:
   vision_model:

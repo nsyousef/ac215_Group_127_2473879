@@ -7,9 +7,10 @@ import time
 import fsspec
 import multiprocessing
 
-from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, TEXT_DESC_COL, MAX_RETRIES
+from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
 from utils import (logger, stratified_split)
 from dataloader.transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
+from dataloader.embedding_utils import embedding_to_array
     
 
 # If we use multiple workers with GCP, we need to ensure each worker has its own filesystem object
@@ -45,7 +46,7 @@ class ImageDataset(Dataset):
                  df: pd.DataFrame, 
                  img_col: str, 
                  label_col: str, 
-                 text_desc_col: str,
+                 embedding_col: str,
                  img_prefix: str = "", 
                  transform: Optional[Callable] = None, 
                  classes: Optional[List[str]] = None, 
@@ -64,7 +65,7 @@ class ImageDataset(Dataset):
         # Convert DataFrame to lists for faster, multiprocessing-safe access
         self.image_paths = df[img_col].astype(str).tolist()
         self.labels_raw = df[label_col].astype(str).tolist()
-        self.text_desc_raw = df[text_desc_col].astype(str).tolist()
+        self.text_desc_embd = df[embedding_col].tolist()
         self.max_retries = MAX_RETRIES
         
         self.img_prefix = img_prefix.rstrip("/")
@@ -88,7 +89,7 @@ class ImageDataset(Dataset):
         return None
     
     def __getitem__(self, idx: int):
-        """Load and return image, label, and text"""
+        """Load and return image, label, and text embedding"""
         attempts = 0
         last_error = None
 
@@ -98,7 +99,7 @@ class ImageDataset(Dataset):
                 filename = self.image_paths[current_idx].lstrip("/")
                 path = f"{self.img_prefix}/{filename}" if self.img_prefix else filename
                 label = self.labels[current_idx]
-                text = self.text_desc_raw[current_idx]
+                text_embd = embedding_to_array(self.text_desc_embd[current_idx])
                 
                 # Load image from GCS or local
                 if not self.use_local:
@@ -113,7 +114,7 @@ class ImageDataset(Dataset):
                 
                 if self.transform:
                     img = self.transform(img)
-                return img, label, text
+                return img, label, text_embd
                 
             except Exception as e:
                 last_error = e
@@ -171,7 +172,7 @@ def create_dataloaders(
                                 df=train_df, 
                                 img_col=IMG_COL, 
                                 label_col=LABEL_COL, 
-                                text_desc_col=TEXT_DESC_COL,
+                                embedding_col=EMBEDDING_COL,
                                 img_prefix=img_prefix, 
                                 use_local=use_local,
                                 transform=get_basic_transform(img_size), 
@@ -194,7 +195,7 @@ def create_dataloaders(
                         df=train_df, 
                         img_col=IMG_COL, 
                         label_col=LABEL_COL, 
-                        text_desc_col=TEXT_DESC_COL,
+                        embedding_col=EMBEDDING_COL,
                         img_prefix=img_prefix, 
                         use_local=use_local,
                         transform=get_train_transform(mean, std, img_size, augmentation_config), 
@@ -205,7 +206,7 @@ def create_dataloaders(
                         df=test_df, 
                         img_col=IMG_COL, 
                         label_col=LABEL_COL, 
-                        text_desc_col=TEXT_DESC_COL,
+                        embedding_col=EMBEDDING_COL,
                         img_prefix=img_prefix, 
                         use_local=use_local,
                         transform=get_test_valid_transform(mean, std, img_size), 
@@ -217,7 +218,7 @@ def create_dataloaders(
                         df=val_df, 
                         img_col=IMG_COL, 
                         label_col=LABEL_COL, 
-                        text_desc_col=TEXT_DESC_COL,
+                        embedding_col=EMBEDDING_COL,
                         img_prefix=img_prefix, 
                         use_local=use_local,
                         transform=get_test_valid_transform(mean, std, img_size), 
