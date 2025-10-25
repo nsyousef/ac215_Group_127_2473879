@@ -9,7 +9,7 @@ def file_exists(path: str) -> bool:
     - GCS paths ("gs://bucket/name") are checked via google.cloud.storage and will use
       existing Google Cloud credentials (lazy-imported so local checks don't require GCP).
 
-    NOTE: using this instead of actually downloading the file will save on egress charges when downloading to local machine.
+    NOTE: using this to check if files exist on Google Cloud will save on egress costs, compared to attempting to download the file from Google Cloud.
     """
     if path.startswith("gs://"):
         # Lazy import so local checks don't require google-cloud-storage to be installed.
