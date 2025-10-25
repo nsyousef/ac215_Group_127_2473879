@@ -1,6 +1,7 @@
 from pathlib import Path as _Path
 import warnings
 from utils import logger
+import pandas as pd
 
 def file_exists(path: str) -> bool:
     """
@@ -11,36 +12,39 @@ def file_exists(path: str) -> bool:
 
     NOTE: using this to check if files exist on Google Cloud will save on egress costs, compared to attempting to download the file from Google Cloud.
     """
-    if path.startswith("gs://"):
-        # Lazy import so local checks don't require google-cloud-storage to be installed.
-        try:
-            from google.cloud import storage
-        except Exception:
-            logger.warning("WARNING: Google cloud could not be imported. Please check that it is installed.")
-            return False
+    if not pd.isna(path):
+        if path.startswith("gs://"):
+            # Lazy import so local checks don't require google-cloud-storage to be installed.
+            try:
+                from google.cloud import storage
+            except Exception:
+                logger.warning("WARNING: Google cloud could not be imported. Please check that it is installed.")
+                return False
 
-        # Parse "gs://bucket/path/to/object" into bucket and object parts
-        rest = path[5:]
-        if not rest:
-            return False
-        parts = rest.split("/", 1)
-        bucket_name = parts[0]
-        object_path = parts[1] if len(parts) > 1 else ""
+            # Parse "gs://bucket/path/to/object" into bucket and object parts
+            rest = path[5:]
+            if not rest:
+                return False
+            parts = rest.split("/", 1)
+            bucket_name = parts[0]
+            object_path = parts[1] if len(parts) > 1 else ""
 
-        try:
-            client = storage.Client()
-            if object_path == "":
-                # If no object path provided, check bucket existence.
-                bucket = client.lookup_bucket(bucket_name)
-                return bucket is not None
-            else:
-                bucket = client.bucket(bucket_name)
-                blob = bucket.blob(object_path)
-                return blob.exists(client=client)
-        except Exception:
-            return False
+            try:
+                client = storage.Client()
+                if object_path == "":
+                    # If no object path provided, check bucket existence.
+                    bucket = client.lookup_bucket(bucket_name)
+                    return bucket is not None
+                else:
+                    bucket = client.bucket(bucket_name)
+                    blob = bucket.blob(object_path)
+                    return blob.exists(client=client)
+            except Exception:
+                return False
+        else:
+            return _Path(path).exists()
     else:
-        return _Path(path).exists()
+        return False
     
 def _parse_gs_path(path: str):
     """

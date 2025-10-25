@@ -184,7 +184,8 @@ def compute_embeddings_and_save(data: pd.DataFrame, path: str,
     # save embeddings
     out_data = data[[IMG_ID_COL, TEXT_DESC_COL]]
     out_data[EMBEDDING_COL] = embd_lst
-    save_dataframe_to_parquet(path, out_data, index=False)
+    if not pd.isna(path):
+        save_dataframe_to_parquet(path, out_data, index=False)
 
     return out_data
 
@@ -284,5 +285,5 @@ def load_or_compute_embeddings(data: pd.DataFrame, path: str,
             return compute_embeddings_and_save(data, path, model_name, batch_size, max_length, device, pooling_strategy, qwen_instr)
     else:
         # ... if the file does not exist, compute all embeddings
-        logger.warning(f"File at {path} does not exist. Computing embeddings from scratch.")
+        logger.warning(f"File at path [{path}] does not exist. Computing embeddings from scratch.")
         return compute_embeddings_and_save(data, path, model_name, batch_size, max_length, device, pooling_strategy, qwen_instr)
