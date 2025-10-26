@@ -8,19 +8,26 @@ A configurable machine learning pipeline for skin disease classification built f
 ml-workflow/
 ├── main.py                    # Main entry point for training
 ├── eval.py                    # Model evaluation script
-├── constants.py               # Project constants
-├── utils.py                   # Utilities, checkpointing & data analysis
+├── constants.py              # Project constants and configurations
+├── utils.py                  # Utilities, checkpointing & data analysis
+├── io_utils.py              # Input/output utilities
 ├── configs/
-│   └── TEMPLATE.yaml          # Configuration template
+│   └── TEMPLATE.yaml         # Configuration template
 ├── dataloader/
-│   ├── dataloader.py          # ImageDataset & create_dataloaders
-│   └── transform_utils.py     # Image transformations
+│   ├── dataloader.py         # ImageDataset & create_dataloaders
+│   ├── transform_utils.py    # Image transformations
+│   └── embedding_utils.py    # Text embedding utilities
 ├── model/
-│   ├── imagenet.py            # Transfer learning model
-│   └── utils.py               # Model utilities (MLP)
+│   ├── utils.py             # Model utilities
+│   ├── classifier/
+│   │   └── classifier.py    # Classification head
+│   └── vision/
+│       ├── cnn.py          # CNN-based models
+│       └── vit.py          # Vision Transformer models
 ├── train/
-│   └── train.py               # Training class
-└── requirements.txt           # Dependencies
+│   ├── train.py            # Training class
+│   └── train_utils.py      # Training utilities
+└── requirements.txt         # Dependencies
 ```
 
 ## Quick Start
@@ -49,7 +56,7 @@ from main import initialize_model
 # Initialize model and data
 return_dict = initialize_model('configs/config.yaml')
 trainer = return_dict['trainer']
-model = return_dict['model']
+model = return_dict['vision_model']
 test_loader = return_dict['test_loader']
 
 # Train the model or evaluate as required
@@ -65,10 +72,11 @@ The workflow is fully configurable via YAML files in the `configs/` directory.
 | Parameter | Description |
 |-----------|-------------|
 | `use_local` | Whether to load data from local storage instead of cloud or remote sources |
-| `metadata_path` | Path to the metadata CSV that defines image paths and labels (only used if `use_local` is True) |
+| `metadata_path` | Path to the metadata CSV that defines image paths, labels, and text descriptions (only used if `use_local` is True) |
 | `img_prefix` | Directory for image files |
 | `min_samples_per_label` | Minimum number of images required for a label to be included |
 | `datasets` | List of datasets to include (e.g., Fitzpatrick17k, DDI, ISIC) |
+| `has_text` | If `True`, only include data with text descriptions; if `False`, only include data without text descriptions; if `null`, do not filter on presence of text descriptions. |
 
 ### Training Parameters
 
@@ -127,20 +135,38 @@ The workflow is fully configurable via YAML files in the `configs/` directory.
 | `compute_stats` | Whether to recompute dataset statistics (mean, std). If false, uses precomputed ImageNet statistics |
 | `weighted_sampling` | Balances image sampling frequency inversely to class counts for class imbalance correction |
 
-### Model Configuration
+### Vision Model Configuration
 
 | Parameter | Description |
 |-----------|-------------|
-| `name` | Model backbone (e.g., "resnet101", "densenet121", "resnet50") |
+| `name` | Model backbone type. For CNN: ("resnet50", "resnet101", "densenet121", "efficientnet_b0", "efficientnet_b4", "vgg16") or ViT: ("vit_b_16", "vit_b_32", "vit_l_16", "vit_l_32") |
 | `pretrained` | Whether to load pretrained weights |
+| `img_size` | Input image size as tuple (default: (224, 224)) |
+| `pooling_type` | For CNN models: Type of feature pooling ('avg', 'max', 'concat') |
+| `unfreeze_layers` | Number of layers to unfreeze from end. For CNNs: backbone layers, for ViTs: transformer blocks |
+
+### Classifier Configuration
+
+| Parameter | Description |
+|-----------|-------------|
 | `num_classes` | Number of output classes (set to `null` for auto-inference based on data) |
 | `hidden_sizes` | Sizes of hidden layers in classification head |
 | `activation` | Non-linear activation function (e.g., "relu") |
 | `dropout_rate` | Fraction of neurons dropped during training for regularization |
-| `label_smoothing` | Smooths target labels to reduce overconfidence (used with cross entropy loss) |
+| `label_smoothing` | Smooths target labels to reduce overconfidence |
 | `loss_fn` | Type of loss function (e.g., "cross_entropy", "focal") |
-| `pooling_type` | Type of feature pooling (e.g., "max" or "sum") |
-| `unfreeze_layers` | Number of final backbone layers to unfreeze during fine-tuning |
+| `sample_weights` | Class weights for handling imbalanced datasets |
+
+### Text Embedding Configuration
+
+| Parameter | Description |
+|-----------|-------------|
+| `model_name` | Name of text embedding model (e.g., "pubmedbert", "qwen") |
+| `batch_size` | Batch size for text encoding |
+| `max_length` | Maximum sequence length for text input |
+| `pooling_type` | Strategy for pooling text embeddings ('mean', 'cls', 'last_token') |
+| `qwen_instr` | Instructions for QWEN models to generate task-specific embeddings |
+| `pre_existing_path` | Path to pre-computed embeddings (optional)
 
 ### Optimizer Configuration
 

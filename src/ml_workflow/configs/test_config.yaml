@@ -3,14 +3,14 @@
 # Data source configuration
 data:
   use_local: True
-  metadata_path: "/Users/tk20/Desktop/APCOMP215/data/metadata_all_harmonized.csv"  # Override default if needed
-  img_prefix: "/Users/tk20/Desktop/APCOMP215/data/imgs/"  # Override default if needed
+  metadata_path: "/Users/nicholasyousefi/Documents/Coding/School/Harvard/Fall_2025/ac215/project/data/metadata_all_harmonized.csv"  # Override default if needed
+  img_prefix: "/Users/nicholasyousefi/Documents/Coding/School/Harvard/Fall_2025/ac215/project/data/imgs"  # Override default if needed
   min_samples_per_label: 1000
   datasets:
     - fitzpatrick17k
     # - ddi
     # - isic
-  has_text: null # True to filter for only datasets with text descriptions; False to filter for datasets without text descriptions.
+  has_text: null # True to filter for only datasets with text descriptions; False to filter for datasets without text descriptions. null to not filter.
   
   # Data splits
   test_size: 0.2
@@ -73,15 +73,11 @@ classifier:
   loss_fn: "cross_entropy"  # cross_entropy, focal
 
 # Encoder configuration
-# IMPORTANT: If you change the model_name, max_length, pooling_type, etc. you must also change the 
-# pre_existing_path. Otherwise, the dataloader will just load the existing embeddings (computed with the previous model), 
-# instead of re-computing them with the new model. To make the configuration recompute the embeddings each time, set
-# pre_existing_path to null. This will not save the embeddings and will force a recompute from scratch.
 encoder:
-  pre_existing_path: null # The path to which to store the embeddings (to store in Google cloud, begin path with gs://<bucket-name>/). Set to null to not save embeddings anywhere.
-  model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
+  pre_existing_path: gs://derma-datasets-2/final/embeddings.parquet # The path to which to store the embeddings (to store in Google cloud, begin path with gs://<bucket-name>/). Do not set to null.
+  model_name: "qwen" # or pubmedbert, biosyn, sapbert, or qwen
   max_length: 512 # Maximum sequence length
-  pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
+  pooling_type: "last_token" # One of 'mean', 'cls', 'last_token'
   batch_size: 32 # The batch size to use when creating embeddings
   qwen_instr: "Represent the patient's description and characteristics (including clinical details, age, sex, and symptoms) as a semantic embedding suitable for clinical classification. Return an embedding." # The instructions for the QWEN embedding to use (allows us to experiment with different instructions; ignored if model is not QWEN)
 

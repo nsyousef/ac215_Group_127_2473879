@@ -9,6 +9,7 @@ from torchvision import transforms
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from typing import Tuple, List, Dict, Any, Optional
+from constants import TEXT_DESC_COL
 
 # Setup logging
 def setup_logger(name: str = __name__, level: int = logging.INFO) -> logging.Logger:
@@ -26,7 +27,7 @@ def setup_logger(name: str = __name__, level: int = logging.INFO) -> logging.Log
 
 logger = setup_logger()
 
-def load_metadata(source: str, min_samples: int, datasets: List[str] = None) -> pd.DataFrame:
+def load_metadata(source: str, min_samples: int, datasets: List[str] = None, has_text: bool = None) -> pd.DataFrame:
     """
     Load metadata from GCS or local file and filter by minimum samples and datasets to be used
     
@@ -34,6 +35,7 @@ def load_metadata(source: str, min_samples: int, datasets: List[str] = None) -> 
         source: Path to CSV (gs://bucket/path or local/path.csv)
         min_samples: Minimum images per label
         datasets: List of datasets to be used
+        has_text: If `True`, include only entries with text data. If `False`, include only entries without text data. If `None`, do not filter on text data.
     """
     logger.info(f"Loading metadata from: {source}")
     metadata = pd.read_csv(source)
@@ -45,8 +47,21 @@ def load_metadata(source: str, min_samples: int, datasets: List[str] = None) -> 
     logger.info(f"Labels with >= {min_samples} images: {len(preserve_labels):,}")
     
     metadata = metadata[metadata['label'].isin(preserve_labels)].reset_index(drop=True)
+
+    # Filter for listed datasets only
     if datasets is not None:
         metadata = metadata[metadata['dataset'].isin(datasets)].reset_index(drop=True)
+
+    # Filter to include or not include text data
+    if has_text is not None:
+        logger.info(f"Filtering to include only images {'with' if has_text else 'without'} text.")
+        if has_text:
+            keep_rows = metadata[TEXT_DESC_COL].notna() & (metadata[TEXT_DESC_COL] != '')
+        else:
+            keep_rows = metadata[TEXT_DESC_COL].isna() | (metadata[TEXT_DESC_COL] == '')
+        metadata = metadata[keep_rows].reset_index(drop=True)
+        logger.info(f"Images {'with' if has_text else 'without'} text descriptions: {metadata.shape[0]}")
+
     logger.info(f"Images after filtering: {len(metadata):,}")
     logger.info(f"Datasets: {datasets}")
     

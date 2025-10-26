@@ -16,6 +16,16 @@ DEFAULT_IMAGE_SIZE = (224, 224)
 # Column names (fixed for this project)
 IMG_COL = "filename"
 LABEL_COL = "label"
+TEXT_DESC_COL = "text_desc"
+IMG_ID_COL = "image_id"
+EMBEDDING_COL = "embedding"
 
 MAX_RETRIES = 3
 
+# Embedding models
+MODELS = {
+    'pubmedbert': 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext',
+    'biosyn': 'dmis-lab/biosyn-sapbert-bc5cdr-disease',
+    'sapbert': 'cambridgeltl/SapBERT-from-PubMedBERT-fulltext',
+    'qwen': 'Qwen/Qwen3-Embedding-8B'
+}

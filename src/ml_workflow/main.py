@@ -3,19 +3,18 @@
 import argparse
 import yaml
 import torch
-import warnings
 
 from train.train import Trainer
 from utils import load_metadata, logger, load_checkpoint
+from dataloader.embedding_utils import load_or_compute_embeddings
 from dataloader.dataloader import create_dataloaders
 from model.vision.vit import VisionTransformer
 from model.vision.cnn import CNNModel
 from model.classifier.classifier import Classifier
 from constants import (
-    GCS_BUCKET_NAME, 
     GCS_METADATA_PATH, 
     GCS_IMAGE_PREFIX,
-    DEFAULT_IMAGE_MODE,
+    IMG_ID_COL,
 )
 
 def initialize_model(config_path):
@@ -32,6 +31,7 @@ def initialize_model(config_path):
     data_config = config['data']
     training_config = config['training']
     augmentation_config = config['augmentation']
+    encoding_config = config['encoder']
     
     # Set seed for reproducibility
     seed = data_config.get('seed', 42)
@@ -51,7 +51,22 @@ def initialize_model(config_path):
     
     # This will load the metadata file and filter it
     # This decides what we train on 
-    metadata = load_metadata(metadata_path, min_samples=data_config['min_samples_per_label'], datasets=data_config['datasets'])
+    metadata = load_metadata(metadata_path, min_samples=data_config['min_samples_per_label'], datasets=data_config['datasets'], has_text=data_config['has_text'])
+
+    # Pre-compute embeddings and store in GCP
+    embeddings = load_or_compute_embeddings(
+        data=metadata[['image_id', 'text_desc']],
+        path=encoding_config['pre_existing_path'],
+        model_name=encoding_config['model_name'],
+        batch_size=encoding_config['batch_size'],
+        max_length=encoding_config['max_length'],
+        device=device,
+        pooling_strategy=encoding_config['pooling_type'],
+        qwen_instr=encoding_config['qwen_instr'],
+    )
+
+    # combine embeddings with metadata
+    metadata = metadata.merge(embeddings, how="left", on=IMG_ID_COL, validate="1:1")
     
     # Create dataloaders with splits
     train_loader, val_loader, test_loader, info = create_dataloaders(
@@ -172,4 +187,3 @@ if __name__ == "__main__":
 
     trainer = return_dict['trainer']
     trainer.train()
-
