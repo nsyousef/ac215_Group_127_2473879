@@ -1,4 +1,4 @@
-# Milestone 2
+# Milestone 3
 
 # Skin Disease Classification - AC215 Group 127.2473879
 
@@ -15,9 +15,11 @@ secrets/
 ac215_Group_127_2473879/
 ├── docs/                          # Project documentation
 │   ├── gcp/                       # Google Cloud Platform screenshots (running VMs and bucket structure)
-│   └── mockup/                    # UI mockups
+│   ├── mockup/                    # UI mockups
+│   └── decks/                     # Pitch deck for Milestone 3
 ├── eda/                           # Exploratory Data Analysis
 │   ├── ddi_eda.ipynb              # DDI dataset analysis
+│   ├── derm1m.ipynb               # Derm1M dataset analysis
 │   ├── isic_eda.ipynb             # ISIC dataset analysis
 │   ├── skincap_eda.ipynb          # SkinCap dataset analysis
 │   ├── scin.ipynb                 # SCIN dataset analysis
@@ -26,7 +28,23 @@ ac215_Group_127_2473879/
     ├── data-processor/            # Data processing and harmonization
     │   ├── data-processor.log     # Data processing logs
     │   ├── data-processor.sh      # Runs the whole data processing pipeline
+    │   └── processor_derm1m.py    # Derm1M processing   
     └── ml_workflow/               # Machine learning training pipeline
+        ├── dataloader/            # Data loading utilities
+        │   ├── dataloader.py      # Main dataloader implementation
+        │   ├── embedding_utils.py # Text embedding utilities
+        │   ├── transform_utils.py # Code for data augmentation utilities
+        │   └── dataloader.ipynb   # Dataloader notebook
+        ├── model/                 # Model architectures
+        │   ├── classifier/        # Classifier models
+        │   │   └── classifier.py  # Classifier implementation
+        │   ├── vision/            # Vision models
+        │   │   ├── cnn.py         # CNN architecture
+        │   │   └── vit.py         # Vision Transformer architecture
+        │   └── utils.py           # Model utilities
+        ├── text_embeddings.ipynb  # Text embeddings analysis
+        ├── test_dataloader.py     # Dataloader testing
+        ├── io_utils.py            # Input/output utilities
         └── logs/                  # Training logs
 ```
 
@@ -41,9 +59,9 @@ Each folder in `src` represents a microservice with its own Docker container:
 
 For detailed information about each service, please refer to the individual README files in each folder.
 
-# Milestone 2 Deliverables
+# Milestone 3 Deliverables
 
-1. Virtual Environment Setup - screenshot of running VMs on the GCP (`docs/gcp`)
-2. End-To-End Containerized Pipeline (`src/data-processor/data-processor.sh`)
-3. Vision/ML workflow (`src/ml_workflow`)
-4. Application Mockup (`docs/mockup.md`)
+1. Derm1M EDA and preprocessing (eda/derm1m.ipynb and data-processor/processor_derm1m.py)
+2. Updated dataloader that includes text embeddings (dataloader/)
+3. Vision transformer model (model/vision/vit.py)
+4. Weights and biases logging (train/train.py)
