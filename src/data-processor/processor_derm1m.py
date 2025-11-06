@@ -67,7 +67,7 @@ class DatasetProcessorDerm1M(DatasetProcessor):
         )
 
         # Add labels and ontology data
-        form_met['label'] = metadata['hierarchical_disease_label'].apply(lambda x: x.split(',')[-1])
+        form_met['label'] = metadata['hierarchical_disease_label'].apply(lambda x: x.split(',')[-1].strip())
 
         split_cols = metadata['hierarchical_disease_label'].str.split(',', expand=True)
         split_cols.columns = [f'level_{i+1}' for i in range(len(split_cols.columns))]

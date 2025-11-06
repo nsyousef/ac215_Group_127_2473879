@@ -84,6 +84,8 @@ def harmonize_labels(metadata_all):
     
     # Define label mappings for harmonization
     label_mappings = {
+        # MALIGNANT LESIONS - Keep these separate (critical for patient safety)
+        
         # Melanoma variations (including capitalized versions)
         'melanoma-in-situ': 'melanoma',
         'melanoma-acral-lentiginous': 'melanoma',
@@ -114,36 +116,58 @@ def harmonize_labels(metadata_all):
         'Squamous cell carcinoma in situ': 'squamous-cell-carcinoma',
         'Squamous cell carcinoma, Invasive': 'squamous-cell-carcinoma',
         'Keratoacanthoma': 'squamous-cell-carcinoma',
+        'keratoacanthoma': 'squamous-cell-carcinoma',
         
-        # Other carcinomas (keep separate due to different prognosis)
-        'sebaceous-carcinoma': 'sebaceous-carcinoma',
+        # Other malignancies - consolidate by tissue type
+        'sebaceous-carcinoma': 'sebaceous-carcinoma',  # Keep specific - user needs to know
         'metastatic-carcinoma': 'metastatic-carcinoma',
+        'merkel cell carcinoma': 'merkel-cell-carcinoma',  # Keep specific - aggressive cancer
         
-        # Lymphomas and hematologic malignancies
-        'mycosis-fungoides': 'mycosis-fungoides',
-        'mycosis fungoides': 'mycosis-fungoides',
+        # Hematologic malignancies - consolidate
+        'mycosis-fungoides': 'cutaneous-lymphoma',
+        'mycosis fungoides': 'cutaneous-lymphoma',
         'subcutaneous-t-cell-lymphoma': 'cutaneous-lymphoma',
-        'leukemia-cutis': 'leukemia-cutis',
-        'blastic-plasmacytoid-dendritic-cell-neoplasm': 'hematologic-malignancy',
+        'leukemia-cutis': 'cutaneous-lymphoma',
+        'blastic-plasmacytoid-dendritic-cell-neoplasm': 'cutaneous-lymphoma',
+        'cutaneous b-cell lymphoma': 'cutaneous-lymphoma',
         
-        # Seborrheic keratosis variations
-        'seborrheic-keratosis': 'seborrheic-keratosis',
-        'seborrheic-keratosis-irritated': 'seborrheic-keratosis',
-        'Seborrheic keratosis': 'seborrheic-keratosis',
-        'seborrheic keratosis': 'seborrheic-keratosis',
-        'Pigmented benign keratosis': 'seborrheic-keratosis',
+        # Kaposi sarcoma
+        'kaposi-sarcoma': 'kaposi-sarcoma',
+        'kaposi sarcoma': 'kaposi-sarcoma',
+        "kaposi's sarcoma of skin": 'kaposi-sarcoma',
+        
+        # PRE-MALIGNANT LESIONS - Keep separate (important for monitoring)
         
         # Actinic keratosis variations
         'actinic-keratosis': 'actinic-keratosis',
         'actinic keratosis': 'actinic-keratosis',
         'Solar or actinic keratosis': 'actinic-keratosis',
         
-        # Other keratoses
+        # Atypical/dysplastic nevi (keep separate due to malignant potential)
+        'dysplastic-nevus': 'dysplastic-nevus',
+        'pigmented-spindle-cell-nevus-of-reed': 'dysplastic-nevus',
+        'atypical-spindle-cell-nevus-of-reed': 'dysplastic-nevus',
+        'Atypical melanocytic neoplasm': 'dysplastic-nevus',
+        'Atypical intraepithelial melanocytic proliferation': 'dysplastic-nevus',
+        
+        # BENIGN NEOPLASMS - Safe to consolidate by tissue type
+        
+        # Seborrheic keratosis variations
+        'seborrheic-keratosis': 'seborrheic-keratosis',
+        'seborrheic-keratosis-irritated': 'seborrheic-keratosis',
+        'Seborrheic keratosis': 'seborrheic-keratosis',
+        'seborrheic keratosis': 'seborrheic-keratosis',
+        'seborrheic keratoses': 'seborrheic-keratosis',
+        'irritated seborrheic keratosis (from "sk/isk")': 'seborrheic-keratosis',
+        'Pigmented benign keratosis': 'seborrheic-keratosis',
+        
+        # Other benign keratoses - consolidate
         'benign-keratosis': 'benign-keratosis',
         'inverted-follicular-keratosis': 'benign-keratosis',
-        'lichenoid-keratosis': 'lichenoid-keratosis',
-        'Lichen planus like keratosis': 'lichenoid-keratosis',
-        'focal-acral-hyperkeratosis': 'hyperkeratosis',
+        'lichenoid-keratosis': 'benign-keratosis',
+        'Lichen planus like keratosis': 'benign-keratosis',
+        'focal-acral-hyperkeratosis': 'benign-keratosis',
+        'keratosis pilaris': 'benign-keratosis',
         
         # Porokeratosis variants
         'porokeratosis': 'porokeratosis',
@@ -152,25 +176,7 @@ def harmonize_labels(metadata_all):
         'porokeratosis actinic': 'porokeratosis',
         'disseminated actinic porokeratosis': 'porokeratosis',
         
-        # Kaposi sarcoma variations
-        'kaposi-sarcoma': 'kaposi-sarcoma',
-        'kaposi sarcoma': 'kaposi-sarcoma',
-        
-        # Prurigo nodularis variations
-        'prurigo-nodularis': 'prurigo-nodularis',
-        'prurigo nodularis': 'prurigo-nodularis',
-        
-        # Eczema/dermatitis variations
-        'eczema-spongiotic-dermatitis': 'eczema',
-        'eczema': 'eczema',
-        'dyshidrotic eczema': 'eczema-dyshidrotic',
-        'seborrheic dermatitis': 'seborrheic-dermatitis',
-        'allergic contact dermatitis': 'contact-dermatitis',
-        'factitial dermatitis': 'dermatitis-factitia',
-        'perioral dermatitis': 'perioral-dermatitis',
-        'neurodermatitis': 'neurodermatitis',
-        
-        # Nevi variations (grouping common benign nevi)
+        # Common benign nevi - consolidate (all have similar management)
         'melanocytic-nevi': 'benign-nevus',
         'blue-nevus': 'benign-nevus',
         'congenital nevus': 'benign-nevus',
@@ -179,277 +185,479 @@ def harmonize_labels(metadata_all):
         'Nevus': 'benign-nevus',
         'naevus comedonicus': 'benign-nevus',
         'nevus-lipomatosus-superficialis': 'benign-nevus',
-        'nevus sebaceous of jadassohn': 'nevus-sebaceous',
         'becker nevus': 'benign-nevus',
         'nevocytic nevus': 'benign-nevus',
         'halo nevus': 'benign-nevus',
+        'nevus sebaceous of jadassohn': 'benign-nevus',
         
-        # Atypical/dysplastic nevi (keep separate due to malignant potential)
-        'dysplastic-nevus': 'dysplastic-nevus',
-        'pigmented-spindle-cell-nevus-of-reed': 'atypical-nevus',
-        'atypical-spindle-cell-nevus-of-reed': 'atypical-nevus',
-        'Atypical melanocytic neoplasm': 'atypical-nevus',
-        'Atypical intraepithelial melanocytic proliferation': 'atypical-nevus',
-        
-        # Wart variations
-        'verruca-vulgaris': 'wart',
-        'wart': 'wart',
-        'Verruca': 'wart',
-        'condyloma-accuminatum': 'wart-genital',
-        
-        # Viral infections
-        'molluscum-contagiosum': 'molluscum-contagiosum',
-        'Molluscum': 'molluscum-contagiosum',
-        
-        # Pyogenic granuloma variations
-        'pyogenic-granuloma': 'pyogenic-granuloma',
-        'granuloma pyogenic': 'pyogenic-granuloma',
-        'Pyogenic granuloma': 'pyogenic-granuloma',
-        
-        # Other granulomas
-        'foreign-body-granuloma': 'granuloma-foreign-body',
-        'granuloma annulare': 'granuloma-annulare',
-        'xanthogranuloma': 'xanthogranuloma',
-        'juvenile xanthogranuloma': 'xanthogranuloma',
-        'Juvenile xanthogranuloma': 'xanthogranuloma',
-        
-        # Dermatofibroma variations
-        'dermatofibroma': 'dermatofibroma',
+        # Fibrous lesions - consolidate (similar management)
+        'dermatofibroma': 'dermatofibroma',  # Most common - keep specific
         'Dermatofibroma': 'dermatofibroma',
-        'acquired-digital-fibrokeratoma': 'fibrous-lesion',
-        'fibrous-papule': 'fibrous-lesion',
+        'acquired-digital-fibrokeratoma': 'dermatofibroma',  # Can group with dermatofibroma
+        'fibrous-papule': 'dermatofibroma',
+        'digital fibroma': 'dermatofibroma', 
+        'fibroma molle': 'dermatofibroma',
+        'angiofibroma': 'dermatofibroma',
+        'Angiofibroma': 'dermatofibroma',
         
-        # Cyst variations
-        'epidermal-cyst': 'epidermal-cyst',
-        'pilar cyst': 'pilar-cyst',
-        'mucous cyst': 'mucous-cyst',
-        'Trichilemmal or isthmic-catagen or pilar cyst': 'pilar-cyst',
-        'Infundibular or epidermal cyst': 'epidermal-cyst',
+        # Neural tumors - consolidate
+        'neurofibroma': 'neurofibroma',  # Common, users recognize this
+        'neuroma': 'neurofibroma',  # Can group together
+        'cellular-neurothekeoma': 'neurofibroma',
+        'rheumatoid nodule': 'neurofibroma',  # Actually not neural, but rare
         
-        # Lentigo variations
-        'solar-lentigo': 'solar-lentigo',
-        'Solar lentigo': 'solar-lentigo',
-        'acral-melanotic-macule': 'melanotic-macule',
-        'Lentigo NOS': 'lentigo',
-        'Ink-spot lentigo': 'lentigo',
-        'Mucosal melanotic macule': 'melanotic-macule',
+        # Adnexal tumors - consolidate (all hair/sweat gland derived)
+        'trichilemmoma': 'hair-follicle-tumor',  # More user-friendly
+        'trichofolliculoma': 'hair-follicle-tumor',
+        'syringocystadenoma-papilliferum': 'sweat-gland-tumor',
+        'eccrine-poroma': 'sweat-gland-tumor',
+        'chondroid-syringoma': 'sweat-gland-tumor',
+        'Hidradenoma': 'sweat-gland-tumor',
+        'Trichoblastoma': 'hair-follicle-tumor',
+        'syringoma': 'sweat-gland-tumor',
+        'pilomatricoma': 'hair-follicle-tumor',
+        'poroma': 'sweat-gland-tumor',
+
         
-        # Hemangioma/vascular lesions
-        'arteriovenous-hemangioma': 'hemangioma',
-        'Hemangioma': 'hemangioma',
-        'angioma': 'hemangioma',
+        # Vascular lesions - consolidate benign vascular tumors
+        'arteriovenous-hemangioma': 'vascular-tumor',
+        'Hemangioma': 'vascular-tumor',
+        'angioma': 'vascular-tumor',
         'glomangioma': 'vascular-tumor',
         'angioleiomyoma': 'vascular-tumor',
-        'lymphangioma': 'vascular-malformation',
-        'Angiofibroma': 'angiofibroma',
-        'Angiokeratoma': 'angiokeratoma',
-        'telangiectases': 'telangiectases',
-        'port wine stain': 'vascular-malformation',
+        'lymphangioma': 'vascular-tumor',
+        'port wine stain': 'vascular-tumor',
+        'Angiokeratoma': 'vascular-tumor',
+        'angiokeratoma': 'vascular-tumor',
+        'venous lake': 'vascular-tumor',
+        'telangiectases': 'vascular-tumor',
+        'spider veins': 'vascular-tumor',
+        'telangiectasia macularis eruptiva perstans': 'vascular-tumor',
+        'campbell de morgan spots': 'vascular-tumor',
+        
+        # Cysts - consolidate by type
+        'epidermal-cyst': 'epidermal-cyst',
+        'epidermoid cyst': 'epidermal-cyst',
+        'Infundibular or epidermal cyst': 'epidermal-cyst',
+        'pilar cyst': 'pilar-cyst',
+        'Trichilemmal or isthmic-catagen or pilar cyst': 'pilar-cyst',
+        'mucous cyst': 'mucous-cyst',
+        'mucocele': 'mucous-cyst',
+        'myxoid cyst': 'mucous-cyst',
+        'steatocystoma multiplex': 'epidermal-cyst',
+        
+        # Skin tags and similar lesions
+        'acrochordon': 'skin-tag',
+        'Fibroepithelial polyp': 'skin-tag',
+        'skin tag': 'skin-tag',
         
         # Lipomatous lesions
         'lipoma': 'lipoma',
         
-        # Neural lesions
-        'neurofibroma': 'neurofibroma',
-        'neuroma': 'neuroma',
-        'cellular-neurothekeoma': 'neural-tumor',
-        'neurofibromatosis': 'neurofibromatosis',
+        # Granulomas - consolidate by type
+        'pyogenic-granuloma': 'pyogenic-granuloma',
+        'granuloma pyogenic': 'pyogenic-granuloma',
+        'Pyogenic granuloma': 'pyogenic-granuloma',
+        'granulation tissue': 'pyogenic-granuloma',
         
-        # Adnexal tumors (hair/sweat gland)
-        'trichilemmoma': 'adnexal-tumor',
-        'trichofolliculoma': 'adnexal-tumor',
-        'syringocystadenoma-papilliferum': 'adnexal-tumor',
-        'eccrine-poroma': 'adnexal-tumor',
-        'chondroid-syringoma': 'adnexal-tumor',
-        'Hidradenoma': 'adnexal-tumor',
-        'Trichoblastoma': 'adnexal-tumor',
-        'syringoma': 'adnexal-tumor',
-        'pilomatricoma': 'adnexal-tumor',
+        'foreign-body-granuloma': 'granuloma-annulare',  # Group common ones
+        'granuloma annulare': 'granuloma-annulare',  # Keep most common one
+        'granuloma faciale': 'granuloma-annulare',
+        'actinic granuloma': 'granuloma-annulare',
+        'majocchi granuloma': 'fungal-infection',  # Actually fungal-related
         
-        # Scar variations
-        'scar': 'scar',
-        'Scar': 'scar',
-        'keloid': 'scar-keloid',
-        'striae': 'striae',
+        'xanthogranuloma': 'xanthogranuloma',
+        'juvenile xanthogranuloma': 'xanthogranuloma',
+        'Juvenile xanthogranuloma': 'xanthogranuloma',
         
-        # Skin tags
-        'acrochordon': 'skin-tag',
-        'Fibroepithelial polyp': 'skin-tag',
+        # INFLAMMATORY CONDITIONS - Consolidate by pathophysiology
         
-        # Acne variations
+        # Eczema/dermatitis - consolidate common types
+        'eczema-spongiotic-dermatitis': 'eczema-dermatitis',
+        'eczema': 'eczema-dermatitis',
+        'atopic dermatitis': 'eczema-dermatitis',
+        'dyshidrotic eczema': 'eczema-dermatitis',
+        'nummular eczema': 'eczema-dermatitis',
+        'discoid eczema': 'eczema-dermatitis',
+        'hand eczema': 'eczema-dermatitis',
+        'xerotic eczema': 'eczema-dermatitis',
+        'infected eczema': 'eczema-dermatitis',
+        'stasis dermatitis': 'eczema-dermatitis',
+        'seborrheic dermatitis': 'eczema-dermatitis',
+        'neurodermatitis': 'eczema-dermatitis',
+        'chronic actinic dermatitis': 'eczema-dermatitis',
+        'acute dermatitis': 'eczema-dermatitis',
+        'autoimmune dermatitis': 'eczema-dermatitis',
+        'exfoliative dermatitis': 'eczema-dermatitis',
+        'exfoliative erythroderma': 'eczema-dermatitis',
+        'inflammatory dermatosis': 'eczema-dermatitis',
+        
+        # Contact dermatitis
+        'allergic contact dermatitis': 'contact-dermatitis',
+        'contact dermatitis': 'contact-dermatitis',
+        'irritant contact dermatitis': 'contact-dermatitis',
+        'contact purpura': 'contact-dermatitis',
+        
+        # Specialized dermatitis
+        'perioral dermatitis': 'perioral-dermatitis',
+        'factitial dermatitis': 'factitial-dermatitis',
+        'dermatitis herpetiformis': 'dermatitis-herpetiformis',
+        
+        # Psoriasis variants
+        'psoriasis': 'psoriasis',
+        'pustular psoriasis': 'psoriasis',
+        'scalp psoriasis': 'psoriasis',
+        'palmoplantar pustulosis': 'psoriasis',
+        
+        # Acne variants
         'acne-cystic': 'acne',
         'acne vulgaris': 'acne',
         'acne': 'acne',
+        'steroid acne': 'acne',
+        'acne urticata': 'acne',
+        'acne keloidalis nuchae': 'acne',
+        
+        # Rosacea spectrum
+        'rosacea': 'rosacea',
+        'rhinophyma': 'rosacea',
         
         # Follicular conditions
         'folliculitis': 'folliculitis',
+        'kerion': 'folliculitis',
         'hidradenitis': 'hidradenitis-suppurativa',
+        'hidradenitis suppurativa': 'hidradenitis-suppurativa',
+        'fox-fordyce disease': 'folliculitis',
         
-        # Hyperplasia variations
-        'Sebaceous hyperplasia': 'sebaceous-hyperplasia',
-        'reactive-lymphoid-hyperplasia': 'lymphoid-hyperplasia',
+        # Urticaria variants
+        'urticaria': 'urticaria',
+        'urticaria pigmentosa': 'urticaria',
         
-        # Acanthoma variations
-        'clear-cell-acanthoma': 'clear-cell-acanthoma',
-        'Clear cell acanthoma': 'clear-cell-acanthoma',
-        'verruciform-xanthoma': 'xanthoma',
+        # Prurigo conditions
+        'prurigo-nodularis': 'prurigo',
+        'prurigo nodularis': 'prurigo',
+        'prurigo': 'prurigo',
+        'prurigo pigmentosa': 'prurigo',
+        'prurigo of pregnancy': 'prurigo',
+        'pruritus ani': 'prurigo',
         
-        # Pigmentary disorders
-        'hyperpigmentation': 'hyperpigmentation',
-        'vitiligo': 'vitiligo',
-        'drug induced pigmentary changes': 'drug-induced-pigmentation',
+        # Lichen conditions
+        'lichen planus': 'lichen-planus',
+        'lichen simplex': 'lichen-planus',
+        'lichen amyloidosis': 'lichen-planus',
+        'lichen striatus': 'lichen-planus',
+        'lichen spinulosus': 'lichen-planus',
         
-        # Trauma/injury
-        'abrasions-ulcerations-and-physical-injuries': 'trauma',
-        'hematoma': 'hematoma',
-        'abscess': 'abscess',
+        # Pityriasis conditions  
+        'pityriasis rosea': 'pityriasis',
+        'pityriasis rubra pilaris': 'pityriasis',
+        'pityriasis lichenoides chronica': 'pityriasis',
+        'pityriasis lichenoides et varioliformis acuta': 'pityriasis',
+        'pityriasis lichenoides': 'pityriasis',
         
-        # Infections
+        # Erythema conditions
+        'erythema multiforme': 'erythema-reactive',
+        'erythema nodosum': 'erythema-reactive',
+        'erythema annulare centrifigum': 'erythema-reactive',
+        'erythema annulare centrifugum': 'erythema-reactive',
+        'erythema elevatum diutinum': 'erythema-reactive',
+        'erythema dyschromicum perstans': 'erythema-reactive',
+        'erythema craquele': 'erythema-reactive',
+        'erythema gyratum repens': 'erythema-reactive',
+        'annular erythema': 'erythema-reactive',
+        'superficial gyrate erythema': 'erythema-reactive',
+        
+        # AUTOIMMUNE/CONNECTIVE TISSUE - Consolidate related conditions
+        
+        # Lupus spectrum
+        'lupus erythematosus': 'lupus-erythematosus',
+        'lupus subacute': 'lupus-erythematosus',
+        'cutaneous lupus': 'lupus-erythematosus',
+        
+        # Scleroderma spectrum
+        'scleroderma': 'scleroderma-morphea',
+        'morphea': 'scleroderma-morphea',
+        'scleromyxedema': 'scleroderma-morphea',
+        
+        # Other autoimmune
+        'dermatomyositis': 'dermatomyositis',  # Keep - muscle involvement
+        'graft-vs-host-disease': 'graft-vs-host-disease',  # Keep - transplant complication
+        'sarcoidosis': 'sarcoidosis',  # Keep - systemic disease
+        'cutaneous sarcoidosis': 'sarcoidosis',  # Merge with sarcoidosis
+        
+        # INFECTIONS - Consolidate by organism type
+        
+        # Fungal infections
         'onychomycosis': 'fungal-infection',
         'tinea-pedis': 'fungal-infection',
+        'tinea pedis': 'fungal-infection',
+        'tinea corporis': 'fungal-infection',
+        'tinea cruris': 'fungal-infection',
+        'tinea': 'fungal-infection',
+        'tinea versicolor': 'fungal-infection',
+        'tinea manus': 'fungal-infection',
+        'candidiasis': 'fungal-infection',
+        'coccidioidomycosis': 'fungal-infection',
+        'fungal dermatitis': 'fungal-infection',
+        
+        # Bacterial infections
+        'paronychia': 'bacterial-infection',
+        'abscess': 'bacterial-infection',
+        'cellulitis': 'bacterial-infection',
+        'impetigo': 'bacterial-infection',
+        'furuncle': 'bacterial-infection',
+        'staphylococcal scalded skin syndrome': 'bacterial-infection',
+        'local infection of wound': 'bacterial-infection',
+        'pyoderma': 'bacterial-infection',
+        'pyoderma gangrenosum': 'bacterial-infection',
+        'erosive pustular dermatosis of the scalp': 'bacterial-infection',
+        'pitted keratolysis': 'bacterial-infection',
+        'bacterial': 'bacterial-infection',
+        
+        # Viral infections
+        'molluscum-contagiosum': 'viral-infection',
+        'Molluscum': 'viral-infection',
+        'molluscum contagiosum': 'viral-infection',
+        'herpes zoster': 'viral-infection',
+        'herpes simplex virus': 'viral-infection',
+        'viral exanthem': 'viral-infection',
+        'varicella': 'viral-infection',
+        'hand foot and mouth disease': 'viral-infection',
+        'parvovirus b19 infection': 'viral-infection',
+        
+        # Wart/HPV infections
+        'verruca-vulgaris': 'wart-hpv',
+        'wart': 'wart-hpv',
+        'Verruca': 'wart-hpv',
+        'verruca vulgaris': 'wart-hpv',
+        'condyloma-accuminatum': 'wart-hpv',
+        'condyloma acuminatum': 'wart-hpv',
+        'flat wart': 'wart-hpv',
+        'skin diseases caused by warts': 'wart-hpv',
+        
+        # Parasitic infections
         'scabies': 'parasitic-infection',
         'myiasis': 'parasitic-infection',
         'tungiasis': 'parasitic-infection',
         'pediculosis lids': 'parasitic-infection',
         'nematode infection': 'parasitic-infection',
-        'coccidioidomycosis': 'fungal-infection',
-        'paronychia': 'bacterial-infection',
+        'cutaneous larva migrans': 'parasitic-infection',
+        'sand-worm eruption': 'parasitic-infection',
+        'cutaneous leishmaniasis': 'parasitic-infection',
         
-        # Inflammatory conditions
-        'lymphocytic-infiltrations': 'inflammatory-infiltrate',
-        'morphea': 'morphea',
-        'scleroderma': 'scleroderma',
-        'graft-vs-host-disease': 'graft-vs-host-disease',
-        'sarcoidosis': 'sarcoidosis',
+        # Other infections
+        'syphilis': 'syphilis',  # Keep specific - STD implications
+        'lyme disease': 'lyme-disease',  # Keep specific - systemic disease
+        'skin and soft tissue atypical mycobacterial infection': 'atypical-mycobacterial-infection',
+
         
-        # Autoimmune/connective tissue
-        'lupus erythematosus': 'lupus-erythematosus',
-        'lupus subacute': 'lupus-erythematosus',
-        'dermatomyositis': 'dermatomyositis',
+        # TRAUMA/INJURY - Consolidate
+        'abrasions-ulcerations-and-physical-injuries': 'trauma',
+        'hematoma': 'trauma',
+        'wound/abrasion': 'trauma',
+        'animal bite - wound': 'trauma',
+        'burn of forearm': 'trauma',
+        'ulcer': 'trauma',
+        'insect bite': 'trauma',
+        'tick bite': 'trauma',
+        'poisoning by nematocyst': 'trauma',
         
-        # Lichen conditions
-        'lichen planus': 'lichen-planus',
-        'lichen simplex': 'lichen-simplex',
-        'lichen amyloidosis': 'lichen-amyloidosis',
+        # Scars and fibrosis
+        'scar': 'scar-fibrosis',
+        'Scar': 'scar-fibrosis',
+        'keloid': 'scar-fibrosis',
+        'striae': 'scar-fibrosis',
+        'red stretch marks': 'scar-fibrosis',
         
-        # Pityriasis conditions
-        'pityriasis rosea': 'pityriasis-rosea',
-        'pityriasis rubra pilaris': 'pityriasis-rubra-pilaris',
-        'pityriasis lichenoides chronica': 'pityriasis-lichenoides-chronica',
+        # PIGMENTARY DISORDERS - Consolidate
         
-        # Erythema conditions
-        'erythema multiforme': 'erythema-multiforme',
-        'erythema nodosum': 'erythema-nodosum',
-        'erythema annulare centrifigum': 'erythema-annulare-centrifigum',
-        'erythema elevatum diutinum': 'erythema-elevatum-diutinum',
+        # Hyperpigmentation
+        'hyperpigmentation': 'hyperpigmentation',
+        'drug induced pigmentary changes': 'hyperpigmentation',
+        'drug-induced pigmentary changes': 'hyperpigmentation',
+        'medication-induced cutaneous pigmentation': 'hyperpigmentation',
+        'melanin pigmentation due to exogenous substance': 'hyperpigmentation',
+        'riehl melanosis': 'hyperpigmentation',
+        'dermatosis papulosa nigra': 'hyperpigmentation',
         
-        # Keratosis variations
-        'keratosis pilaris': 'keratosis-pilaris',
+        # Hypopigmentation
+        'vitiligo': 'hypopigmentation',
+        'post-inflammatory hypopigmentation': 'hypopigmentation',
+        'idiopathic guttate hypomelanosis': 'hypopigmentation',
         
-        # Metabolic/genetic conditions
-        'necrobiosis lipoidica': 'necrobiosis-lipoidica',
-        'acanthosis nigricans': 'acanthosis-nigricans',
-        'ichthyosis vulgaris': 'ichthyosis-vulgaris',
-        'xeroderma pigmentosum': 'xeroderma-pigmentosum',
-        'incontinentia pigmenti': 'incontinentia-pigmenti',
-        'ehlers danlos syndrome': 'ehlers-danlos-syndrome',
-        'tuberous sclerosis': 'tuberous-sclerosis',
-        'hailey hailey disease': 'hailey-hailey-disease',
-        'dariers disease': 'dariers-disease',
-        'epidermolysis bullosa': 'epidermolysis-bullosa',
+        # Lentigo/melanotic macules - consolidate
+        'solar-lentigo': 'lentigo-solar',
+        'Solar lentigo': 'lentigo-solar',
+        'sun spots': 'lentigo-solar',
+        'acral-melanotic-macule': 'melanotic-macule',
+        'Lentigo NOS': 'melanotic-macule',
+        'Ink-spot lentigo': 'melanotic-macule',
+        'Mucosal melanotic macule': 'melanotic-macule',
+        'mucosal melanotic macule': 'melanotic-macule',
+        'acral melanotic macule': 'melanotic-macule',
+        'café au lait macule': 'melanotic-macule',
         
-        # Psoriasis variants
-        'psoriasis': 'psoriasis',
-        'pustular psoriasis': 'psoriasis-pustular',
+        # HYPERPLASIA/HAMARTOMAS
+        'Sebaceous hyperplasia': 'benign-hyperplasia',
+        'reactive-lymphoid-hyperplasia': 'benign-hyperplasia',
+        'Supernumerary nipple': 'benign-hyperplasia',
         
-        # Rosacea
-        'rosacea': 'rosacea',
-        'rhinophyma': 'rhinophyma',
+        # Clear cell lesions
+        'clear-cell-acanthoma': 'clear-cell-acanthoma',
+        'Clear cell acanthoma': 'clear-cell-acanthoma',
+        
+        # Xanthomatous lesions
+        'verruciform-xanthoma': 'xanthoma',
+        'xanthomas': 'xanthoma',
+        'eruptive xanthoma': 'xanthoma',
+        'xanthelasma': 'xanthoma',
+        'diffuse xanthoma': 'xanthoma',
+        
+        # METABOLIC/GENETIC CONDITIONS - Keep separate due to systemic implications
+        
+        # Genodermatoses
+        'necrobiosis lipoidica': 'genodermatosis',
+        'acanthosis nigricans': 'genodermatosis',
+        'ichthyosis vulgaris': 'genodermatosis',
+        'ichthyosis': 'genodermatosis',
+        'xeroderma pigmentosum': 'genodermatosis',
+        'incontinentia pigmenti': 'genodermatosis',
+        'ehlers danlos syndrome': 'genodermatosis',
+        'tuberous sclerosis': 'genodermatosis',
+        'hailey hailey disease': 'genodermatosis',
+        'dariers disease': 'genodermatosis',
+        'epidermolysis bullosa': 'genodermatosis',
+        'neurofibromatosis': 'genodermatosis',
+        'aplasia cutis': 'genodermatosis',
+        'hereditary': 'genodermatosis',
+        
+        # Metabolic deposits
+        'mucinosis': 'metabolic-deposit',
+        'calcinosis cutis': 'metabolic-deposit',
+        'amyloidosis': 'metabolic-deposit',
+        
+        # MASTOCYTOSIS/HISTIOCYTOSIS
+        'Mastocytosis': 'mastocytosis-histiocytosis',
+        'langerhans cell histiocytosis': 'mastocytosis-histiocytosis',
+        
+        # DRUG REACTIONS - Consolidate
+        'drug eruption': 'drug-reaction',
+        'stevens johnson syndrome': 'drug-reaction-severe',
+        'stevens-johnson syndrome': 'drug-reaction-severe',
+        'fixed eruptions': 'drug-reaction',
+        'fixed drug eruption': 'drug-reaction',
+        'acute generalized exanthematous pustulosis': 'drug-reaction-severe',
+        
+        # BULLOUS DISEASES
+        'bullous disease': 'bullous-disease',
+        'bullous pemphigoid': 'bullous-disease',
+        'childhood bullous pemphigoid': 'bullous-disease',
+        'pemphigus vulgaris': 'bullous-disease',
+        'acquired autoimmune bullous diseaseherpes gestationis': 'bullous-disease',
+        
+        # PHOTODERMATOLOGY
+        'photodermatoses': 'photodermatitis',
+        'sun damaged skin': 'photodermatitis',
+        'sunburn': 'photodermatitis',
+        'phytophotodermatitis': 'photodermatitis',
+        'polymorphous light eruption': 'photodermatitis',
+        'actinic solar damage(telangiectasia)': 'photodermatitis',
+        'actinic solar damage(solar purpura)': 'photodermatitis',
+        'actinic solar damage(solar elastosis)': 'photodermatitis',
+        'actinic solar damage(cutis rhomboidalis nuchae)': 'photodermatitis',
+        'radiodermatitis': 'photodermatitis',
+        'polymorphic eruption of pregnancy': 'photodermatitis',
+        
+        # NAIL DISORDERS
+        'onycholysis': 'nail-disorder',
+        'onychoschizia': 'nail-disorder',
+        'leukonychia': 'nail-disorder',
+        'koilonychia': 'nail-disorder',
+        "beau's lines": 'nail-disorder',
+        
+        # MISCELLANEOUS BENIGN CONDITIONS
+        
+        # Milia and fordyce spots
+        'milia': 'milia-fordyce',
+        'fordyce spots': 'milia-fordyce',
+        
+        # Edema/circulatory
+        'stasis edema': 'circulatory-disorder',
+        'livedo reticularis': 'circulatory-disorder',
+        'elephantiasis nostras': 'circulatory-disorder',
+        'poikiloderma': 'circulatory-disorder',
+        'poikiloderma of civatte': 'circulatory-disorder',
+        'flushing': 'circulatory-disorder',
+        
+        # Keratotic conditions
+        'hyperkeratosis palmaris et plantaris': 'hyperkeratosis',
+        'callus': 'hyperkeratosis',
+        'knuckle pads': 'hyperkeratosis',
+        'juvenile plantar dermatosis': 'hyperkeratosis',
+        'keratolysis exfoliativa of wende': 'hyperkeratosis',
+        'cutaneous horn': 'hyperkeratosis',
+        'atopic winter feet': 'hyperkeratosis',
+        
+        # Desquamation/xerosis
+        'xerosis': 'xerosis-desquamation',
+        'desquamation': 'xerosis-desquamation',
+        
+        # Cheilitis
         'cheilitis': 'cheilitis',
         
-        # Urticaria
-        'urticaria': 'urticaria',
-        'urticaria pigmentosa': 'urticaria-pigmentosa',
+        # Geographic conditions
+        'geographic tongue': 'geographic-dermatosis',
         
-        # Mastocytosis
-        'Mastocytosis': 'mastocytosis',
+        # Papillomatosis
+        'papilomatosis confluentes and reticulate': 'papillomatosis',
+        'confluent and reticulated papillomatosis': 'papillomatosis',
         
-        # Miscellaneous conditions
-        'Supernumerary nipple': 'supernumerary-nipple',
-        'aplasia cutis': 'aplasia-cutis',
-        'calcinosis cutis': 'calcinosis-cutis',
-        'stasis edema': 'stasis-edema',
-        'livedo reticularis': 'livedo-reticularis',
-        'mucinosis': 'mucinosis',
-        'scleromyxedema': 'scleromyxedema',
-        'milia': 'milia',
-        'fordyce spots': 'fordyce-spots',
-        'xanthomas': 'xanthoma',
-        'porphyria': 'porphyria',
-        'langerhans cell histiocytosis': 'langerhans-cell-histiocytosis',
-        'photodermatoses': 'photodermatitis',
-        'sun damaged skin': 'sun-damage',
-        'acrodermatitis enteropathica': 'acrodermatitis-enteropathica',
+        # Pregnancy-related dermatoses
+        'papular dermatoses of pregnancy': 'pregnancy-dermatosis',
+        'cholestasis of pregnancy': 'pregnancy-dermatosis',
         
-        # Drug reactions
-        'drug eruption': 'drug-reaction',
-        'stevens johnson syndrome': 'stevens-johnson-syndrome',
-        'fixed eruptions': 'fixed-drug-eruption',
+        # Intertrigo
+        'intertrigo': 'intertrigo',
         
-        # Behavioral/neurotic
-        'neurotic excoriations': 'neurotic-excoriations',
-        'neutrophilic dermatoses': 'neutrophilic-dermatoses',
+        # Mucositis
+        'muzzle rash': 'mucositis',
         
-        # Vector-borne
-        'tick bite': 'tick-bite',
-        'lyme disease': 'lyme-disease',
-        'behcets disease': 'behcets-disease',
+        # Hair disorders
+        'alopecia areata': 'hair-disorder',
+        'hair diseases': 'hair-disorder',
+        'hypertrichosis': 'hair-disorder',
         
-        # Additional systematic mappings
-        'papilomatosis confluentes and reticulate': 'papillomatosis-confluent-reticulate',
-
-        # Vascular lesions consolidation
-        'glomangioma': 'hemangioma',  # Both are benign vascular tumors
-        'angioleiomyoma': 'hemangioma',  # Both are benign vascular tumors
-
-        # Fibrous lesions consolidation  
-        'acquired-digital-fibrokeratoma': 'dermatofibroma',  # Both are fibrous lesions
-        'fibrous-papule': 'dermatofibroma',  # Both are fibrous lesions
-
-        # Granuloma consolidation
-        'foreign-body-granuloma': 'granuloma-annulare',  # Merge granulomas together
-
-        # Hyperplasia consolidation
-        'Sebaceous hyperplasia': 'benign-tumor',  # Create general benign tumor category
-        'reactive-lymphoid-hyperplasia': 'benign-tumor',
-
-        # Neural tumor consolidation
-        'neuroma': 'neurofibroma',  # Both are neural lesions
-        'cellular-neurothekeoma': 'neurofibroma',  # Both are neural lesions
-
-        # Hematologic malignancy consolidation
-        'leukemia-cutis': 'hematologic-malignancy',
-        'subcutaneous-t-cell-lymphoma': 'hematologic-malignancy',  # Change from cutaneous-lymphoma
-
-        # Infection consolidation
-        'abscess': 'bacterial-infection',  # Abscess is typically bacterial
-
-        # Trauma consolidation
-        'hematoma': 'trauma',  # Hematoma is usually trauma-related
-
-        # Scleroderma spectrum consolidation
-        'morphea': 'scleroderma',  # Morphea is localized scleroderma
-
-        # Keratosis consolidation
-        'focal-acral-hyperkeratosis': 'benign-keratosis',  # Both are benign keratoses
-
-        # Pigmentary disorder consolidation
-        'hyperpigmentation': 'pigmentary-disorder',  # Create broader category
-        'drug induced pigmentary changes': 'pigmentary-disorder',
-
-        # Inflammatory consolidation
-        'lymphocytic-infiltrations': 'inflammatory-dermatosis',  # Create broader inflammatory category
-        'neutrophilic dermatoses': 'inflammatory-dermatosis',
+        # Miscellaneous rare conditions
+        'chilblain': 'environmental-dermatosis',
+        'degos disease': 'rare-dermatosis',
+        'relapsing polychondritis': 'rare-dermatosis',
+        'behcets disease': 'rare-dermatosis',
+        
+        # Neurotic/behavioral conditions
+        'neurotic excoriations': 'neurotic-dermatoses',
+        'skin lesion in drug addict': 'neurotic-dermatoses',
+        
+        # Dilated pore conditions
+        'dilated pore of winer': 'follicular-disorder',
+        
+        # Clubbing
+        'clubbing of fingers': 'nail-disorder',
+        
+        # Crowe's sign (neurofibromatosis)
+        "crowe's sign": 'genodermatosis',
+        
+        # Unilateral dermatoses
+        'unilateral laterothoracic exanthem': 'rare-dermatosis',
+        
+        # Proliferative conditions
+        'proliferations': 'benign-hyperplasia',
+        
+        # Lymphocytic infiltrate
+        'lymphocytic infiltrate of jessner': 'inflammatory-infiltrate',
+        
+        # Additional miscellaneous conditions
+        'porphyria': 'metabolic-disorder',
+        'eruptive odontogenic cyst': 'rare-cyst',
+        'chondrodermatitis nodularis helicis': 'chondrodermatitis',
     }
     
     # Apply the mappings
