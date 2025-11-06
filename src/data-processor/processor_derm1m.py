@@ -73,16 +73,36 @@ class DatasetProcessorDerm1M(DatasetProcessor):
         split_cols.columns = [f'level_{i+1}' for i in range(len(split_cols.columns))]
         form_met = pd.concat([form_met, split_cols], axis=1)
 
-        # Include gender text descriptions
-        gender_list = metadata['gender'].to_list()
+        # Include metadata in text descriptions
+        gender_list = metadata['gender'].tolist()
+        age_list = metadata['age'].tolist()
+        location_list = metadata['body_location'].tolist()
+        symptoms_list = metadata['symptoms'].tolist()
         assert len(gender_list) == len(metadata)
+        assert len(age_list) == len(metadata)
+        assert len(location_list) == len(metadata)
+        assert len(symptoms_list) == len(metadata)
 
-        for i, gender in enumerate(gender_list):
-            if gender == 'No gender information' or gender == 'male, female':
-                continue
-            else:
-                sentence = f' The gender is {gender}.'
-                metadata.loc[metadata.index[i], 'caption'] = str(metadata.iloc[i]['caption']) + sentence
+        for i in range(len(metadata)):
+            new_caption = str(metadata.iloc[i]['caption'])
+
+            if gender_list[i] != 'No gender information' and gender_list[i] != 'male, female':
+                gender_sentence = f' The gender is {gender_list[i]}.'
+                new_caption += gender_sentence
+
+            if age_list[i] != 'No age information':
+                age_sentence = f' The age is {age_list[i]}.'
+                new_caption += age_sentence
+
+            if location_list[i] != 'No body location information':
+                location_sentence = f' The body location is {location_list[i]}.'
+                new_caption += location_sentence
+
+            if symptoms_list[i] != 'No symptom information':
+                symptom_sentence = f' The symptoms are {symptoms_list[i]}.'
+                new_caption += symptom_sentence
+
+            metadata.loc[metadata.index[i], 'caption'] = new_caption
 
         form_met["text_desc"] = metadata['caption']
 
