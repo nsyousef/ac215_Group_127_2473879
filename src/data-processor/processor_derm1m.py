@@ -78,10 +78,6 @@ class DatasetProcessorDerm1M(DatasetProcessor):
         age_list = metadata['age'].tolist()
         location_list = metadata['body_location'].tolist()
         symptoms_list = metadata['symptoms'].tolist()
-        assert len(gender_list) == len(metadata)
-        assert len(age_list) == len(metadata)
-        assert len(location_list) == len(metadata)
-        assert len(symptoms_list) == len(metadata)
 
         for i in range(len(metadata)):
             new_caption = str(metadata.iloc[i]['caption'])

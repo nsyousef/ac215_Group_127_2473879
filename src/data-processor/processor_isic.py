@@ -57,7 +57,33 @@ class DatasetProcessorIsic(DatasetProcessor):
         form_met["image_id"] = metadata['isic_id']
         form_met["dataset"] = [dataset] * form_met.shape[0]
         form_met["label"] = metadata['diagnosis_3']
+
+        # Include metadata in text descriptions
         form_met["text_desc"] = [None] * form_met.shape[0]
+        sex_list = metadata['sex'].tolist()
+        age_list = metadata['age_approx'].tolist()
+        anatom_general_list = metadata['anatom_site_general'].tolist()
+        anatom_special_list = metadata['anatom_site_special'].tolist()
+
+        for i in range(len(metadata)):
+            new_caption = ''
+            
+            if str(sex_list[i]) != 'nan':
+                gender_sentence = f' The sex is {sex_list[i]}.'
+                new_caption += gender_sentence
+            
+            if str(age_list[i]) != 'nan':
+                age_sentence = f' The approximate age is {int(age_list[i])}.'
+                new_caption += age_sentence
+            
+            if str(anatom_general_list[i]) != 'nan':
+                location_sentence = f' The body location is {anatom_general_list[i]}.'
+                new_caption += location_sentence
+            elif str(anatom_special_list[i]) != 'nan':
+                location_sentence = f' The body location is {anatom_special_list[i]}.'
+                new_caption += location_sentence
+            
+            form_met.loc[form_met.index[i], 'text_desc'] = new_caption.strip()
 
         # add original and final filenames
         form_met = form_met.merge(img_id_name_map, how='left', left_on='image_id', right_index=True)

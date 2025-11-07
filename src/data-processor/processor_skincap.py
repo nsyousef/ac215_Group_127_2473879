@@ -65,7 +65,10 @@ class DatasetProcessorSkinCAP(DatasetProcessor):
             metadata = metadata.rename(columns={"ori_file_path": "orig_filename"})
             metadata = metadata[["orig_filename", "caption_zh_polish_en"]]
             new_meta = pd.merge(old_meta, metadata, on='orig_filename', how='left')
-            new_meta['text_desc'] = new_meta['caption_zh_polish_en']
+            # Add new caption to existing text_desc
+            new_meta['text_desc'] = new_meta['text_desc'].fillna('') + ' ' + new_meta['caption_zh_polish_en'].fillna('')
+            # Clean up any leading/trailing whitespace
+            new_meta['text_desc'] = new_meta['text_desc'].str.strip()
             new_meta = new_meta.drop(columns=['caption_zh_polish_en'])
         except NotFound as e:
             raise FileNotFoundError(f"File {final_metadata_path} not found in GCS") from e

@@ -46,7 +46,18 @@ class DatasetProcessorDDI(DatasetProcessor):
             lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x['orig_filename'])[1]}", axis=1
         )
         final_metadata_drft["label"] = metadata["disease"]
+
+        # Add malignant metadata as text description
         final_metadata_drft["text_desc"] = [None] * final_metadata_drft.shape[0]
+        malignant_list = metadata['malignant'].tolist()
+        assert len(malignant_list) == len(final_metadata_drft)
+
+        for i, malig_bool in enumerate(malignant_list):
+            if malig_bool:
+                malig_sentence = 'This lesion is malignant.'
+            else:
+                malig_sentence = 'This lesion is benign.'
+            final_metadata_drft.loc[final_metadata_drft.index[i], 'text_desc'] = malig_sentence
 
         # order columns
         final_metadata = final_metadata_drft[["image_id", "dataset", "filename", "orig_filename", "label", "text_desc"]]
