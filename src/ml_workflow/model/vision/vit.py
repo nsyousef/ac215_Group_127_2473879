@@ -1,14 +1,13 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision import models
-from torchvision.models import (
-    ViT_B_16_Weights,
-    ViT_B_32_Weights,
-    ViT_L_16_Weights,
-    ViT_L_32_Weights,
-)
-from typing import Dict, Any, Optional, List
+from torchvision.models import (ViT_B_16_Weights, ViT_B_32_Weights, ViT_L_16_Weights, ViT_L_32_Weights)
+from typing import Dict, Any
+
+try:
+    from ..utils import logger
+except ImportError:
+    from utils import logger
 
 class VisionTransformer(nn.Module):
     """Vision Transformer model that returns embeddings only"""
@@ -34,18 +33,14 @@ class VisionTransformer(nn.Module):
         self.img_size = tuple(vision_config.get('img_size', (224, 224)))
         self.unfreeze_layers = vision_config.get('unfreeze_layers', 0)
         
-        # Note: ViT models typically expect (224, 224) but we allow flexibility
+        # Note: ViT models expect (224, 224)
         if self.img_size!=(224, 224):
             raise ValueError(f"Input size mismatch: {self.img_size} != (224, 224)")
         
         # Get the pretrained ViT model
         self.model = self._get_model(self.model_name, self.pretrained)
-        
         self.embedding_dim = self._get_embedding_dim() # hidden dimension of the model
-        
-        self.model.heads = nn.Identity() # remove the classification head - we only want embeddings
-        
-        self._freeze_layers() # apply layer freezing/unfreezing
+        self._freeze_layers()
     
     def _get_model(self, model_name: str, pretrained: bool) -> nn.Module:
         """Get the pretrained Vision Transformer model"""
@@ -62,31 +57,38 @@ class VisionTransformer(nn.Module):
             weights = ViT_L_32_Weights.DEFAULT if pretrained else None
             model = models.vit_l_32(weights=weights)
         else:
-            raise ValueError(f"Unsupported ViT model: {model_name}. "
-                           f"Supported models: vit_b_16, vit_b_32, vit_l_16, vit_l_32")
+            raise ValueError(f"Unsupported ViT model: {model_name}. Supported models: vit_b_16, vit_b_32, vit_l_16, vit_l_32")
         return model
     
     def _get_embedding_dim(self) -> int:
         """Get the embedding dimension of the ViT model"""
         return self.model.hidden_dim
     
-    def _freeze_layers(self, num_layers = None):
+    def _freeze_layers(self, warmup_mode: bool = False):
         """
         Freeze layers in the ViT model based on unfreeze_layers parameter
-        unfreeze_layers: 0 means all layers frozen (except head), -1 means all unfrozen,
-                        positive number means unfreeze that many transformer blocks from the end
+        
+        Args:
+            warmup_mode: If True, freeze ALL layers (for warmup phase)
+                        If False, use self.unfreeze_layers setting
+        
+        unfreeze_layers: 
+            - 0: All layers frozen
+            - -1: All layers unfrozen
+            - positive number: Unfreeze that many transformer blocks from the end
         """
-        if num_layers == -1: # This is for warmup phase, we freeze all layers
-            # Freeze all layers
+        # Warmup phase: freeze everything
+        if warmup_mode:
             for param in self.model.parameters():
                 param.requires_grad = False
             return
 
+        # Normal training: use unfreeze_layers setting
         if self.unfreeze_layers == -1:
             # Unfreeze all layers
             for param in self.model.parameters():
                 param.requires_grad = True
-            print("All ViT layers unfrozen")
+            logger.info("All ViT layers unfrozen")
             return
         
         # First freeze all layers
@@ -95,16 +97,15 @@ class VisionTransformer(nn.Module):
         
         if self.unfreeze_layers == 0:
             # Keep encoder frozen
-            print("All encoder layers frozen")
+            logger.info("All encoder layers frozen")
             return
         
         # Unfreeze specified number of transformer blocks from the end
         encoder_blocks = list(self.model.encoder.layers.children())
-        num_blocks = len(encoder_blocks)
+        total_blocks = len(encoder_blocks)
         
-        if self.unfreeze_layers > num_blocks:
-            print(f"Warning: unfreeze_layers ({self.unfreeze_layers}) is greater than "
-                  f"total blocks ({num_blocks}). Unfreezing all blocks.")
+        if self.unfreeze_layers > total_blocks:
+            logger.warning(f"unfreeze_layers ({self.unfreeze_layers}) > total blocks ({total_blocks}). Unfreezing all blocks.")
             blocks_to_unfreeze = encoder_blocks
         else:
             blocks_to_unfreeze = encoder_blocks[-self.unfreeze_layers:]
@@ -127,9 +128,8 @@ class VisionTransformer(nn.Module):
             for param in self.model.encoder.ln.parameters():
                 param.requires_grad = True
         
-        trainable_blocks = sum(1 for block in encoder_blocks 
-                              if any(p.requires_grad for p in block.parameters()))
-        print(f"ViT Encoder: {num_blocks} total blocks, {trainable_blocks} unfrozen blocks")
+        trainable_blocks = sum(1 for block in encoder_blocks if any(p.requires_grad for p in block.parameters()))
+        logger.info(f"ViT Encoder: {total_blocks} total blocks, {trainable_blocks} trainable blocks")
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

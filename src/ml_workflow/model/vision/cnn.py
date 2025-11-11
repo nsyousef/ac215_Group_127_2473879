@@ -1,16 +1,13 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision import models
-from torchvision.models import (
-    ResNet50_Weights,
-    ResNet101_Weights,
-    DenseNet121_Weights,
-    EfficientNet_B0_Weights,
-    EfficientNet_B4_Weights,
-    VGG16_Weights,
-)
-from typing import Dict, Any, Optional, List
+from torchvision.models import ResNet50_Weights, ResNet101_Weights, DenseNet121_Weights, EfficientNet_B0_Weights, EfficientNet_B4_Weights, VGG16_Weights
+from typing import Dict, Any
+
+try:
+    from ..utils import logger
+except ImportError:
+    from utils import logger
 
 class CNNModel(nn.Module):
     """CNN-based transfer learning model that returns embeddings only"""
@@ -62,8 +59,7 @@ class CNNModel(nn.Module):
         elif model_name == "densenet121":
             weights = DenseNet121_Weights.DEFAULT if pretrained else None
             model = models.densenet121(weights=weights)
-            # Remove the original classifier
-            model.features = model.features
+            # Remove the original classifier, keep only features
             model = model.features
         elif model_name == "efficientnet_b0":
             weights = EfficientNet_B0_Weights.DEFAULT if pretrained else None
@@ -84,25 +80,33 @@ class CNNModel(nn.Module):
             
         return model
     
-    def _freeze_layers(self, num_layers = None):
+    def _freeze_layers(self, warmup_mode: bool = False):
         """
         Freeze layers in the model based on unfreeze_layers parameter
-        unfreeze_layers: 0 means all layers frozen, -1 means all unfrozen,
-                        positive number means unfreeze that many layers from the end
+        
+        Args:
+            warmup_mode: If True, freeze ALL layers (for warmup phase)
+                         If False, use self.unfreeze_layers setting
+        
+        unfreeze_layers: 
+            - 0: All layers frozen
+            - -1: All layers unfrozen
+            - positive number: Unfreeze that many layers from the end
         """
-        if num_layers == -1: # This is for warmup phase, we freeze all layers
-            # Freeze all layers
+        # Warmup phase: freeze everything
+        if warmup_mode:
             for param in self.model.parameters():
                 param.requires_grad = False
             return
 
+        # Normal training: use unfreeze_layers setting
         if self.unfreeze_layers == -1:
             # Unfreeze all layers
             for param in self.model.parameters():
                 param.requires_grad = True
             return
         
-        # Third case: We freeze some layers and unfreeze some layers
+        # Partial unfreezing
         # First freeze all layers
         for param in self.model.parameters():
             param.requires_grad = False
@@ -111,19 +115,13 @@ class CNNModel(nn.Module):
             # Keep all layers frozen
             return
         
-        # Get all modules/layers in the model
-        all_modules = list(self.model.modules())
+        # Get direct children (layers)
+        layers = list(self.model.children())
+        total_layers = len(layers)
         
-        # For Sequential models, get direct children
-        if isinstance(self.model, nn.Sequential):
-            layers = list(self.model.children())
-        else:
-            layers = list(self.model.children())
-        
-        # Calculate number of layers to unfreeze
-        num_layers = len(layers)
-        if self.unfreeze_layers > num_layers:
-            print(f"Warning: unfreeze_layers ({self.unfreeze_layers}) is greater than total layers ({num_layers}). Unfreezing all layers.")
+        # Determine which layers to unfreeze
+        if self.unfreeze_layers > total_layers:
+            logger.warning(f"unfreeze_layers ({self.unfreeze_layers}) > total layers ({total_layers}). Unfreezing all layers.")
             layers_to_unfreeze = layers
         else:
             layers_to_unfreeze = layers[-self.unfreeze_layers:]
@@ -133,17 +131,23 @@ class CNNModel(nn.Module):
             for param in layer.parameters():
                 param.requires_grad = True
         
-        # Print freeze status
+        # Log freeze status
         trainable_layers = sum(1 for layer in layers if any(p.requires_grad for p in layer.parameters()))
-        print(f"Model: {num_layers} total layers, {trainable_layers} unfrozen layers")
+        logger.info(f"Vision model: {total_layers} total layers, {trainable_layers} trainable layers")
     
     def _get_embedding_dim(self) -> int:
         """Get the number of output features from the model"""
-        # Create a dummy input to get the feature size
-        dummy_input = torch.randn(1, 3, self.img_size[0], self.img_size[1])
+        # Save original training state
+        was_training = self.model.training
+        self.model.eval()  # Set to eval mode to use running stats for BatchNorm
+        
+        # Get device from model parameters
+        device = next(self.model.parameters()).device
+        
+        # Create dummy input on same device as model
+        dummy_input = torch.randn(1, 3, self.img_size[0], self.img_size[1], device=device)
         with torch.no_grad():
             features = self.model(dummy_input)
-            
             # Apply pooling based on pooling_type
             if self.pooling_type == 'avg':
                 pooled = self.avg_pool(features)
@@ -155,8 +159,13 @@ class CNNModel(nn.Module):
                 pooled = torch.cat([avg_pooled, max_pooled], dim=1)
             else:
                 raise ValueError(f"Unsupported pooling type: {self.pooling_type}")
+            embedding_dim = pooled.view(pooled.size(0), -1).size(1)
+        
+        # Restore original training state
+        if was_training:
+            self.model.train()
             
-            return pooled.view(pooled.size(0), -1).size(1)
+        return embedding_dim
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -187,17 +196,6 @@ class CNNModel(nn.Module):
         embeddings = features.view(features.size(0), -1)
         
         return embeddings
-    
-    def unfreeze_more_layers(self, num_additional_layers: int):
-        """
-        Unfreeze additional layers during training (for progressive unfreezing)
-        
-        Args:
-            num_additional_layers: Number of additional layers to unfreeze from the end
-        """
-        self.unfreeze_layers += num_additional_layers
-        self._freeze_layers()
-        print(f"Unfroze {num_additional_layers} additional layers. Total unfrozen: {self.unfreeze_layers}")
     
     def get_vision_info(self) -> Dict[str, Any]:
         """
