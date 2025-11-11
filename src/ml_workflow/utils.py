@@ -9,7 +9,10 @@ from torchvision import transforms
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from typing import Tuple, List, Dict, Any, Optional
-from constants import TEXT_DESC_COL
+try:
+    from .constants import TEXT_DESC_COL
+except ImportError:
+    from constants import TEXT_DESC_COL
 
 # Setup logging
 def setup_logger(name: str = __name__, level: int = logging.INFO) -> logging.Logger:
@@ -103,7 +106,8 @@ def save_checkpoint(model: Optional[torch.nn.Module], optimizer: Optional[torch.
                    save_dir: str, experiment_name: str, is_best: bool = False,
                    additional_info: Optional[Dict[str, Any]] = None, 
                    vision_model: Optional[torch.nn.Module] = None,
-                   classifier: Optional[torch.nn.Module] = None) -> str:
+                   images_classifier: Optional[torch.nn.Module] = None,
+                   text_classifier: Optional[torch.nn.Module] = None) -> str:
     """
     Save model checkpoint
     
@@ -136,11 +140,13 @@ def save_checkpoint(model: Optional[torch.nn.Module], optimizer: Optional[torch.
     # Handle model state dicts
     if model is not None:
         checkpoint['model_state_dict'] = model.state_dict()
-    elif vision_model is not None and classifier is not None:
+    elif vision_model is not None and images_classifier is not None:
         checkpoint['vision_model_state_dict'] = vision_model.state_dict()
-        checkpoint['classifier_state_dict'] = classifier.state_dict()
+        checkpoint['images_classifier_state_dict'] = images_classifier.state_dict()
+        if text_classifier is not None:
+            checkpoint['text_classifier_state_dict'] = text_classifier.state_dict()
     else:
-        raise ValueError("Either model or both vision_model and classifier must be provided")
+        raise ValueError("Either model or both vision_model and images_classifier must be provided")
     
     # Handle optimizer state dict
     if optimizer is not None:
@@ -176,7 +182,8 @@ def load_checkpoint(checkpoint_path: str, model: Optional[torch.nn.Module] = Non
                    optimizer: Optional[torch.optim.Optimizer] = None,
                    device: Optional[torch.device] = None,
                    vision_model: Optional[torch.nn.Module] = None,
-                   classifier: Optional[torch.nn.Module] = None) -> Dict[str, Any]:
+                   images_classifier: Optional[torch.nn.Module] = None,
+                   text_classifier: Optional[torch.nn.Module] = None) -> Dict[str, Any]:
     """
     Load model checkpoint
     
@@ -203,13 +210,15 @@ def load_checkpoint(checkpoint_path: str, model: Optional[torch.nn.Module] = Non
     # Load model state
     if model is not None and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
-    elif vision_model is not None and classifier is not None:
+    elif vision_model is not None and images_classifier is not None:
         if 'vision_model_state_dict' in checkpoint:
             vision_model.load_state_dict(checkpoint['vision_model_state_dict'])
-        if 'classifier_state_dict' in checkpoint:
-            classifier.load_state_dict(checkpoint['classifier_state_dict'])
+        if 'images_classifier_state_dict' in checkpoint:
+            images_classifier.load_state_dict(checkpoint['images_classifier_state_dict'])
+        if text_classifier is not None and 'text_classifier_state_dict' in checkpoint:
+            text_classifier.load_state_dict(checkpoint['text_classifier_state_dict'])
     else:
-        raise ValueError("Either model or both vision_model and classifier must be provided")
+        raise ValueError("Either model or both vision_model and images_classifier must be provided")
     
     # Load optimizer state if provided
     if optimizer is not None and 'optimizer_state_dict' in checkpoint and checkpoint['optimizer_state_dict'] is not None:

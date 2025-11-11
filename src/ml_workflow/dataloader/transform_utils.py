@@ -3,7 +3,10 @@ from torchvision import transforms
 from typing import Tuple, List, Dict
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from utils import logger
+try:
+    from ..utils import logger
+except ImportError:
+    from utils import logger
 
 # Transform functions
 def get_basic_transform(img_size: Tuple[int, int]) -> transforms.Compose:
@@ -75,20 +78,13 @@ def get_train_transform(mean: List[float], std: List[float], img_size: Tuple[int
         transform_list.append(transforms.RandomGrayscale(p=grayscale_prob))
     
     # Always add tensor conversion and normalization
-    transform_list.extend([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std)
-    ])
+    transform_list.extend([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
     
     return transforms.Compose(transform_list)
 
 def get_test_valid_transform(mean: List[float], std: List[float], img_size: Tuple[int, int]) -> transforms.Compose:
     """Validation transform without augmentation"""
-    return transforms.Compose([
-        transforms.Resize(img_size),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std)
-    ])
+    return transforms.Compose([transforms.Resize(img_size), transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
 
 def compute_dataset_stats(dataloader: DataLoader, num_channels: int = 3) -> Tuple[List[float], List[float]]:
     """Compute channel-wise mean and std"""
@@ -97,7 +93,8 @@ def compute_dataset_stats(dataloader: DataLoader, num_channels: int = 3) -> Tupl
     std = torch.zeros(num_channels)
     total_images = 0
 
-    for imgs, _ in tqdm(dataloader, desc="Computing stats"):
+    for batch in tqdm(dataloader, desc="Computing stats"):
+        imgs = batch[0]  # Get images
         batch_samples = imgs.size(0)
         imgs = imgs.view(batch_samples, imgs.size(1), -1)
         mean += imgs.mean(2).sum(0)

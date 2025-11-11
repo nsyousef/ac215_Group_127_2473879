@@ -1,6 +1,9 @@
 from pathlib import Path as _Path
 import warnings
-from utils import logger
+try:
+    from .utils import logger
+except ImportError:
+    from utils import logger
 import pandas as pd
 
 def file_exists(path: str) -> bool:
@@ -61,7 +64,6 @@ def _parse_gs_path(path: str):
     object_path = parts[1] if len(parts) > 1 else ""
     return bucket_name, object_path
 
-
 def _get_gcs_client():
     """
     Lazy import and return a google.cloud.storage.Client instance.
@@ -73,7 +75,6 @@ def _get_gcs_client():
         warnings.warn("WARNING: Google cloud could not be imported. Please check that it is installed.")
         raise
     return storage.Client()
-
 
 def save_dataframe_to_csv(path: str, df, index: bool = False, **to_csv_kwargs):
     """

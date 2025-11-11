@@ -14,8 +14,12 @@ from sklearn.preprocessing import label_binarize
 from tqdm import tqdm
 import os
 
-from main import initialize_model
-from utils import logger
+try:
+    from .main import initialize_model
+    from .utils import logger
+except ImportError:
+    from main import initialize_model
+    from utils import logger
 
 
 def evaluate_model(config_path, save_plots=True, plot_dir="./plots"):

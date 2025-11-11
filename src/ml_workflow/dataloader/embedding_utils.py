@@ -1,12 +1,18 @@
-from utils import logger
+try:
+    from ..utils import logger
+    from ..io_utils import file_exists, save_dataframe_to_parquet, load_parquet
+    from ..constants import TEXT_DESC_COL, IMG_ID_COL, EMBEDDING_COL, MODELS
+except ImportError:
+    from utils import logger
+    from io_utils import file_exists, save_dataframe_to_parquet, load_parquet
+    from constants import TEXT_DESC_COL, IMG_ID_COL, EMBEDDING_COL, MODELS
+
 import numpy as np
 import torch
 from transformers import AutoTokenizer, AutoModel
 from typing import Literal
 import pandas as pd
 import os
-from io_utils import file_exists, save_dataframe_to_parquet, load_parquet
-from constants import TEXT_DESC_COL, IMG_ID_COL, EMBEDDING_COL, MODELS
 import ast
 
 class MissingEmbeddingError(ValueError):

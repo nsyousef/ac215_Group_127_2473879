@@ -3,19 +3,34 @@
 import argparse
 import yaml
 import torch
+import sys
+from pathlib import Path
 
-from train.train import Trainer
-from utils import load_metadata, logger, load_checkpoint
-from dataloader.embedding_utils import load_or_compute_embeddings
-from dataloader.dataloader import create_dataloaders
-from model.vision.vit import VisionTransformer
-from model.vision.cnn import CNNModel
-from model.classifier.classifier import Classifier
-from constants import (
-    GCS_METADATA_PATH, 
-    GCS_IMAGE_PREFIX,
-    IMG_ID_COL,
-)
+# Add src to path for script execution
+if __name__ == "__main__":
+    src_path = Path(__file__).parent.parent
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
+
+# Try relative imports (package mode), fall back to absolute (script mode)
+try:
+    from .train.train import Trainer
+    from .utils import load_metadata, logger, load_checkpoint
+    from .dataloader.embedding_utils import load_or_compute_embeddings, embedding_to_array
+    from .dataloader.dataloader import create_dataloaders
+    from .model.vision.vit import VisionTransformer
+    from .model.vision.cnn import CNNModel
+    from .model.classifier.classifier import Classifier
+    from .constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
+except ImportError:
+    from train.train import Trainer
+    from utils import load_metadata, logger, load_checkpoint
+    from dataloader.embedding_utils import load_or_compute_embeddings, embedding_to_array
+    from dataloader.dataloader import create_dataloaders
+    from model.vision.vit import VisionTransformer
+    from model.vision.cnn import CNNModel
+    from model.classifier.classifier import Classifier
+    from constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
 
 def initialize_model(config_path):
     """This function will initialize everything needed for training based on config being used"""
@@ -68,6 +83,11 @@ def initialize_model(config_path):
     # combine embeddings with metadata
     metadata = metadata.merge(embeddings, how="left", on=IMG_ID_COL, validate="1:1")
     
+    # Get text embedding dimension from first non-null embedding
+    sample_embedding = metadata[EMBEDDING_COL].dropna().iloc[0]
+    text_embedding_dim = len(embedding_to_array(sample_embedding))
+    logger.info(f"Text embedding dimension: {text_embedding_dim}")
+    
     # Create dataloaders with splits
     train_loader, val_loader, test_loader, info = create_dataloaders(
         metadata_df=metadata,
@@ -92,26 +112,38 @@ def initialize_model(config_path):
     vision_model = vision_model.to(device)
     embedding_dim = vision_model.embedding_dim
 
-    # Update classifier config with embedding size
-    classifier_config = config['classifier'].copy()
-    classifier_config['num_classes'] = info['num_classes']
-    classifier_config['sample_weights'] = info['sample_weights']
-    classifier_config['input_size'] = embedding_dim
+    # Images classifier
+    images_classifier_config = config['images_classifier'].copy()
+    images_classifier_config['num_classes'] = info['num_classes']
+    images_classifier_config['sample_weights'] = info['sample_weights']
+    images_classifier_config['input_size'] = embedding_dim
+    images_classifier = Classifier(images_classifier_config)
+    images_classifier = images_classifier.to(device)
     
-    # Initialize classifier
-    classifier = Classifier(classifier_config)
-    classifier = classifier.to(device)
+    # Create text classifier
+    text_classifier_config = config['text_classifier'].copy()
+    text_classifier_config['num_classes'] = info['num_classes']
+    text_classifier_config['sample_weights'] = info['sample_weights']
+    text_classifier_config['input_size'] = text_embedding_dim
+    text_classifier = Classifier(text_classifier_config)
+    text_classifier = text_classifier.to(device)
     
     # Log model information
     vision_info = vision_model.get_vision_info()
-    classifier_info = classifier.get_classifier_info()
+    images_classifier_info = images_classifier.get_classifier_info()
+    text_classifier_info = text_classifier.get_classifier_info()
     
     logger.info(f"Vision Model: {vision_info['model_name']}")
     logger.info(f"Vision parameters: {vision_info['total_parameters']:,}")
-    logger.info(f"Classifier parameters: {classifier_info['total_parameters']:,}")
-    logger.info(f"Total parameters: {vision_info['total_parameters'] + classifier_info['total_parameters']:,}")
-    logger.info(f"Classifier hidden sizes: {classifier_info['hidden_sizes']}")
-    logger.info(f"Classifier activation: {classifier_info['activation']}")
+    logger.info(f"Images Classifier parameters: {images_classifier_info['total_parameters']:,}")
+    logger.info(f"Text Classifier parameters: {text_classifier_info['total_parameters']:,}")
+    logger.info(f"Total parameters: {vision_info['total_parameters'] + images_classifier_info['total_parameters'] + text_classifier_info['total_parameters']:,}")
+    logger.info(f"Images Classifier hidden sizes: {images_classifier_info['hidden_sizes']}")
+    logger.info(f"Text Classifier hidden sizes: {text_classifier_info['hidden_sizes']}")
+    logger.info(f"Images Classifier activation: {images_classifier_info['activation']}")
+    
+    # Get fusion configuration
+    fusion_config = config.get('fusion', {})
     
     # Initialize trainer with dataloaders, models, and device
     trainer = Trainer(
@@ -121,7 +153,9 @@ def initialize_model(config_path):
                 test_loader = test_loader, 
                 info = info, 
                 vision_model = vision_model,
-                classifier = classifier,
+                images_classifier = images_classifier,
+                text_classifier = text_classifier,
+                fusion_config = fusion_config,
                 device = device
                 )
     
@@ -134,7 +168,8 @@ def initialize_model(config_path):
                 checkpoint_path=checkpoint_config['load_from'],
                 model=None,
                 vision_model=vision_model,
-                classifier=classifier,
+                images_classifier=images_classifier,
+                text_classifier=text_classifier,
                 device=device
             )
             logger.info("Checkpoint loaded successfully!")
@@ -149,8 +184,10 @@ def initialize_model(config_path):
             if schedulers_state_dict:
                 if trainer.scheduler_vision is not None and 'vision' in schedulers_state_dict:
                     trainer.scheduler_vision.load_state_dict(schedulers_state_dict['vision'])
-                if trainer.scheduler_classifier is not None and 'classifier' in schedulers_state_dict:
-                    trainer.scheduler_classifier.load_state_dict(schedulers_state_dict['classifier'])
+                if trainer.scheduler_images is not None and 'images_classifier' in schedulers_state_dict:
+                    trainer.scheduler_images.load_state_dict(schedulers_state_dict['images_classifier'])
+                if trainer.scheduler_text is not None and 'text_classifier' in schedulers_state_dict:
+                    trainer.scheduler_text.load_state_dict(schedulers_state_dict['text_classifier'])
                 logger.info("Scheduler states loaded from checkpoint")
             
             # Load vision freeze state
@@ -167,7 +204,8 @@ def initialize_model(config_path):
         'trainer': trainer,
         'config': config,
         'vision_model': vision_model,
-        'classifier': classifier,
+        'images_classifier': images_classifier,
+        'text_classifier': text_classifier,
         'train_loader': train_loader,
         'val_loader': val_loader,
         'test_loader': test_loader,
@@ -176,14 +214,11 @@ def initialize_model(config_path):
     
     return return_dict
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train skin disease classification model')
     parser.add_argument('--config', type=str, default='config.yaml', 
                         help='Path to configuration YAML file')
     args = parser.parse_args()
-
     return_dict = initialize_model(args.config)
-
     trainer = return_dict['trainer']
     trainer.train()

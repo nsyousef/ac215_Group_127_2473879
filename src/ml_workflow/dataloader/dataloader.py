@@ -1,18 +1,15 @@
 import pandas as pd
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from typing import Optional, List, Callable, Tuple, Dict, Any
-import torch 
-import time
-import fsspec
+import torch
 import multiprocessing
 
-from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
-from utils import (logger, stratified_split)
-from dataloader.transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
-from dataloader.embedding_utils import embedding_to_array
+from ..constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
+from ..utils import (logger, stratified_split)
+from .transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
+from .embedding_utils import embedding_to_array
     
-
 # If we use multiple workers with GCP, we need to ensure each worker has its own filesystem object
 import gcsfs
 _worker_fs = None
@@ -20,12 +17,39 @@ _worker_fs = None
 def _get_worker_fs():
     global _worker_fs
     if _worker_fs is None:
-        _worker_fs = gcsfs.GCSFileSystem(
-            token="cloud",          
-            cache_timeout=600,      
-            default_block_size=2**22,   # How much memory it loads in one packet
-            retry_reads=True
-        )
+        try:
+            # Try to use the same credentials as google.cloud.storage
+            # This allows gcsfs to work with any credentials that google.cloud.storage can use
+            from google.auth import default as google_auth_default
+            from google.auth.exceptions import DefaultCredentialsError
+            
+            try:
+                # Get credentials using the same method as google.cloud.storage
+                credentials, project = google_auth_default()
+                # Pass credentials explicitly to gcsfs
+                _worker_fs = gcsfs.GCSFileSystem(
+                    token=credentials,  # Pass credentials object directly
+                    cache_timeout=600,      
+                    default_block_size=2**22,
+                    retry_reads=True
+                )
+            except DefaultCredentialsError:
+                # Fall back to "cloud" token (application default credentials)
+                # This requires: gcloud auth application-default login
+                _worker_fs = gcsfs.GCSFileSystem(
+                    token="cloud",
+                    cache_timeout=600,
+                    default_block_size=2**22,
+                    retry_reads=True
+                )
+        except ImportError:
+            # If google.auth is not available, use "cloud" token
+            _worker_fs = gcsfs.GCSFileSystem(
+                token="cloud",
+                cache_timeout=600,
+                default_block_size=2**22,
+                retry_reads=True
+            )
     return _worker_fs
 
 def _worker_init_fn(_):
@@ -37,7 +61,6 @@ def _worker_init_fn(_):
         torch.set_num_threads(1)  # avoid oversubscribing CPU in workers
     except Exception:
         pass
-
 
 class ImageDataset(Dataset):
     """PyTorch Dataset for images from GCS or local storage - multiprocessing safe"""
@@ -57,15 +80,17 @@ class ImageDataset(Dataset):
             df: DataFrame with image paths and labels
             img_col: Column name for image paths
             label_col: Column name for labels
-            text_desc_col: Column name for text descriptions
+            embedding_col: Column name for pre-computed text embeddings
             img_prefix: Prefix for image paths (GCS bucket or local dir)
             transform: Optional transform to apply to images
             classes: Fixed class list (inferred if None)
+            use_local: Whether to use local file system or GCS
         """
         # Convert DataFrame to lists for faster, multiprocessing-safe access
         self.image_paths = df[img_col].astype(str).tolist()
         self.labels_raw = df[label_col].astype(str).tolist()
-        self.text_desc_embd = df[embedding_col].tolist()
+        # Pre-convert embeddings to numpy arrays for better performance
+        self.text_embeddings = [embedding_to_array(emb) for emb in df[embedding_col].tolist()]
         self.max_retries = MAX_RETRIES
         
         self.img_prefix = img_prefix.rstrip("/")
@@ -92,6 +117,8 @@ class ImageDataset(Dataset):
         """Load and return image, label, and text embedding"""
         attempts = 0
         last_error = None
+        current_idx = idx
+        path = None
 
         while attempts < self.max_retries:
             try:
@@ -99,7 +126,7 @@ class ImageDataset(Dataset):
                 filename = self.image_paths[current_idx].lstrip("/")
                 path = f"{self.img_prefix}/{filename}" if self.img_prefix else filename
                 label = self.labels[current_idx]
-                text_embd = embedding_to_array(self.text_desc_embd[current_idx])
+                text_embd = self.text_embeddings[current_idx]
                 
                 # Load image from GCS or local
                 if not self.use_local:
@@ -122,7 +149,9 @@ class ImageDataset(Dataset):
                 # Only print on first attempt to reduce spam (use print, not logger, for multiprocessing)
                 if attempts == 1:
                     print(f"Warning: Failed to load image at idx {current_idx} ({path}): {type(e).__name__}")
-                    raise RuntimeError(f"Error loading image at index {idx} (path: {path}): {type(e).__name__}: {str(e)}") from e
+                # Only raise after all retries exhausted
+                if attempts >= self.max_retries:
+                    raise RuntimeError(f"Error loading image at index {idx} (path: {path}) after {attempts} attempts: {type(last_error).__name__}: {str(last_error)}") from last_error
 
 def create_dataloaders(
                 metadata_df: pd.DataFrame,
@@ -164,6 +193,18 @@ def create_dataloaders(
     num_classes = len(all_classes)
     logger.info(f"Total classes: {num_classes}")
     
+    # Build dataloader kwargs once (reused for temp_loader and main dataloaders)
+    dataloader_kwargs = {
+        'batch_size': batch_size, 
+        'num_workers': num_workers, 
+        'prefetch_factor': prefetch_factor if num_workers > 0 else None, 
+        'pin_memory': torch.cuda.is_available(),
+        'persistent_workers': use_persistent_workers,
+    }
+    if not use_local and num_workers > 0:
+        dataloader_kwargs['multiprocessing_context'] = multiprocessing.get_context('spawn')
+        dataloader_kwargs['worker_init_fn'] = _worker_init_fn
+    
     # Compute or validate statistics
     if compute_stats:
         logger.info("Computing dataset statistics from all training data")
@@ -178,12 +219,10 @@ def create_dataloaders(
                                 transform=get_basic_transform(img_size), 
                                 classes=all_classes
                                 )
-        temp_loader = DataLoader(
-                            temp_dataset, 
-                            batch_size=batch_size, 
-                            num_workers=num_workers, 
-                            shuffle=False
-                            )
+        # Reuse dataloader_kwargs, just add shuffle=False for stats computation
+        temp_loader_kwargs = dataloader_kwargs.copy()
+        temp_loader_kwargs['shuffle'] = False
+        temp_loader = DataLoader(temp_dataset, **temp_loader_kwargs)
         mean, std = compute_dataset_stats(temp_loader)
     else:
         # Use default ImageNet statistics if not computing from data
@@ -226,33 +265,22 @@ def create_dataloaders(
                         )
     else:
         val_dataset = None
-    
-    # Create dataloaders with optional weighted sampling    
-    if not use_local:
-        mp_context = multiprocessing.get_context('spawn') if num_workers > 0 else None
-        dataloader_kwargs = {
-            'batch_size': batch_size, 
-            'num_workers': num_workers, 
-            'prefetch_factor': prefetch_factor if num_workers > 0 else None, 
-            'pin_memory': torch.cuda.is_available(),
-            'persistent_workers': use_persistent_workers,
-            'multiprocessing_context': mp_context,
-            'worker_init_fn': _worker_init_fn
-        }
-    else:
-        dataloader_kwargs = {
-            'batch_size': batch_size, 
-            'num_workers': num_workers, 
-            'prefetch_factor': prefetch_factor if num_workers > 0 else None, 
-            'pin_memory': torch.cuda.is_available(),
-            'persistent_workers': use_persistent_workers,
-        }
 
     # Compute class frequency weights, also used in focal loss
     class_counts = train_df[LABEL_COL].value_counts()
-    class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
-    sample_weights = [class_weights[label] for label in train_df[LABEL_COL]]
-
+    
+    # For weighted sampling: need per-sample weights
+    class_weights_dict = {cls: 1.0 / count for cls, count in class_counts.items()}
+    sample_weights = [class_weights_dict[label] for label in train_df[LABEL_COL]]
+    
+    # For focal loss: need per-class weights in class-index order, classes not in training set get default weight 1.0
+    class_weights_list = [class_weights_dict.get(cls, 1.0) for cls in all_classes]
+    
+    # Log if any classes only appear in val/test (will have untrained output units)
+    train_classes = set(train_df[LABEL_COL].unique())
+    val_test_only = set(all_classes) - train_classes
+    if val_test_only:
+        logger.warning(f"Classes only in val/test (untrained output units, weight=1.0): {sorted(val_test_only)}")
     
     if weighted_sampling:
         sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
@@ -263,14 +291,17 @@ def create_dataloaders(
     test_loader = DataLoader(test_dataset, shuffle=False, **dataloader_kwargs)
     val_loader = DataLoader(val_dataset, shuffle=False, **dataloader_kwargs) if val_dataset is not None else None
     info = {
-        'num_classes': num_classes, 'classes': all_classes,
+        'num_classes': num_classes, 
+        'classes': all_classes,
         'class_to_idx': train_dataset.class_to_idx,
         'train_size': len(train_dataset), 
         'test_size': len(test_dataset),
         'val_size': len(val_dataset) if val_dataset is not None else 0,
-        'mean': mean, 'std': std,
-        'img_size': img_size, 'batch_size': batch_size,
-        'sample_weights': sample_weights,
+        'mean': mean, 
+        'std': std,
+        'img_size': img_size, 
+        'batch_size': batch_size,
+        'class_weights': class_weights_list,  # for focal loss
     }
     
     return train_loader, val_loader, test_loader, info

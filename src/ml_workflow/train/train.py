@@ -6,7 +6,17 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
-from utils import logger, save_checkpoint, load_checkpoint, cleanup_old_checkpoints
+try:
+    from ..utils import logger, save_checkpoint, load_checkpoint, cleanup_old_checkpoints
+except ImportError:
+    # Fallback for when not imported as package (shouldn't normally happen)
+    import sys
+    from pathlib import Path
+    # Add ml_workflow parent to path if needed
+    ml_workflow_path = Path(__file__).parent.parent.parent
+    if str(ml_workflow_path) not in sys.path:
+        sys.path.insert(0, str(ml_workflow_path))
+    from ml_workflow.utils import logger, save_checkpoint, load_checkpoint, cleanup_old_checkpoints
 import time
 import wandb
 from collections import defaultdict
@@ -17,7 +27,7 @@ from train.train_utils import make_optimizer
 
 class Trainer:
     
-    def __init__(self, config, train_loader, val_loader, test_loader, info, vision_model, classifier, device):
+    def __init__(self, config, train_loader, val_loader, test_loader, info, vision_model, images_classifier, text_classifier, fusion_config, device):
         """
         Initialize trainer with configuration, dataloaders, model, and device
         
@@ -27,7 +37,10 @@ class Trainer:
             val_loader: Validation DataLoader (can be None)
             test_loader: Test DataLoader
             info: Dictionary with dataset information
-            model: Initialized model
+            vision_model: Initialized vision model
+            images_classifier: Initialized images classifier
+            text_classifier: Initialized text classifier
+            fusion_config: Fusion configuration dictionary
             device: Device to use for training (cuda/cpu)
         """
         self.config = config
@@ -36,7 +49,8 @@ class Trainer:
         self.test_loader = test_loader
         self.info = info
         self.vision_model = vision_model
-        self.classifier = classifier
+        self.images_classifier = images_classifier
+        self.text_classifier = text_classifier
         self.device = device
         
         # Extract configuration sections
@@ -45,8 +59,12 @@ class Trainer:
         self.output_config = config['output']
         self.checkpoint_config = config['checkpoint']
         
-        self.optimizer_vision, self.optimizer_classifier = self._initialize_optimizers()
-        self.scheduler_vision, self.scheduler_classifier = self._initialize_schedulers()
+        # Extract fusion weights
+        self.alpha_image = fusion_config.get('alpha_image', 0.5)
+        self.alpha_text = 1.0 - self.alpha_image
+        
+        self.optimizer_vision, self.optimizer_images, self.optimizer_text = self._initialize_optimizers()
+        self.scheduler_vision, self.scheduler_images, self.scheduler_text = self._initialize_schedulers()
         
         self.current_epoch = 0
         self.best_val_loss = float('inf')
@@ -58,14 +76,16 @@ class Trainer:
         self.accuracy_history = {}
     
     def _initialize_optimizers(self):
-        """Initialize vision/classifier optimizers from optimizer config (required)."""
+        """Initialize vision/images classifier/text classifier optimizers from optimizer config (required)."""
         optimizer_config = self.config.get('optimizer')
 
         opt_vision_cfg = optimizer_config.get('vision_model')
-        opt_classifier_cfg = optimizer_config.get('classifier')
+        opt_images_cfg = optimizer_config.get('images_classifier')
+        opt_text_cfg = optimizer_config.get('text_classifier')
 
         vision_params = list(self.vision_model.parameters())
-        classifier_params = list(self.classifier.parameters())
+        images_classifier_params = list(self.images_classifier.parameters())
+        text_classifier_params = list(self.text_classifier.parameters())
 
         ob_name = opt_vision_cfg['name'].lower()
         ob_lr = opt_vision_cfg['learning_rate']
@@ -74,19 +94,27 @@ class Trainer:
         ob_eps = opt_vision_cfg.get('eps', 1e-8)
         ob_momentum = opt_vision_cfg.get('momentum', 0.9)
 
-        oh_name = opt_classifier_cfg['name'].lower()
-        oh_lr = opt_classifier_cfg['learning_rate']
-        oh_wd = opt_classifier_cfg['weight_decay']
-        oh_betas = opt_classifier_cfg.get('betas', (0.9, 0.999))
-        oh_eps = opt_classifier_cfg.get('eps', 1e-8)
-        oh_momentum = opt_classifier_cfg.get('momentum', 0.9)
+        oi_name = opt_images_cfg['name'].lower()
+        oi_lr = opt_images_cfg['learning_rate']
+        oi_wd = opt_images_cfg['weight_decay']
+        oi_betas = opt_images_cfg.get('betas', (0.9, 0.999))
+        oi_eps = opt_images_cfg.get('eps', 1e-8)
+        oi_momentum = opt_images_cfg.get('momentum', 0.9)
+
+        ot_name = opt_text_cfg['name'].lower()
+        ot_lr = opt_text_cfg['learning_rate']
+        ot_wd = opt_text_cfg['weight_decay']
+        ot_betas = opt_text_cfg.get('betas', (0.9, 0.999))
+        ot_eps = opt_text_cfg.get('eps', 1e-8)
+        ot_momentum = opt_text_cfg.get('momentum', 0.9)
 
         optimizer_vision = make_optimizer(ob_name, ob_lr, ob_wd, ob_betas, ob_eps, ob_momentum, vision_params)
-        optimizer_classifier = make_optimizer(oh_name, oh_lr, oh_wd, oh_betas, oh_eps, oh_momentum, classifier_params)
-        return optimizer_vision, optimizer_classifier
+        optimizer_images = make_optimizer(oi_name, oi_lr, oi_wd, oi_betas, oi_eps, oi_momentum, images_classifier_params)
+        optimizer_text = make_optimizer(ot_name, ot_lr, ot_wd, ot_betas, ot_eps, ot_momentum, text_classifier_params)
+        return optimizer_vision, optimizer_images, optimizer_text
     
     def _initialize_schedulers(self):
-        """Initialize cosine annealing schedulers for both optimizers."""
+        """Initialize cosine annealing schedulers for all optimizers."""
         num_epochs = self.training_config['num_epochs']
         
         # Get scheduler configuration
@@ -100,17 +128,23 @@ class Trainer:
                 T_max=num_epochs,
                 eta_min=scheduler_config.get('vision_eta_min', 0.0)
             )
-            scheduler_classifier = CosineAnnealingLR(
-                self.optimizer_classifier, 
+            scheduler_images = CosineAnnealingLR(
+                self.optimizer_images, 
                 T_max=num_epochs,
-                eta_min=scheduler_config.get('classifier_eta_min', 0.0)
+                eta_min=scheduler_config.get('images_classifier_eta_min', 0.0)
+            )
+            scheduler_text = CosineAnnealingLR(
+                self.optimizer_text, 
+                T_max=num_epochs,
+                eta_min=scheduler_config.get('images_classifier_eta_min', 0.0)  # Use same as images classifier
             )
         else:
             # No schedulers (step function that does nothing)
             scheduler_vision = None
-            scheduler_classifier = None
+            scheduler_images = None
+            scheduler_text = None
             
-        return scheduler_vision, scheduler_classifier
+        return scheduler_vision, scheduler_images, scheduler_text
     
     def train(self):
         """Main training loop"""
@@ -121,8 +155,10 @@ class Trainer:
         logger.info(f"Starting training for {num_epochs} epochs...")
         logger.info(f"Starting from epoch: {self.start_epoch}")
         vision_optimizer_cfg = self.config['optimizer']['vision_model']
-        classifier_optimizer_cfg = self.config['optimizer']['classifier']
-        logger.info(f"Optimizers -> vision_model: {vision_optimizer_cfg['name']} (lr={vision_optimizer_cfg['learning_rate']}), classifier: {classifier_optimizer_cfg['name']} (lr={classifier_optimizer_cfg['learning_rate']})")
+        images_optimizer_cfg = self.config['optimizer']['images_classifier']
+        text_optimizer_cfg = self.config['optimizer']['text_classifier']
+        logger.info(f"Optimizers -> vision_model: {vision_optimizer_cfg['name']} (lr={vision_optimizer_cfg['learning_rate']}), images_classifier: {images_optimizer_cfg['name']} (lr={images_optimizer_cfg['learning_rate']}), text_classifier: {text_optimizer_cfg['name']} (lr={text_optimizer_cfg['learning_rate']})")
+        logger.info(f"Fusion weights -> alpha_image: {self.alpha_image:.3f}, alpha_text: {self.alpha_text:.3f}")
 
         with wandb.init(project=self.output_config['wandb_project'], name=self.output_config['experiment_name'], config=self.config) as run:
 
@@ -145,7 +181,7 @@ class Trainer:
                     'train/f1': train_f1,
                     'epoch': epoch,
                     'params/learning_rate_vision': vision_optimizer_cfg['learning_rate'],
-                    'params/learning_rate_classifier': classifier_optimizer_cfg['learning_rate'],
+                    'params/learning_rate_images_classifier': images_optimizer_cfg['learning_rate'],
                 })
                 
                 ran_validation = False
@@ -198,15 +234,18 @@ class Trainer:
                 if epoch > self.n_warmup_epochs:
                     if self.scheduler_vision is not None:
                         self.scheduler_vision.step()
-                if self.scheduler_classifier is not None:
-                    self.scheduler_classifier.step()
+                if self.scheduler_images is not None:
+                    self.scheduler_images.step()
+                if self.scheduler_text is not None:
+                    self.scheduler_text.step()
                 
             logger.info("Training completed!")
     
     def _train_epoch(self):
         """Train for one epoch"""
         self.vision_model.train()
-        self.classifier.train()
+        self.images_classifier.train()
+        self.text_classifier.train()
         total_loss = 0.0
         correct = 0
         total = 0
@@ -217,35 +256,49 @@ class Trainer:
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Training")
         stime = time.time()
 
-        for batch_idx, (data, target) in enumerate(pbar):
+        for batch_idx, (images, targets, text_embeddings) in enumerate(pbar):
 
             # Move data to device
-            data, target = data.to(self.device, non_blocking=True), target.to(self.device, non_blocking=True)
+            images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
+            # Convert text_embeddings to tensor if needed (DataLoader may return numpy arrays)
+            if not isinstance(text_embeddings, torch.Tensor):
+                text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
+            text_embeddings = text_embeddings.to(self.device, non_blocking=True)
             
             # Zero gradients
             if not self.vision_frozen:
                 self.optimizer_vision.zero_grad()
-            self.optimizer_classifier.zero_grad()
+            self.optimizer_images.zero_grad()
+            self.optimizer_text.zero_grad()
             
-            # Forward pass
-            vision_embeddings = self.vision_model(data)
-            output = self.classifier(vision_embeddings)
-            loss = self.classifier.loss(output, target)
+            # Forward pass - image branch
+            vision_embeddings = self.vision_model(images)
+            image_logits = self.images_classifier(vision_embeddings)
+            
+            # Forward pass - text branch
+            text_logits = self.text_classifier(text_embeddings)
+            
+            # Fuse logits
+            fused_logits = self.alpha_image * image_logits + self.alpha_text * text_logits
+            
+            # Compute loss on fused logits
+            loss = self.images_classifier.loss(fused_logits, targets)
             
             # Backward pass
             loss.backward()
             if not self.vision_frozen:
                 self.optimizer_vision.step()
-            self.optimizer_classifier.step()
+            self.optimizer_images.step()
+            self.optimizer_text.step()
             
             # Statistics
             total_loss += loss.item()
-            pred = output.argmax(dim=1, keepdim=True)
-            correct = pred.eq(target.view_as(pred)).sum().item()
-            total = target.size(0)
+            pred = fused_logits.argmax(dim=1, keepdim=True)
+            correct = pred.eq(targets.view_as(pred)).sum().item()
+            total = targets.size(0)
             # Update confusion matrix
             pred_flat = pred.view(-1).detach().cpu().numpy()
-            target_flat = target.view(-1).detach().cpu().numpy()
+            target_flat = targets.view(-1).detach().cpu().numpy()
             for t, p in zip(target_flat, pred_flat):
                 confusion[t, p] += 1
 
@@ -281,7 +334,8 @@ class Trainer:
             return None, None, None, None
             
         self.vision_model.eval()
-        self.classifier.eval()
+        self.images_classifier.eval()
+        self.text_classifier.eval()
         total_loss = 0.0
         correct = 0
         total = 0
@@ -290,22 +344,31 @@ class Trainer:
         
         with torch.no_grad():
             pbar = tqdm(self.val_loader, desc="Validation", leave=False)
-            for data, target in pbar:
+            for images, targets, text_embeddings in pbar:
                 # Move data to device
-                data, target = data.to(self.device, non_blocking=True), target.to(self.device, non_blocking=True)
+                images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
+                text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32).to(self.device, non_blocking=True)
                 
-                # Forward pass
-                vision_embeddings = self.vision_model(data)
-                output = self.classifier(vision_embeddings)
-                loss = self.classifier.loss(output, target)
+                # Forward pass - image branch
+                vision_embeddings = self.vision_model(images)
+                image_logits = self.images_classifier(vision_embeddings)
+                
+                # Forward pass - text branch
+                text_logits = self.text_classifier(text_embeddings)
+                
+                # Fuse logits
+                fused_logits = self.alpha_image * image_logits + self.alpha_text * text_logits
+                
+                # Compute loss on fused logits
+                loss = self.images_classifier.loss(fused_logits, targets)
                 
                 # Statistics
                 total_loss += loss.item()
-                pred = output.argmax(dim=1, keepdim=True)
-                correct += pred.eq(target.view_as(pred)).sum().item()
-                total += target.size(0)
+                pred = fused_logits.argmax(dim=1, keepdim=True)
+                correct += pred.eq(targets.view_as(pred)).sum().item()
+                total += targets.size(0)
                 pred_flat = pred.view(-1).detach().cpu().numpy()
-                target_flat = target.view(-1).detach().cpu().numpy()
+                target_flat = targets.view(-1).detach().cpu().numpy()
                 for t, p in zip(target_flat, pred_flat):
                     confusion[t, p] += 1
                 
@@ -432,7 +495,8 @@ class Trainer:
         logger.info("Starting test evaluation...")
         
         self.vision_model.eval()
-        self.classifier.eval()
+        self.images_classifier.eval()
+        self.text_classifier.eval()
         total_loss = 0.0
         correct = 0
         total = 0
@@ -443,28 +507,37 @@ class Trainer:
         
         with torch.no_grad():
             pbar = tqdm(self.test_loader, desc="Testing")
-            for data, target in pbar:
+            for images, targets, text_embeddings in pbar:
                 # Move data to device
-                data, target = data.to(self.device, non_blocking=True), target.to(self.device, non_blocking=True)
+                images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
+                text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32).to(self.device, non_blocking=True)
                 
-                # Forward pass
-                vision_embeddings = self.vision_model(data)
-                output = self.classifier(vision_embeddings)
-                loss = self.classifier.loss(output, target)
+                # Forward pass - image branch
+                vision_embeddings = self.vision_model(images)
+                image_logits = self.images_classifier(vision_embeddings)
+                
+                # Forward pass - text branch
+                text_logits = self.text_classifier(text_embeddings)
+                
+                # Fuse logits
+                fused_logits = self.alpha_image * image_logits + self.alpha_text * text_logits
+                
+                # Compute loss on fused logits
+                loss = self.images_classifier.loss(fused_logits, targets)
                 
                 # Statistics
                 total_loss += loss.item()
-                pred = output.argmax(dim=1, keepdim=True)
-                correct += pred.eq(target.view_as(pred)).sum().item()
-                total += target.size(0)
+                pred = fused_logits.argmax(dim=1, keepdim=True)
+                correct += pred.eq(targets.view_as(pred)).sum().item()
+                total += targets.size(0)
                 pred_flat = pred.view(-1).detach().cpu().numpy()
-                target_flat = target.view(-1).detach().cpu().numpy()
+                target_flat = targets.view(-1).detach().cpu().numpy()
                 for t, p in zip(target_flat, pred_flat):
                     confusion[t, p] += 1
                 
                 # Store predictions and targets for detailed analysis
                 all_predictions.extend(pred.cpu().numpy().flatten())
-                all_targets.extend(target.cpu().numpy().flatten())
+                all_targets.extend(targets.cpu().numpy().flatten())
                 
                 # Update progress bar
                 pbar.set_postfix({
@@ -511,20 +584,23 @@ class Trainer:
             'device': str(self.device)
         }
 
-        # Include both optimizer states if using split optimizers
-        if self.optimizer_vision is not None and self.optimizer_classifier is not None:
+        # Include all optimizer states if using split optimizers
+        if self.optimizer_vision is not None and self.optimizer_images is not None and self.optimizer_text is not None:
             additional_info['optimizers_state_dict'] = {
                 'vision': self.optimizer_vision.state_dict(),
-                'classifier': self.optimizer_classifier.state_dict(),
+                'images_classifier': self.optimizer_images.state_dict(),
+                'text_classifier': self.optimizer_text.state_dict(),
             }
         
         # Include scheduler states
-        if self.scheduler_vision is not None or self.scheduler_classifier is not None:
+        if self.scheduler_vision is not None or self.scheduler_images is not None or self.scheduler_text is not None:
             additional_info['schedulers_state_dict'] = {}
             if self.scheduler_vision is not None:
                 additional_info['schedulers_state_dict']['vision'] = self.scheduler_vision.state_dict()
-            if self.scheduler_classifier is not None:
-                additional_info['schedulers_state_dict']['classifier'] = self.scheduler_classifier.state_dict()
+            if self.scheduler_images is not None:
+                additional_info['schedulers_state_dict']['images_classifier'] = self.scheduler_images.state_dict()
+            if self.scheduler_text is not None:
+                additional_info['schedulers_state_dict']['text_classifier'] = self.scheduler_text.state_dict()
         
         # Include vision freeze state
         additional_info['vision_frozen'] = self.vision_frozen
@@ -542,7 +618,8 @@ class Trainer:
             is_best=is_best,
             additional_info=additional_info,
             vision_model=self.vision_model,
-            classifier=self.classifier
+            images_classifier=self.images_classifier,
+            text_classifier=self.text_classifier
         )
         
         # Save checkpoint to wandb

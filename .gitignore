@@ -208,3 +208,9 @@ __marimo__/
 # macOS
 **/.DS_Store
 
+# Data directories and large data files
+data/
+src/data-processor/data/
+src/data-processor/*.csv
+src/data-processor/*.zip
+.Rhistory
