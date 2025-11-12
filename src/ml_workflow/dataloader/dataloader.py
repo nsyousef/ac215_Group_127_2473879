@@ -89,8 +89,8 @@ class ImageDataset(Dataset):
         # Convert DataFrame to lists for faster, multiprocessing-safe access
         self.image_paths = df[img_col].astype(str).tolist()
         self.labels_raw = df[label_col].astype(str).tolist()
-        # Pre-convert embeddings to numpy arrays for better performance
-        self.text_embeddings = [embedding_to_array(emb) for emb in df[embedding_col].tolist()]
+        # Pre-convert embeddings to torch tensors for better performance
+        self.text_embeddings = [torch.tensor(embedding_to_array(emb)) for emb in df[embedding_col].tolist()]
         self.max_retries = MAX_RETRIES
         
         self.img_prefix = img_prefix.rstrip("/")

@@ -314,7 +314,9 @@ class Trainer:
             for images, targets, text_embeddings in pbar:
                 # Move data to device
                 images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
-                text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32).to(self.device, non_blocking=True)
+                if not isinstance(text_embeddings, torch.Tensor):
+                    text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
+                text_embeddings = text_embeddings.to(self.device, non_blocking=True)
                 
                 # Forward pass through vision model
                 vision_embeddings = self.vision_model(images)
@@ -473,7 +475,9 @@ class Trainer:
             for images, targets, text_embeddings in pbar:
                 # Move data to device
                 images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
-                text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32).to(self.device, non_blocking=True)
+                if not isinstance(text_embeddings, torch.Tensor):
+                    text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
+                text_embeddings = text_embeddings.to(self.device, non_blocking=True)
                 
                 # Forward pass through vision model
                 vision_embeddings = self.vision_model(images)
