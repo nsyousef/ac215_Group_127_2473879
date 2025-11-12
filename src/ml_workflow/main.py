@@ -21,6 +21,7 @@ try:
     from .model.vision.vit import VisionTransformer
     from .model.vision.cnn import CNNModel
     from .model.classifier.classifier import Classifier
+    from .model.classifier.multimodal_classifier import MultimodalClassifier
     from .constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
 except ImportError:
     from train.train import Trainer
@@ -30,6 +31,7 @@ except ImportError:
     from model.vision.vit import VisionTransformer
     from model.vision.cnn import CNNModel
     from model.classifier.classifier import Classifier
+    from model.classifier.multimodal_classifier import MultimodalClassifier
     from constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
 
 def initialize_model(config_path):
@@ -112,38 +114,32 @@ def initialize_model(config_path):
     vision_model = vision_model.to(device)
     embedding_dim = vision_model.embedding_dim
 
-    # Images classifier
-    images_classifier_config = config['images_classifier'].copy()
-    images_classifier_config['num_classes'] = info['num_classes']
-    images_classifier_config['sample_weights'] = info['sample_weights']
-    images_classifier_config['input_size'] = embedding_dim
-    images_classifier = Classifier(images_classifier_config)
-    images_classifier = images_classifier.to(device)
-    
-    # Create text classifier
-    text_classifier_config = config['text_classifier'].copy()
-    text_classifier_config['num_classes'] = info['num_classes']
-    text_classifier_config['sample_weights'] = info['sample_weights']
-    text_classifier_config['input_size'] = text_embedding_dim
-    text_classifier = Classifier(text_classifier_config)
-    text_classifier = text_classifier.to(device)
+    # Create multimodal classifier
+    multimodal_config = config['multimodal_classifier'].copy()
+    multimodal_config['num_classes'] = info['num_classes']
+    multimodal_config['sample_weights'] = info['sample_weights']
+    multimodal_config['vision_embedding_dim'] = embedding_dim
+    multimodal_config['text_embedding_dim'] = text_embedding_dim
+    multimodal_classifier = MultimodalClassifier(multimodal_config)
+    multimodal_classifier = multimodal_classifier.to(device)
     
     # Log model information
     vision_info = vision_model.get_vision_info()
-    images_classifier_info = images_classifier.get_classifier_info()
-    text_classifier_info = text_classifier.get_classifier_info()
+    multimodal_info = multimodal_classifier.get_model_info()
     
     logger.info(f"Vision Model: {vision_info['model_name']}")
     logger.info(f"Vision parameters: {vision_info['total_parameters']:,}")
-    logger.info(f"Images Classifier parameters: {images_classifier_info['total_parameters']:,}")
-    logger.info(f"Text Classifier parameters: {text_classifier_info['total_parameters']:,}")
-    logger.info(f"Total parameters: {vision_info['total_parameters'] + images_classifier_info['total_parameters'] + text_classifier_info['total_parameters']:,}")
-    logger.info(f"Images Classifier hidden sizes: {images_classifier_info['hidden_sizes']}")
-    logger.info(f"Text Classifier hidden sizes: {text_classifier_info['hidden_sizes']}")
-    logger.info(f"Images Classifier activation: {images_classifier_info['activation']}")
-    
-    # Get fusion configuration
-    fusion_config = config.get('fusion', {})
+    logger.info(f"Multimodal Classifier parameters: {multimodal_info['total_parameters']:,}")
+    logger.info(f"  - Vision projection parameters: {multimodal_info['vision_projection_parameters']:,}")
+    logger.info(f"  - Text projection parameters: {multimodal_info['text_projection_parameters']:,}")
+    logger.info(f"  - Final classifier parameters: {multimodal_info['final_classifier_parameters']:,}")
+    logger.info(f"Total parameters: {vision_info['total_parameters'] + multimodal_info['total_parameters']:,}")
+    logger.info(f"Fusion strategy: {multimodal_info['fusion_strategy']}")
+    logger.info(f"Projection dimension: {multimodal_info['projection_dim']}")
+    logger.info(f"Image projection hidden sizes: {multimodal_info['image_projection_hidden']}")
+    logger.info(f"Text projection hidden sizes: {multimodal_info['text_projection_hidden']}")
+    logger.info(f"Final classifier hidden sizes: {multimodal_info['final_hidden_sizes']}")
+    logger.info(f"Use auxiliary loss: {multimodal_info['use_auxiliary_loss']}")
     
     # Initialize trainer with dataloaders, models, and device
     trainer = Trainer(
@@ -153,9 +149,7 @@ def initialize_model(config_path):
                 test_loader = test_loader, 
                 info = info, 
                 vision_model = vision_model,
-                images_classifier = images_classifier,
-                text_classifier = text_classifier,
-                fusion_config = fusion_config,
+                multimodal_classifier = multimodal_classifier,
                 device = device
                 )
     
@@ -168,8 +162,7 @@ def initialize_model(config_path):
                 checkpoint_path=checkpoint_config['load_from'],
                 model=None,
                 vision_model=vision_model,
-                images_classifier=images_classifier,
-                text_classifier=text_classifier,
+                multimodal_classifier=multimodal_classifier,
                 device=device
             )
             logger.info("Checkpoint loaded successfully!")
@@ -184,10 +177,8 @@ def initialize_model(config_path):
             if schedulers_state_dict:
                 if trainer.scheduler_vision is not None and 'vision' in schedulers_state_dict:
                     trainer.scheduler_vision.load_state_dict(schedulers_state_dict['vision'])
-                if trainer.scheduler_images is not None and 'images_classifier' in schedulers_state_dict:
-                    trainer.scheduler_images.load_state_dict(schedulers_state_dict['images_classifier'])
-                if trainer.scheduler_text is not None and 'text_classifier' in schedulers_state_dict:
-                    trainer.scheduler_text.load_state_dict(schedulers_state_dict['text_classifier'])
+                if trainer.scheduler_multimodal is not None and 'multimodal_classifier' in schedulers_state_dict:
+                    trainer.scheduler_multimodal.load_state_dict(schedulers_state_dict['multimodal_classifier'])
                 logger.info("Scheduler states loaded from checkpoint")
             
             # Load vision freeze state
@@ -204,8 +195,7 @@ def initialize_model(config_path):
         'trainer': trainer,
         'config': config,
         'vision_model': vision_model,
-        'images_classifier': images_classifier,
-        'text_classifier': text_classifier,
+        'multimodal_classifier': multimodal_classifier,
         'train_loader': train_loader,
         'val_loader': val_loader,
         'test_loader': test_loader,

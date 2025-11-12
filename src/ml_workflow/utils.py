@@ -106,8 +106,7 @@ def save_checkpoint(model: Optional[torch.nn.Module], optimizer: Optional[torch.
                    save_dir: str, experiment_name: str, is_best: bool = False,
                    additional_info: Optional[Dict[str, Any]] = None, 
                    vision_model: Optional[torch.nn.Module] = None,
-                   images_classifier: Optional[torch.nn.Module] = None,
-                   text_classifier: Optional[torch.nn.Module] = None) -> str:
+                   multimodal_classifier: Optional[torch.nn.Module] = None) -> str:
     """
     Save model checkpoint
     
@@ -140,13 +139,18 @@ def save_checkpoint(model: Optional[torch.nn.Module], optimizer: Optional[torch.
     # Handle model state dicts
     if model is not None:
         checkpoint['model_state_dict'] = model.state_dict()
+    elif vision_model is not None and multimodal_classifier is not None:
+        # New architecture with multimodal classifier
+        checkpoint['vision_model_state_dict'] = vision_model.state_dict()
+        checkpoint['multimodal_classifier_state_dict'] = multimodal_classifier.state_dict()
     elif vision_model is not None and images_classifier is not None:
+        # Legacy architecture with separate classifiers (for backwards compatibility)
         checkpoint['vision_model_state_dict'] = vision_model.state_dict()
         checkpoint['images_classifier_state_dict'] = images_classifier.state_dict()
         if text_classifier is not None:
             checkpoint['text_classifier_state_dict'] = text_classifier.state_dict()
     else:
-        raise ValueError("Either model or both vision_model and images_classifier must be provided")
+        raise ValueError("Either model, or vision_model with multimodal_classifier, or vision_model with images_classifier must be provided")
     
     # Handle optimizer state dict
     if optimizer is not None:
@@ -183,7 +187,8 @@ def load_checkpoint(checkpoint_path: str, model: Optional[torch.nn.Module] = Non
                    device: Optional[torch.device] = None,
                    vision_model: Optional[torch.nn.Module] = None,
                    images_classifier: Optional[torch.nn.Module] = None,
-                   text_classifier: Optional[torch.nn.Module] = None) -> Dict[str, Any]:
+                   text_classifier: Optional[torch.nn.Module] = None,
+                   multimodal_classifier: Optional[torch.nn.Module] = None) -> Dict[str, Any]:
     """
     Load model checkpoint
     
@@ -210,7 +215,16 @@ def load_checkpoint(checkpoint_path: str, model: Optional[torch.nn.Module] = Non
     # Load model state
     if model is not None and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
+    elif vision_model is not None and multimodal_classifier is not None:
+        # New architecture with multimodal classifier
+        if 'vision_model_state_dict' in checkpoint:
+            vision_model.load_state_dict(checkpoint['vision_model_state_dict'])
+        if 'multimodal_classifier_state_dict' in checkpoint:
+            multimodal_classifier.load_state_dict(checkpoint['multimodal_classifier_state_dict'])
+        else:
+            logger.warning("multimodal_classifier_state_dict not found in checkpoint. This may be a legacy checkpoint.")
     elif vision_model is not None and images_classifier is not None:
+        # Legacy architecture with separate classifiers (for backwards compatibility)
         if 'vision_model_state_dict' in checkpoint:
             vision_model.load_state_dict(checkpoint['vision_model_state_dict'])
         if 'images_classifier_state_dict' in checkpoint:
@@ -218,7 +232,7 @@ def load_checkpoint(checkpoint_path: str, model: Optional[torch.nn.Module] = Non
         if text_classifier is not None and 'text_classifier_state_dict' in checkpoint:
             text_classifier.load_state_dict(checkpoint['text_classifier_state_dict'])
     else:
-        raise ValueError("Either model or both vision_model and images_classifier must be provided")
+        raise ValueError("Either model, or vision_model with multimodal_classifier, or vision_model with images_classifier must be provided")
     
     # Load optimizer state if provided
     if optimizer is not None and 'optimizer_state_dict' in checkpoint and checkpoint['optimizer_state_dict'] is not None:
