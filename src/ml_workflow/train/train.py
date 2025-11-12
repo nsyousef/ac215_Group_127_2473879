@@ -223,7 +223,6 @@ class Trainer:
         total_loss = 0.0
         correct = 0
         total = 0
-        accuracies = []
         # Running confusion matrix for macro-F1
         num_classes = self.info['num_classes']
         confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
@@ -262,8 +261,11 @@ class Trainer:
             # Statistics
             total_loss += loss.item()
             pred = logits.argmax(dim=1, keepdim=True)
-            correct = pred.eq(targets.view_as(pred)).sum().item()
-            total = targets.size(0)
+            batch_correct = pred.eq(targets.view_as(pred)).sum().item()
+            batch_total = targets.size(0)
+            correct += batch_correct
+            total += batch_total
+
             # Update confusion matrix
             pred_flat = pred.view(-1).detach().cpu().numpy()
             target_flat = targets.view(-1).detach().cpu().numpy()
@@ -271,17 +273,16 @@ class Trainer:
                 confusion[t, p] += 1
 
             avg_running_loss = total_loss / (batch_idx + 1)
-            accuracies.append(100. * correct / total)
-            avg_running_acc = np.mean(accuracies)
+            running_accuracy = 100. * correct / total
             
             # Update progress bar
             pbar.set_postfix({
                 'Loss': f'{avg_running_loss:.4f}',
-                'Acc': f'{avg_running_acc:.2f}%'
+                'Acc': f'{running_accuracy:.2f}%'
             })
         
         avg_loss = total_loss / len(self.train_loader)
-        accuracy = np.mean(accuracies)
+        accuracy = 100. * correct / total
         # Compute macro-F1 from confusion
         with np.errstate(divide='ignore', invalid='ignore'):
             tp = np.diag(confusion).astype(np.float64)
@@ -328,8 +329,10 @@ class Trainer:
                 # Statistics
                 total_loss += loss.item()
                 pred = logits.argmax(dim=1, keepdim=True)
-                correct += pred.eq(targets.view_as(pred)).sum().item()
-                total += targets.size(0)
+                batch_correct = pred.eq(targets.view_as(pred)).sum().item()
+                batch_total = targets.size(0)
+                correct += batch_correct
+                total += batch_total
                 pred_flat = pred.view(-1).detach().cpu().numpy()
                 target_flat = targets.view(-1).detach().cpu().numpy()
                 for t, p in zip(target_flat, pred_flat):
