@@ -1,72 +1,81 @@
+import re
+import time
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText, AutoTokenizer, AutoModelForCausalLM
-from IPython.display import display, Markdown
-from transformers import BitsAndBytesConfig 
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    AutoProcessor,
+    AutoModelForImageTextToText,
+    StoppingCriteria,
+    StoppingCriteriaList
+)
+
+
+class ThoughtStoppingCriteria(StoppingCriteria):
+    """Stop generation when 'thought' token is encountered."""
+    
+    def __init__(self, tokenizer, prompt_length):
+        self.tokenizer = tokenizer
+        self.prompt_length = prompt_length
+        self.thought_tokens = tokenizer.encode("thought", add_special_tokens=False)
+        self.thought_token = self.thought_tokens[0] if self.thought_tokens else None
+    
+    def __call__(self, input_ids, scores, **kwargs):
+        if self.thought_token is not None:
+            generated_ids = input_ids[0][self.prompt_length:]
+            if len(generated_ids) > 0 and generated_ids[-1] == self.thought_token:
+                return True
+        return False
+
+
 class LLM:
-    """
-    Minimal local wrapper for the MedGemma-4B instruction-tuned model.
-    Loads model + processor once, maintains a base prompt,
-    and builds contextual prompts with predictions/confidences.
-    """
-
-    def __init__(self,
-                 model_name: str = "medgemma-4b",
-                 device: str = None,
-                 dtype: torch.dtype = torch.bfloat16,
-                 max_new_tokens: int = 1024,
-                 base_prompt: str = None):
-        # Device detection
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.dtype = dtype
+    """LLM wrapper for dermatology assistant with Modal deployment support."""
+    
+    def __init__(
+        self,
+        model_name: str = "medgemma-27b",
+        max_new_tokens: int = 700,
+        base_prompt: str = "",
+        question_prompt: str = "",
+    ):
         self.max_new_tokens = max_new_tokens
-
+        self.base_prompt = ' '.join(base_prompt.split()) if base_prompt else ""
+        self.question_prompt = ' '.join(question_prompt.split()) if question_prompt else ""
+        self.model_name = model_name
+        
+        print(f"Loading model: {model_name}")
+        
         if model_name == "medgemma-4b":
-            print(f"Loading model ({model_name}) on {self.device}...")
             model_id = "google/medgemma-4b-it"
             self.processor = AutoProcessor.from_pretrained(model_id)
             self.model = AutoModelForImageTextToText.from_pretrained(
                 model_id,
-                dtype=self.dtype,
+                torch_dtype=torch.bfloat16,
                 device_map="auto",
             )
-            self.model.to(self.device)
-
-        elif model_name == 'medgemma-27b':
-            print(f"Loading model ({model_name}) on {self.device}...")
+        elif model_name == "medgemma-27b":
             model_id = "google/medgemma-27b-text-it"
             self.processor = AutoTokenizer.from_pretrained(model_id)
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_id,
-                dtype=self.dtype,
+                torch_dtype=torch.bfloat16,
                 device_map="auto",
-                quantization_config=BitsAndBytesConfig(load_in_4bit=True)
             )
-            self.model.to(self.device)
-        # Format base prompt: strip leading/trailing whitespace but preserve structure
-        if base_prompt is not None:
-            # Strip leading/trailing whitespace and normalize multiple spaces/newlines to single space
-            # But keep it as a single line to avoid tokenization issues
-            self.base_prompt = ' '.join(base_prompt.split())
         else:
-            self.base_prompt = ""
-
+            raise ValueError(f"Unknown model: {model_name}")
+        
+        if torch.cuda.is_available():
+            print(f"GPU: {torch.cuda.get_device_name(0)}")
+            print(f"Memory: {torch.cuda.memory_allocated(0)/1e9:.2f}GB")
+    
     def build_prompt(self, predictions: dict, metadata: dict) -> str:
-        """
-        Combine the base prompt with model predictions and metadata.
-        predictions: dictionary of predicted conditions and their confidence scores
-        history: dictionary of history of conditions and their confidence scores
-        """
-        summary = []
-        for pred, conf in predictions.items():
-            summary.append(f"{pred} ({conf*100:.1f}%)")
-        summary_str = ", ".join(summary)
-
-
-        prompt = f"{self.base_prompt}\n Model results for predicted Conditions: {summary_str}.\n"
-
+        """Build prompt from predictions and metadata."""
+        summary = [f"{pred} ({conf*100:.1f}%)" for pred, conf in predictions.items()]
+        prompt = f"{self.base_prompt}\n\nINPUT DATA: {', '.join(summary)}.\n"
+        
         if 'user_input' in metadata:
             prompt += f"User input: {metadata['user_input']}\n"
-
+        
         if 'cv_analysis' in metadata:
             cv = metadata['cv_analysis']
             area = str(cv.get('area', 'N/A'))
@@ -75,63 +84,108 @@ class LLM:
             if color_profile:
                 redness = color_profile.get('redness_index', 'N/A')
                 parts.append(f"redness={redness}")
-                prompt += f"Latest CV Analysis: {', '.join(parts)}.\n"
-            else:
-                prompt += f"Latest CV Analysis: {cv}.\n"
-
-        for date, data in sorted(metadata['history'].items()):
-            prompt += f"Date: {date}.\n"
-            if 'cv_analysis' in data:
-                cv = data['cv_analysis']
-                area = str(cv.get('area', 'N/A'))
-                color_profile = cv.get('color_profile', {})
-                parts = [f"area={area}"]
-                if color_profile:
-                    redness = color_profile.get('redness_index', 'N/A')
-                    parts.append(f"redness={redness}")
-                    prompt += f"CV Analysis: {', '.join(parts)}.\n"
-            if 'text_summary' in data:
-                prompt += f"Text Summary: {data['text_summary']}.\n"
+            prompt += f"Latest CV Analysis: {', '.join(parts)}.\n"
+        
+        if 'history' in metadata and metadata['history']:
+            prompt += "\nHistorical Data:\n"
+            for date, data in sorted(metadata['history'].items()):
+                prompt += f"Date: {date}.\n"
+                if 'cv_analysis' in data:
+                    cv = data['cv_analysis']
+                    area = str(cv.get('area', 'N/A'))
+                    color_profile = cv.get('color_profile', {})
+                    redness = color_profile.get('redness_index', 'N/A') if color_profile else 'N/A'
+                    prompt += f"  CV Analysis: area={area}, redness={redness}.\n"
+                if 'text_summary' in data:
+                    prompt += f"  Text Summary: {data['text_summary']}.\n"
+        
         return prompt
-
-    @torch.inference_mode()
-    def get_input_ids(self, prompt: str) -> torch.Tensor:
-        """Get input IDs for the model."""
-        return self.processor(text=prompt, return_tensors="pt").to(self.model.device)
-
+    
     @torch.inference_mode()
     def generate(self, prompt: str, temperature: float = 0.3) -> str:
-        """Generate text output from the model given a prepared prompt."""
-        # For MedGemma, use simple text input without chat template
-        inputs = self.processor(text=prompt, return_tensors="pt").to(self.model.device)
-
-        token_count = inputs['input_ids'].shape[1]
+        """Generate response with thought stopping."""
+        messages = [{"role": "user", "content": prompt}]
+        formatted_prompt = self.processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        
+        inputs = self.processor(
+            formatted_prompt,
+            return_tensors="pt",
+            add_special_tokens=True
+        ).to(self.model.device)
+        
+        input_length = inputs['input_ids'].shape[1]
+        
+        stopping_criteria = StoppingCriteriaList([
+            ThoughtStoppingCriteria(self.processor, input_length)
+        ])
         
         outputs = self.model.generate(
-            **inputs,  # Unpack the inputs dict
+            **inputs,
             max_new_tokens=self.max_new_tokens,
             do_sample=temperature > 0,
-            temperature=temperature if temperature > 0 else None
+            temperature=temperature if temperature > 0 else None,
+            pad_token_id=self.processor.pad_token_id,
+            eos_token_id=self.processor.eos_token_id,
+            stopping_criteria=stopping_criteria,
         )
-        input_length = inputs['input_ids'].shape[1]
-
-        # Decode only the NEW tokens (skip the input)
-        generated_ids = outputs[0][input_length:]  # Slice off the input tokens
-        output_length = len(generated_ids) - input_length
-        print(f"Input length: {input_length}, Output length: {output_length}")
+        
+        generated_ids = outputs[0][input_length:]
         text = self.processor.decode(generated_ids, skip_special_tokens=True).strip()
-        self.display_markdown(text)
-        return text
-
+        
+        return self._extract_user_response(text)
+    
+    def _extract_user_response(self, text: str) -> str:
+        """Remove thought markers and their content."""
+        text = re.sub(r'<thought>.*?</thought>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        
+        if 'thought' in text.lower():
+            thought_match = re.search(r'\bthought\b', text, re.IGNORECASE)
+            if thought_match:
+                text = text[:thought_match.start()]
+        
+        if '<thought>' in text.lower():
+            thought_pos = text.lower().find('<thought>')
+            text = text[:thought_pos]
+        
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+    
     def explain(self, predictions: dict, metadata: dict, temperature: float = 0.3) -> str:
-        """
-        Full convenience method: build the prompt + run the model.
-        predictions: dictionary of predicted conditions and their confidence scores
-        metadata: dictionary of metadata
-        """
+        """Generate explanation from predictions and metadata."""
         prompt = self.build_prompt(predictions, metadata)
-        answer = self.generate(prompt, temperature)
-        return answer
-
-    def display_markdown(self, text: str):
-        display(Markdown(text))
+        return self.generate(prompt, temperature)
+    
+    def ask_followup(
+        self,
+        initial_answer: str,
+        question: str,
+        conversation_history: list = None,
+        temperature: float = 0.3
+    ) -> dict:
+        """Answer follow-up question with conversation history."""
+        if conversation_history is None:
+            conversation_history = []
+        
+        conversation_history = conversation_history[-4:] if len(conversation_history) >= 4 else conversation_history
+        conversation_history.append(question)
+        
+        history_text = ""
+        if len(conversation_history) > 1:
+            history_text = "\n\nPrevious questions in this conversation:\n"
+            for i, q in enumerate(conversation_history[:-1], 1):
+                history_text += f"{i}. {q}\n"
+            history_text += f"\nCurrent question: {question}"
+        else:
+            history_text = f"\n\nQuestion: {question}"
+        
+        followup_prompt = f"{self.question_prompt}\n\nYour previous analysis:\n{initial_answer}{history_text}"
+        answer = self.generate(followup_prompt, temperature)
+        
+        return {
+            "answer": answer,
+            "conversation_history": conversation_history
+        }
