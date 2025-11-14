@@ -3,7 +3,7 @@
  * Handles IPC requests from renderer and manages file-based data operations.
  */
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const isDev = require('electron-is-dev');
@@ -177,6 +177,67 @@ ipcMain.handle('save-time-entry', async (event, conditionId, entry) => {
 
 ipcMain.handle('get-app-data-path', () => {
   return getDataDir();
+});
+
+// ============================================================================
+// IPC Handlers for Profile
+// ============================================================================
+
+ipcMain.handle('load-profile', async () => {
+  try {
+    const dataDir = getDataDir();
+    const profilePath = path.join(dataDir, 'profile.json');
+
+    try {
+      const data = await fs.readFile(profilePath, 'utf-8');
+      return JSON.parse(data);
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        return null; // No profile saved yet
+      }
+      throw e;
+    }
+  } catch (e) {
+    console.error('Error loading profile:', e);
+    throw e;
+  }
+});
+
+ipcMain.handle('save-profile', async (event, profile) => {
+  try {
+    const dataDir = getDataDir();
+    const profilePath = path.join(dataDir, 'profile.json');
+    await fs.writeFile(profilePath, JSON.stringify(profile, null, 2), 'utf-8');
+    return profile;
+  } catch (e) {
+    console.error('Error saving profile:', e);
+    throw e;
+  }
+});
+
+// Open external links in system browser
+ipcMain.handle('open-external', async (event, url) => {
+  try {
+    await shell.openExternal(url);
+    return true;
+  } catch (e) {
+    console.error('Error opening external URL:', url, e);
+    return false;
+  }
+});
+
+// Reset all app data by removing the data directory
+ipcMain.handle('reset-app-data', async () => {
+  try {
+    const dataDir = getDataDir();
+    await fs.rm(dataDir, { recursive: true, force: true });
+    // Recreate data dir to ensure future writes succeed
+    await fs.mkdir(dataDir, { recursive: true });
+    return true;
+  } catch (e) {
+    console.error('Error resetting app data:', e);
+    throw e;
+  }
 });
 
 // ============================================================================

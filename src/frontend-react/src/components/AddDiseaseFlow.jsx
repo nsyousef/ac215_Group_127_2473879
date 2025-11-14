@@ -40,7 +40,7 @@ const BODY_PARTS = [
   'Right Leg',
 ];
 
-export default function AddDiseaseFlow({ open, onClose, onSaved }) {
+export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = true, onboardingBack }) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
   const { addDisease } = useDiseaseContext();
@@ -149,11 +149,6 @@ export default function AddDiseaseFlow({ open, onClose, onSaved }) {
     }
   };
 
-  const handleConfirmPhoto = () => {
-    // Move from verify (3) to notes (4)
-    setStep(4);
-  };
-
   const handleStartAnalysis = () => {
     // Move from notes (4) to analyzing (5)
     setStep(5);
@@ -165,11 +160,20 @@ export default function AddDiseaseFlow({ open, onClose, onSaved }) {
     onClose && onClose();
   };
 
+  const handleDialogClose = (event, reason) => {
+    if (!canCancel && (reason === 'backdropClick' || reason === 'escapeKeyDown')) {
+      return; // prevent closing during onboarding
+    }
+    close();
+  };
+
   return (
-    <Dialog open={open} fullScreen={fullScreen} onClose={close} fullWidth maxWidth="sm">
+    <Dialog open={open} fullScreen={fullScreen} onClose={handleDialogClose} disableEscapeKeyDown={!canCancel} fullWidth maxWidth="sm">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="h6" component="div">Add Condition</Typography>
-        <IconButton onClick={close} size="small"><CloseIcon /></IconButton>
+        {canCancel && (
+          <IconButton onClick={close} size="small"><CloseIcon /></IconButton>
+        )}
       </DialogTitle>
 
       <DialogContent dividers sx={{ overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -248,24 +252,19 @@ export default function AddDiseaseFlow({ open, onClose, onSaved }) {
                   <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>Or drag & drop an image here</Typography>
                 </>
               ) : (
-                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                  <img src={preview} alt="preview" style={{ maxWidth: '100%', maxHeight: 360, borderRadius: 8 }} />
+                <Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                    <img src={preview} alt="preview" style={{ maxWidth: '100%', maxHeight: 360, borderRadius: 8 }} />
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+                    <Button size="small" variant="text" onClick={() => { setFile(null); setPreview(null); }}>Clear image</Button>
+                  </Box>
                 </Box>
               )}
             </Box>
           </Box>
         )}
 
-        {/* Step 3: Verify photo */}
-        {step === 3 && (
-          <Box>
-            <Typography variant="subtitle1" sx={{ mb: 1 }}>Looks good?</Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-              {preview && <img src={preview} alt="preview" style={{ maxWidth: '100%', maxHeight: 420, borderRadius: 8 }} />}
-            </Box>
-            <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>If the image looks good, continue to add optional notes. Otherwise retake or upload another photo.</Typography>
-          </Box>
-        )}
 
         {/* Step 4: Notes */}
         {step === 4 && (
@@ -292,9 +291,17 @@ export default function AddDiseaseFlow({ open, onClose, onSaved }) {
       <DialogActions sx={{ px: 3, py: 2 }}>
         {/* Navigation buttons for each step */}
         {step === 0 && (
-          <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: 'flex-end' }}>
-            <Button variant="text" onClick={close}>Cancel</Button>
-            <Button variant="contained" onClick={() => setStep(1)} disabled={!bodyPart}>Next</Button>
+          <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: 'space-between' }}>
+            <Box>
+              {onboardingBack ? (
+                <Button variant="text" onClick={onboardingBack}>BACK</Button>
+              ) : (
+                canCancel && <Button variant="text" onClick={close}>Cancel</Button>
+              )}
+            </Box>
+            <Box>
+              <Button variant="contained" onClick={() => setStep(1)} disabled={!bodyPart}>Next</Button>
+            </Box>
           </Box>
         )}
 
@@ -302,7 +309,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved }) {
           <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: 'space-between' }}>
             <Button variant="text" onClick={() => setStep(0)}>Back</Button>
             <Box>
-              <Button variant="text" onClick={close}>Cancel</Button>
+              {canCancel && <Button variant="text" onClick={close}>Cancel</Button>}
               <Button variant="contained" onClick={() => setStep(2)} sx={{ ml: 1 }}>Next</Button>
             </Box>
           </Box>
@@ -312,27 +319,17 @@ export default function AddDiseaseFlow({ open, onClose, onSaved }) {
           <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: 'space-between' }}>
             <Button variant="text" onClick={() => setStep(1)}>Back</Button>
             <Box>
-              <Button variant="text" onClick={close}>Cancel</Button>
-              <Button variant="contained" onClick={() => setStep(3)} disabled={!preview} sx={{ ml: 1 }}>Continue</Button>
-            </Box>
-          </Box>
-        )}
-
-        {step === 3 && (
-          <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: 'space-between' }}>
-            <Button variant="text" onClick={() => setStep(2)}>No, retake</Button>
-            <Box>
-              <Button variant="text" onClick={close}>Cancel</Button>
-              <Button variant="contained" onClick={handleConfirmPhoto} sx={{ ml: 1 }}>Yes</Button>
+              {canCancel && <Button variant="text" onClick={close}>Cancel</Button>}
+              <Button variant="contained" onClick={() => setStep(4)} disabled={!preview} sx={{ ml: 1 }}>Continue</Button>
             </Box>
           </Box>
         )}
 
         {step === 4 && (
           <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: 'space-between' }}>
-            <Button variant="text" onClick={() => setStep(3)}>Back</Button>
+            <Button variant="text" onClick={() => setStep(2)}>Back</Button>
             <Box>
-              <Button variant="text" onClick={close}>Cancel</Button>
+              {canCancel && <Button variant="text" onClick={close}>Cancel</Button>}
               <Button variant="contained" onClick={handleStartAnalysis} sx={{ ml: 1 }}>Analyze</Button>
             </Box>
           </Box>
@@ -340,7 +337,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved }) {
 
         {step === 5 && (
           <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: 'center' }}>
-            <Button variant="text" onClick={close}>Cancel</Button>
+            {canCancel && <Button variant="text" onClick={close}>Cancel</Button>}
           </Box>
         )}
       </DialogActions>

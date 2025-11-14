@@ -11,8 +11,9 @@ import {
     useTheme,
     Typography,
     Button,
+    IconButton,
 } from '@mui/material';
-import { ArrowBackOutlined } from '@mui/icons-material';
+import { ArrowBackOutlined, PersonOutline } from '@mui/icons-material';
 import BodyMapView from '@/components/BodyMapView';
 import ConditionListView from '@/components/ConditionListView';
 import ResultsPanel from '@/components/ResultsPanel';
@@ -21,7 +22,10 @@ import ChatPanel from '@/components/ChatPanel';
 import MobileLayout from '@/components/layouts/MobileLayout';
 import AddDiseaseFlow from '@/components/AddDiseaseFlow';
 import AddTimeEntryFlow from '@/components/AddTimeEntryFlow';
+import ProfilePage from '@/components/ProfilePage';
+import OnboardingFlow from '@/components/OnboardingFlow';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
+import { useProfile } from '@/contexts/ProfileContext';
 
 export default function Home() {
     const theme = useTheme();
@@ -37,6 +41,7 @@ export default function Home() {
     const [previousMobileView, setPreviousMobileView] = useState('home'); // Track previous view for back navigation
 
     const { diseases } = useDiseaseContext();
+    const { profile, loading: profileLoading, updateProfile } = useProfile();
 
     // Sync mobileView with URL query param and track previous view
     useEffect(() => {
@@ -74,10 +79,13 @@ export default function Home() {
         // Go back to the previous view
         // If on results, go back to the previous home/map view
         // If on chat/time, go back to results
+        // If on profile, go back to home
         if (mobileView === 'results') {
             router.push(`/?view=${previousMobileView}`);
         } else if (['chat', 'time'].includes(mobileView)) {
             router.push('/?view=results');
+        } else if (mobileView === 'profile') {
+            router.push('/?view=home');
         }
     };
 
@@ -131,21 +139,45 @@ export default function Home() {
         router.push('/?view=results');
     };
 
+    // Render onboarding flow if not completed
+    if (!profileLoading && !profile?.hasCompletedOnboarding) {
+        return (
+            <OnboardingFlow
+                onComplete={(newDisease) => {
+                    // Set selected condition and navigate appropriately
+                    setSelectedCondition(newDisease);
+                    if (isMobile) {
+                        router.push('/?view=results');
+                    } else {
+                        router.push('/?view=results');
+                    }
+                }}
+            />
+        );
+    }
+
     // ========== MOBILE LAYOUT ==========
     if (isMobile) {
         // Show bottom nav only on home/map screens; show back button on detail screens
         const showBottomNav = ['home', 'map'].includes(mobileView);
-        const showBackButton = ['results', 'chat', 'time'].includes(mobileView);
+        const showBackButton = ['results', 'chat', 'time', 'profile'].includes(mobileView);
+        const showProfileIcon = ['home', 'map'].includes(mobileView);
 
         return (
             <MobileLayout
                 currentPage={mobileView === 'home' ? 'list' : mobileView === 'map' ? 'body-map' : 'results'}
                 showBottomNav={showBottomNav}
                 showBackButton={showBackButton}
+                showProfileIcon={showProfileIcon}
                 onBack={handleBackFromResults}
                 onAddDisease={handleAddDisease}
             >
                 <Container maxWidth="sm" sx={{ py: 2, pb: showBottomNav ? 9 : 2 }}>
+                    {/* Profile View */}
+                    {mobileView === 'profile' && (
+                        <ProfilePage onBack={() => router.push('/?view=home')} />
+                    )}
+
                     {/* Home/List View */}
                     {mobileView === 'home' && (
                         <>
@@ -223,9 +255,14 @@ export default function Home() {
         return (
             <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5', py: 3 }}>
                 <Container maxWidth="xl" sx={{ mb: 3 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-                        Home
-                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                            Home
+                        </Typography>
+                        <IconButton onClick={() => router.push('/?view=profile')} size="large">
+                            <PersonOutline />
+                        </IconButton>
+                    </Box>
 
                     <Grid container spacing={3}>
                         {/* Left: Conditions list */}
@@ -260,6 +297,23 @@ export default function Home() {
                     </Grid>
                 </Container>
                 <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} />
+            </Box>
+        );
+    }
+
+    // Desktop profile view
+    if (viewParam === 'profile') {
+        return (
+            <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5', py: 3 }}>
+                <Container maxWidth="sm" sx={{ mb: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                        <Button startIcon={<ArrowBackOutlined />} variant="text" onClick={() => router.push('/?view=home')}>Back</Button>
+                        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                            Profile
+                        </Typography>
+                    </Box>
+                    <ProfilePage onBack={() => router.push('/?view=home')} />
+                </Container>
             </Box>
         );
     }

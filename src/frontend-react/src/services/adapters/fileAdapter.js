@@ -94,6 +94,50 @@ const FileAdapter = {
       throw e;
     }
   },
+
+  // Load profile data
+  async loadProfile() {
+    if (!window.electronAPI) {
+      console.warn('Electron API not available; cannot load profile.');
+      return null;
+    }
+
+    try {
+      return await window.electronAPI.loadProfile();
+    } catch (e) {
+      console.error('FileAdapter.loadProfile() error:', e);
+      return null;
+    }
+  },
+
+  // Save profile data
+  async saveProfile(profile) {
+    if (!window.electronAPI) {
+      console.warn('Electron API not available; cannot save profile.');
+      return null;
+    }
+
+    try {
+      return await window.electronAPI.saveProfile(profile);
+    } catch (e) {
+      console.error('FileAdapter.saveProfile() error:', e);
+      throw e;
+    }
+  },
+
+  // Reset all app data (Electron only)
+  async resetAppData() {
+    if (!window.electronAPI) {
+      console.warn('Electron API not available; cannot reset app data.');
+      return false;
+    }
+    try {
+      return await window.electronAPI.resetAppData();
+    } catch (e) {
+      console.error('FileAdapter.resetAppData() error:', e);
+      throw e;
+    }
+  },
 };
 
 export default FileAdapter;

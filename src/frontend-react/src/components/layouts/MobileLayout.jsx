@@ -16,9 +16,10 @@ import {
     MapOutlined,
     ArrowBackOutlined,
     AddOutlined,
+    PersonOutline,
 } from '@mui/icons-material';
 
-export default function MobileLayout({ children, currentPage = 'list', showBottomNav = true, showBackButton = false, onBack, onAddDisease }) {
+export default function MobileLayout({ children, currentPage = 'list', showBottomNav = true, showBackButton = false, onBack, onAddDisease, showProfileIcon = false }) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const viewParam = searchParams.get('view') || 'home';
@@ -50,6 +51,14 @@ export default function MobileLayout({ children, currentPage = 'list', showBotto
                     <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
                         {showBackButton ? 'Details' : 'Home'}
                     </Typography>
+                    {showProfileIcon && (
+                        <IconButton
+                            onClick={() => router.push('/?view=profile')}
+                            sx={{ color: '#000' }}
+                        >
+                            <PersonOutline />
+                        </IconButton>
+                    )}
                 </Toolbar>
             </AppBar>
 

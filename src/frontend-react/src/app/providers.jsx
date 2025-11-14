@@ -3,6 +3,7 @@
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { DiseaseProvider } from '@/contexts/DiseaseContext';
+import { ProfileProvider } from '@/contexts/ProfileContext';
 
 const theme = createTheme({
   palette: {
@@ -22,9 +23,11 @@ export function Providers({ children }) {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <DiseaseProvider>
-        {children}
-      </DiseaseProvider>
+      <ProfileProvider>
+        <DiseaseProvider>
+          {children}
+        </DiseaseProvider>
+      </ProfileProvider>
     </ThemeProvider>
   );
 }

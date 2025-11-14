@@ -24,6 +24,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Save diseases list
   saveDiseases: (diseases) => ipcRenderer.invoke('save-diseases', diseases),
 
+  // Load profile data
+  loadProfile: () => ipcRenderer.invoke('load-profile'),
+
+  // Save profile data
+  saveProfile: (profile) => ipcRenderer.invoke('save-profile', profile),
+
   // Get the app data directory path
   getAppDataPath: () => ipcRenderer.invoke('get-app-data-path'),
+
+  // Open external links in system browser
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+
+  // Reset all app data
+  resetAppData: () => ipcRenderer.invoke('reset-app-data'),
 });

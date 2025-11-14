@@ -22,7 +22,7 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
 
-  const [step, setStep] = useState(1); // 1: instructions, 2: photo, 3: verify, 4: notes, 5: analyzing
+  const [step, setStep] = useState(1); // 1: instructions, 2: photo, 4: notes, 5: analyzing
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [note, setNote] = useState('');
@@ -124,18 +124,16 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
                   <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>Or drag & drop an image here</Typography>
                 </>
               ) : (
-                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                  <img src={preview} alt="preview" style={{ maxWidth: '100%', maxHeight: 420, borderRadius: 8 }} />
+                <Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                    <img src={preview} alt="preview" style={{ maxWidth: '100%', maxHeight: 420, borderRadius: 8 }} />
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+                    <Button size="small" variant="text" onClick={() => { setFile(null); setPreview(null); }}>Clear image</Button>
+                  </Box>
                 </Box>
               )}
             </Box>
-          </Box>
-        )}
-
-        {step === 3 && (
-          <Box>
-            <Typography variant="subtitle1">Looks good?</Typography>
-            {preview && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}><img src={preview} alt="preview" style={{ maxWidth: '100%', maxHeight: 420, borderRadius: 8 }} /></Box>}
           </Box>
         )}
 
@@ -171,24 +169,14 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
             <Button variant="text" onClick={() => setStep(1)}>Back</Button>
             <Box>
               <Button variant="text" onClick={close}>Cancel</Button>
-              <Button variant="contained" onClick={() => setStep(3)} disabled={!preview} sx={{ ml: 1 }}>Continue</Button>
-            </Box>
-          </Box>
-        )}
-
-        {step === 3 && (
-          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between' }}>
-            <Button variant="text" onClick={() => setStep(2)}>No, retake</Button>
-            <Box>
-              <Button variant="text" onClick={close}>Cancel</Button>
-              <Button variant="contained" onClick={() => setStep(4)} sx={{ ml: 1 }}>Yes</Button>
+              <Button variant="contained" onClick={() => setStep(4)} disabled={!preview} sx={{ ml: 1 }}>Continue</Button>
             </Box>
           </Box>
         )}
 
         {step === 4 && (
           <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between' }}>
-            <Button variant="text" onClick={() => setStep(3)}>Back</Button>
+            <Button variant="text" onClick={() => setStep(2)}>Back</Button>
             <Box>
               <Button variant="text" onClick={close}>Cancel</Button>
               <Button variant="contained" onClick={() => { setStep(5); analyze(); }} sx={{ ml: 1 }}>Analyze</Button>
