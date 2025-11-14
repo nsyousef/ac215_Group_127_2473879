@@ -2,9 +2,9 @@
 
 # Data source configuration  
 data:
-  use_local: True  # "Local" to the Modal container (mounted GCS)
-  metadata_path: "/gcs-data/final/metadata_all_harmonized.csv"  # Mounted GCS path
-  img_prefix: "/gcs-data/final/imgs"  # Mounted GCS path
+  use_local: False  # Use GCS paths directly (gs://) - more reliable than mounts
+  metadata_path: "gs://derma-datasets-2/final/metadata_all_harmonized.csv"  # Direct GCS path
+  img_prefix: "gs://derma-datasets-2/final/imgs"  # Direct GCS path
   min_samples_per_label: 1000
   datasets:
     - fitzpatrick17k

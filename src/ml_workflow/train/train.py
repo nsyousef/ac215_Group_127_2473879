@@ -379,7 +379,12 @@ class Trainer:
         
             if predicted_class not in self.accuracy_history:
                 self.accuracy_history[predicted_class] = []
-            accuracy = confusion_matrix[predicted_class, predicted_class] / confusion_matrix[predicted_class].sum()
+            # Calculate accuracy, handling division by zero (when class has no predictions)
+            class_sum = confusion_matrix[predicted_class].sum()
+            if class_sum > 0:
+                accuracy = confusion_matrix[predicted_class, predicted_class] / class_sum
+            else:
+                accuracy = 0.0
             self.accuracy_history[predicted_class].append(accuracy)
             
             # Sort by count (most common mistakes first)

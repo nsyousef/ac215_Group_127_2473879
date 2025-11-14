@@ -5,10 +5,17 @@ from typing import Optional, List, Callable, Tuple, Dict, Any
 import torch
 import multiprocessing
 
-from ..constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
-from ..utils import (logger, stratified_split)
-from .transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
-from .embedding_utils import embedding_to_array
+# Try relative imports (package mode), fall back to absolute (script mode)
+try:
+    from ..constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
+    from ..utils import (logger, stratified_split)
+    from .transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
+    from .embedding_utils import embedding_to_array
+except ImportError:
+    from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
+    from utils import (logger, stratified_split)
+    from dataloader.transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
+    from dataloader.embedding_utils import embedding_to_array
     
 # If we use multiple workers with GCP, we need to ensure each worker has its own filesystem object
 import gcsfs
@@ -283,7 +290,9 @@ def create_dataloaders(
         logger.warning(f"Classes only in val/test (untrained output units, weight=1.0): {sorted(val_test_only)}")
     
     if weighted_sampling:
-        sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
+        # Convert sample_weights to tensor (required by WeightedRandomSampler)
+        sample_weights_tensor = torch.tensor(sample_weights, dtype=torch.float32)
+        sampler = WeightedRandomSampler(weights=sample_weights_tensor, num_samples=len(sample_weights), replacement=True)
         train_loader = DataLoader(train_dataset, sampler=sampler, drop_last=True, **dataloader_kwargs)
         logger.info("Using weighted sampling for imbalanced data")
     else:

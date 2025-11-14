@@ -123,8 +123,10 @@ class MultimodalClassifier(nn.Module):
         elif self.loss_fn_name == 'focal':
             if 'alpha' in config:
                 self.alpha = config['alpha']
+            elif 'class_weights' in config and config['class_weights'] is not None:
+                self.alpha = config['class_weights']
             else:
-                self.alpha = config.get('sample_weights', 1.0)
+                self.alpha = 1.0
             self.gamma = config.get('gamma', 2.0)
             self.reduction = config.get('reduction', 'mean')
             self.criterion = FocalLoss(alpha=self.alpha, gamma=self.gamma, reduction=self.reduction)

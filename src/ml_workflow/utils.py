@@ -30,18 +30,19 @@ def setup_logger(name: str = __name__, level: int = logging.INFO) -> logging.Log
 
 logger = setup_logger()
 
-def load_metadata(source: str, min_samples: int, datasets: List[str] = None, has_text: bool = None) -> pd.DataFrame:
+def load_metadata(source: str, min_samples: int, datasets: List[str] = None, has_text: bool = None, data_fraction: float = None) -> pd.DataFrame:
     """
     Load metadata from GCS or local file and filter by minimum samples and datasets to be used
     
     Args:
         source: Path to CSV (gs://bucket/path or local/path.csv)
         min_samples: Minimum images per label
-        datasets: List of datasets to be used
+        datasets: List of datasets to be used (None = all datasets)
         has_text: If `True`, include only entries with text data. If `False`, include only entries without text data. If `None`, do not filter on text data.
+        data_fraction: Fraction of data to use (0.0-1.0). If None, use all data. Sampling is stratified by label.
     """
     logger.info(f"Loading metadata from: {source}")
-    metadata = pd.read_csv(source)
+    metadata = pd.read_csv(source, low_memory=False)
     logger.info(f"Total images loaded: {len(metadata):,}")
     
     # Filter labels with insufficient samples
@@ -65,13 +66,36 @@ def load_metadata(source: str, min_samples: int, datasets: List[str] = None, has
         metadata = metadata[keep_rows].reset_index(drop=True)
         logger.info(f"Images {'with' if has_text else 'without'} text descriptions: {metadata.shape[0]}")
 
+    # Sample a fraction of data if specified (stratified by label)
+    if data_fraction is not None and 0 < data_fraction < 1:
+        logger.info(f"Sampling {data_fraction*100:.1f}% of data (stratified by label)...")
+        # Filter out classes with < 2 samples (needed for stratified sampling)
+        label_counts = metadata['label'].value_counts()
+        valid_classes = label_counts[label_counts >= 2].index
+        classes_removed = len(label_counts) - len(valid_classes)
+        if classes_removed > 0:
+            logger.warning(f"Filtering out {classes_removed} classes with < 2 samples (cannot be stratified)")
+            metadata = metadata[metadata['label'].isin(valid_classes)].reset_index(drop=True)
+        
+        metadata, _ = train_test_split(metadata, train_size=data_fraction, stratify=metadata['label'], random_state=42)
+        metadata = metadata.reset_index(drop=True)
+        logger.info(f"Sampled {len(metadata):,} images ({data_fraction*100:.1f}% of filtered data)")
+
     logger.info(f"Images after filtering: {len(metadata):,}")
-    logger.info(f"Datasets: {datasets}")
+    logger.info(f"Datasets: {datasets if datasets else 'all'}")
     
     return metadata
 
 def stratified_split(df: pd.DataFrame, label_col: str = "label", test_size: float = 0.2, val_size: float = None, seed: int = 42) -> Tuple[pd.DataFrame, ...]:
     """Split data into train/test or train/val/test sets with stratification"""
+    # Filter out classes with < 2 samples (needed for stratified splitting)
+    label_counts = df[label_col].value_counts()
+    valid_classes = label_counts[label_counts >= 2].index
+    classes_removed = len(label_counts) - len(valid_classes)
+    if classes_removed > 0:
+        logger.warning(f"Filtering out {classes_removed} classes with < 2 samples (cannot be stratified)")
+        df = df[df[label_col].isin(valid_classes)].reset_index(drop=True)
+    
     if val_size is None:
         train_df, test_df = train_test_split(df, test_size=test_size, stratify=df[label_col], random_state=seed)
         logger.info(f"Train samples: {len(train_df):,}, Test samples: {len(test_df):,}")
@@ -79,7 +103,15 @@ def stratified_split(df: pd.DataFrame, label_col: str = "label", test_size: floa
     else:
         train_df, test_df = train_test_split(df, test_size=test_size, stratify=df[label_col], random_state=seed)
         adjusted_val_size = val_size / (1 - test_size)
-        train_df, val_df = train_test_split(train_df, test_size=adjusted_val_size,  stratify=train_df[label_col], random_state=seed)
+        # Check again for train/val split (after train/test split, some classes might have < 2 samples)
+        train_label_counts = train_df[label_col].value_counts()
+        train_valid_classes = train_label_counts[train_label_counts >= 2].index
+        train_classes_removed = len(train_label_counts) - len(train_valid_classes)
+        if train_classes_removed > 0:
+            logger.warning(f"Filtering out {train_classes_removed} classes from train set with < 2 samples (cannot be stratified for val split)")
+            train_df = train_df[train_df[label_col].isin(train_valid_classes)].reset_index(drop=True)
+        
+        train_df, val_df = train_test_split(train_df, test_size=adjusted_val_size, stratify=train_df[label_col], random_state=seed)
         logger.info(f"Train samples: {len(train_df):,}, Val samples: {len(val_df):,}, Test samples: {len(test_df):,}")
         return train_df.reset_index(drop=True), val_df.reset_index(drop=True), test_df.reset_index(drop=True)
 
@@ -125,7 +157,20 @@ def save_checkpoint(model: Optional[torch.nn.Module], optimizer: Optional[torch.
         Path to saved checkpoint
     """
     # Create save directory if it doesn't exist
-    os.makedirs(save_dir, exist_ok=True)
+    # For Modal volumes, ensure proper permissions
+    try:
+        os.makedirs(save_dir, mode=0o755, exist_ok=True)
+    except OSError as e:
+        if e.errno == 30:  # Read-only file system
+            logger.error(
+                f"Cannot create directory {save_dir}: Read-only file system.\n"
+                f"This usually means the Modal volume is not properly mounted.\n"
+                f"Verify that the volume 'training-checkpoints' exists and is mounted at /checkpoints."
+            )
+            raise
+        else:
+            logger.error(f"Failed to create directory {save_dir}: {e}")
+            raise
     
     # Prepare checkpoint data
     checkpoint = {

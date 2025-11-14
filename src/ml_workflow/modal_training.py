@@ -37,8 +37,8 @@ image = (
 app = modal.App("skin-disease-training", image=image)
 
 @app.function(
-    gpu=modal.gpu.A10G(),
-    timeout=86400,
+    gpu=modal.gpu.A100(),
+    timeout=1800,  # 30 minutes (30 * 60 seconds)
     secrets=[
         modal.Secret.from_name("wandb-secret"),
         modal.Secret.from_name("gcs-secret"),
@@ -71,6 +71,32 @@ def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
     
     # Set working directory for config file resolution
     os.chdir(ml_workflow_path)
+    
+    # Ensure checkpoint directory exists and is writable (for Modal volumes)
+    checkpoint_dir = "/checkpoints"
+    try:
+        os.makedirs(checkpoint_dir, mode=0o755, exist_ok=True)
+        # Verify write permissions
+        test_file = os.path.join(checkpoint_dir, '.modal_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        print(f"✓ Checkpoint directory {checkpoint_dir} is writable")
+    except (OSError, IOError) as e:
+        print(f"⚠ Warning: Cannot write to {checkpoint_dir}: {e}")
+        print("  Checkpoints may not be saved. Verify Modal volume is properly mounted.")
+    
+    # Verify GCS mount (optional - we can use gs:// paths directly)
+    gcs_mount_path = "/gcs-data"
+    if os.path.exists(gcs_mount_path):
+        print(f"✓ GCS bucket mounted at {gcs_mount_path}")
+        try:
+            contents = os.listdir(gcs_mount_path)
+            print(f"  Mount contents (first 5): {contents[:5]}")
+        except Exception as e:
+            print(f"  Warning: Could not list mount contents: {e}")
+    else:
+        print(f"⚠ GCS mount not found at {gcs_mount_path}")
     
     # Login to wandb
     import wandb

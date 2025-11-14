@@ -20,7 +20,6 @@ try:
     from .dataloader.dataloader import create_dataloaders
     from .model.vision.vit import VisionTransformer
     from .model.vision.cnn import CNNModel
-    from .model.classifier.classifier import Classifier
     from .model.classifier.multimodal_classifier import MultimodalClassifier
     from .constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
 except ImportError:
@@ -30,7 +29,6 @@ except ImportError:
     from dataloader.dataloader import create_dataloaders
     from model.vision.vit import VisionTransformer
     from model.vision.cnn import CNNModel
-    from model.classifier.classifier import Classifier
     from model.classifier.multimodal_classifier import MultimodalClassifier
     from constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
 
@@ -66,9 +64,14 @@ def initialize_model(config_path):
         metadata_path = GCS_METADATA_PATH
         img_prefix = GCS_IMAGE_PREFIX
     
-    # This will load the metadata file and filter it
-    # This decides what we train on 
-    metadata = load_metadata(metadata_path, min_samples=data_config['min_samples_per_label'], datasets=data_config['datasets'], has_text=data_config['has_text'])
+    # Load the metadata file and filter it
+    metadata = load_metadata(
+        metadata_path, 
+        min_samples=data_config['min_samples_per_label'], 
+        datasets=data_config.get('datasets'),  # None = all datasets
+        has_text=data_config.get('has_text'),
+        data_fraction=data_config.get('data_fraction')  # None = all data, 0.0-1.0 = fraction
+    )
 
     # Pre-compute embeddings and store in GCP
     embeddings = load_or_compute_embeddings(
@@ -117,7 +120,8 @@ def initialize_model(config_path):
     # Create multimodal classifier
     multimodal_config = config['multimodal_classifier'].copy()
     multimodal_config['num_classes'] = info['num_classes']
-    multimodal_config['sample_weights'] = info['sample_weights']
+    # class_weights can be used for focal loss if needed
+    multimodal_config['class_weights'] = info.get('class_weights', None)
     multimodal_config['vision_embedding_dim'] = embedding_dim
     multimodal_config['text_embedding_dim'] = text_embedding_dim
     multimodal_classifier = MultimodalClassifier(multimodal_config)
