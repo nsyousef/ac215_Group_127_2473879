@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Box, Card, CardContent, Typography, Button, Stack } from '@mui/material';
+import { useEffect, useState, useRef } from 'react';
+import { Box, Card, CardContent, Typography, Button, Stack, useTheme, useMediaQuery, Tooltip } from '@mui/material';
 // Use standard <img> for local/data URL previews
 import FileAdapter from '@/services/adapters/fileAdapter';
 import { isElectron } from '@/utils/config';
 
-export default function TimeTrackingPanel({ conditionId }) {
+export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const contentRef = useRef(null);
 
   useEffect(() => {
     let mounted = true;
@@ -48,11 +51,22 @@ export default function TimeTrackingPanel({ conditionId }) {
     }
     load();
     return () => (mounted = false);
-  }, [conditionId]);
+  }, [conditionId, refreshKey]);
+
+  // Scroll to top when entries update so newest is visible
+  useEffect(() => {
+    if (contentRef.current) {
+      try {
+        contentRef.current.scrollTop = 0;
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [entries]);
 
   return (
     <Card id="time-panel" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <CardContent sx={{ flex: 1, overflow: 'auto' }}>
+      <CardContent ref={contentRef} sx={{ flex: 1, overflow: 'auto' }}>
         <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Time Tracking</Typography>
         {!conditionId && (
           <Typography variant="body2" sx={{ color: '#999', textAlign: 'center', py: 4 }}>
@@ -79,8 +93,45 @@ export default function TimeTrackingPanel({ conditionId }) {
         </Stack>
       </CardContent>
 
-      <Box sx={{ p: 2, borderTop: '1px solid #eee' }}>
-        <Button variant="contained" fullWidth sx={{ textTransform: 'none' }}>Add Image</Button>
+      {/* Fixed Add Image button: appears above bottom nav on mobile and fixed bottom on desktop */}
+      <Box
+        sx={{
+          position: 'fixed',
+          right: isMobile ? 16 : '50%',
+          bottom: isMobile ? 80 : 24,
+          transform: isMobile ? 'none' : 'translateX(50%)',
+          width: isMobile ? '56px' : '280px',
+          zIndex: 1400,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: isMobile ? 'center' : 'stretch',
+        }}
+      >
+        <Tooltip title="Select a condition first" disableHoverListener={!!conditionId}>
+          <span>
+            <Button
+              variant="contained"
+              onClick={() => onAddImage && onAddImage(conditionId)}
+              fullWidth={!isMobile}
+              disabled={!conditionId}
+              sx={{
+                textTransform: 'none',
+                py: isMobile ? 0 : 1.2,
+                borderRadius: isMobile ? '50%' : 2,
+                width: isMobile ? '56px' : '100%',
+                height: isMobile ? '56px' : 'auto',
+                minWidth: isMobile ? '56px' : 'auto',
+                padding: isMobile ? 0 : undefined,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: isMobile ? 24 : 'inherit',
+              }}
+            >
+              {isMobile ? '+' : 'Add Image'}
+            </Button>
+          </span>
+        </Tooltip>
       </Box>
     </Card>
   );

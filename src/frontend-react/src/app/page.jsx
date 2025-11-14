@@ -20,6 +20,7 @@ import TimeTrackingPanel from '@/components/TimeTrackingPanel';
 import ChatPanel from '@/components/ChatPanel';
 import MobileLayout from '@/components/layouts/MobileLayout';
 import AddDiseaseFlow from '@/components/AddDiseaseFlow';
+import AddTimeEntryFlow from '@/components/AddTimeEntryFlow';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 
 export default function Home() {
@@ -94,6 +95,32 @@ export default function Home() {
         setShowAddFlow(true);
     };
 
+    // Add time entry modal state + refresh key
+    const [showAddTimeFlow, setShowAddTimeFlow] = useState(false);
+    const [timeEntriesVersion, setTimeEntriesVersion] = useState(0);
+
+    const handleOpenAddTime = (conditionId) => {
+        // Accept an optional conditionId from the caller (TimeTrackingPanel passes its conditionId)
+        const id = conditionId || selectedCondition?.id;
+        if (!id) return; // require a selected condition
+
+        // If the caller provided an id that's different from the current selection, update it
+        if (!selectedCondition || selectedCondition.id !== id) {
+            const found = (diseases || []).find((d) => d.id === id);
+            if (found) setSelectedCondition(found);
+        }
+
+        setShowAddTimeFlow(true);
+    };
+
+    const handleTimeSaved = (entry) => {
+        // bump version so TimeTrackingPanel reloads
+        setTimeEntriesVersion((v) => v + 1);
+        setShowAddTimeFlow(false);
+        // Navigate to time view on mobile
+        if (isMobile) router.push('/?view=time');
+    };
+
     // Add disease modal state
     const [showAddFlow, setShowAddFlow] = useState(false);
 
@@ -165,7 +192,7 @@ export default function Home() {
                     {/* Time Tracking View */}
                     {mobileView === 'time' && (
                         <>
-                            <TimeTrackingPanel conditionId={selectedCondition?.id} />
+                            <TimeTrackingPanel conditionId={selectedCondition?.id} onAddImage={handleOpenAddTime} refreshKey={timeEntriesVersion} />
                         </>
                     )}
 
@@ -185,6 +212,7 @@ export default function Home() {
                 </Container>
                 {/* Add disease modal (shared) */}
                 <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} />
+                <AddTimeEntryFlow open={showAddTimeFlow} onClose={() => setShowAddTimeFlow(false)} conditionId={selectedCondition?.id} onSaved={handleTimeSaved} />
             </MobileLayout>
         );
     }
@@ -258,7 +286,7 @@ export default function Home() {
 
                     {/* Center Column: Time Tracking */}
                     <Grid item xs={12} md={4}>
-                        <TimeTrackingPanel conditionId={selectedCondition?.id} />
+                        <TimeTrackingPanel conditionId={selectedCondition?.id} onAddImage={handleOpenAddTime} refreshKey={timeEntriesVersion} />
                     </Grid>
 
                     {/* Right Column: Chat */}
@@ -268,6 +296,7 @@ export default function Home() {
                 </Grid>
             </Container>
             <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} />
+            <AddTimeEntryFlow open={showAddTimeFlow} onClose={() => setShowAddTimeFlow(false)} conditionId={selectedCondition?.id} onSaved={handleTimeSaved} />
         </Box>
     );
 }
