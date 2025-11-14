@@ -40,7 +40,7 @@ training:
   scheduler:
     use_cosine_annealing: true  # Enable cosine annealing learning rate scheduler
     vision_eta_min: 0.0000001  # Minimum learning rate for backbone optimizer
-    classifier_eta_min: 0.0000001  # Minimum learning rate for head optimizer
+    multimodal_classifier_eta_min: 0.0000001  # Minimum learning rate for multimodal classifier optimizer
 
 # Augmentation parameters
 # Set to null to disable a transform, or provide a value to enable it
@@ -63,14 +63,30 @@ vision_model:
   pooling_type: "max"  # For ImageNet models: avg, max, concat
   unfreeze_layers: 20  # Number of layers to unfreeze from end
 
-# Classifier configuration
-classifier:
-  num_classes: null  # Will be inferred from data
-  hidden_sizes: [12]  # List of hidden layer sizes
-  activation: "relu"  # relu, gelu, swish, leaky_relu
-  dropout_rate: 0.6
+# Multimodal classifier configuration
+multimodal_classifier:
+  # Projection layer configuration
+  projection_dim: 256  # Output dimension for both image and text projections (must be same for weighted_sum)
+  image_projection_hidden: [512]  # Hidden layers for image projection MLP (empty list for linear projection)
+  text_projection_hidden: [512]   # Hidden layers for text projection MLP (empty list for linear projection)
+  projection_activation: "relu"  # relu, gelu, swish, leaky_relu
+  projection_dropout: 0.2
+  
+  # Fusion configuration
+  fusion_strategy: "weighted_sum"  # "weighted_sum" or "concat_mlp"
+  
+  # Final classifier configuration (applied after fusion)
+  final_hidden_sizes: [128]  # Hidden layers after fusion (empty list for linear classifier)
+  final_activation: "relu"
+  final_dropout: 0.3
+  
+  # Loss configuration
+  loss_fn: "cross_entropy"  # cross_entropy or focal
   label_smoothing: 0.1  # Label smoothing factor for cross entropy loss (0.0 = no smoothing)
-  loss_fn: "cross_entropy"  # cross_entropy, focal
+  
+  # Auxiliary loss configuration (optional)
+  use_auxiliary_loss: false  # Enable auxiliary losses on individual modalities before fusion
+  auxiliary_loss_weight: 0.3  # Weight for auxiliary losses (only used if use_auxiliary_loss=true)
 
 # Encoder configuration
 encoder:
@@ -91,7 +107,7 @@ optimizer:
     betas: [0.9, 0.999]
     eps: 0.00000001
   
-  classifier:
+  multimodal_classifier:
     name: "adamw"
     learning_rate: 0.0007
     weight_decay: 0.0001
