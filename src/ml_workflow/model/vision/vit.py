@@ -5,9 +5,14 @@ from torchvision.models import (ViT_B_16_Weights, ViT_B_32_Weights, ViT_L_16_Wei
 from typing import Dict, Any
 
 try:
-    from ..utils import logger
+    from ...utils import logger  # Three dots to go up to ml_workflow/utils.py
 except ImportError:
-    from utils import logger
+    try:
+        from ml_workflow.utils import logger  # Absolute import fallback
+    except ImportError:
+        # Create a simple logger as final fallback
+        import logging
+        logger = logging.getLogger(__name__)
 
 class VisionTransformer(nn.Module):
     """Vision Transformer model that returns embeddings only"""

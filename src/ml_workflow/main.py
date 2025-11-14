@@ -23,14 +23,14 @@ try:
     from .model.classifier.multimodal_classifier import MultimodalClassifier
     from .constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
 except ImportError:
-    from train.train import Trainer
-    from utils import load_metadata, logger, load_checkpoint
-    from dataloader.embedding_utils import load_or_compute_embeddings, embedding_to_array
-    from dataloader.dataloader import create_dataloaders
-    from model.vision.vit import VisionTransformer
-    from model.vision.cnn import CNNModel
-    from model.classifier.multimodal_classifier import MultimodalClassifier
-    from constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
+    from ml_workflow.train.train import Trainer
+    from ml_workflow.utils import load_metadata, logger, load_checkpoint
+    from ml_workflow.dataloader.embedding_utils import load_or_compute_embeddings, embedding_to_array
+    from ml_workflow.dataloader.dataloader import create_dataloaders
+    from ml_workflow.model.vision.vit import VisionTransformer
+    from ml_workflow.model.vision.cnn import CNNModel
+    from ml_workflow.model.classifier.multimodal_classifier import MultimodalClassifier
+    from ml_workflow.constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
 
 def initialize_model(config_path):
     """This function will initialize everything needed for training based on config being used"""
