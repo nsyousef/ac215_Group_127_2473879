@@ -1,25 +1,23 @@
 import './globals.css';
-import { ThemeProvider } from 'next-themes';
-import Header from '@/components/layout/Header';
-import Footer from '@/components/layout/Footer';
+import { Providers } from './providers';
 
 export const metadata = {
-    title: 'Your App Name',
-    description: 'A minimal starter template for your next project',
+    title: 'SkinCare App',
+    description: 'Dermatological condition detection and tracking',
 }
 
 export default function RootLayout({ children }) {
     return (
-        <html lang="en" className="h-full" suppressHydrationWarning>
+        <html lang="en" suppressHydrationWarning>
             <head>
                 <link href="assets/logo.svg" rel="shortcut icon" type="image/x-icon"></link>
+                <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+                <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
             </head>
-            <body className="flex flex-col min-h-screen">
-                <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-                    <Header />
-                    <main className="flex-grow pt-16">{children}</main>
-                    <Footer />
-                </ThemeProvider>
+            <body>
+                <Providers>
+                    {children}
+                </Providers>
             </body>
         </html>
     );
