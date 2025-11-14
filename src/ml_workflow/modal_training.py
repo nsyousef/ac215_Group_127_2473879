@@ -37,26 +37,41 @@ image = (
 app = modal.App("skin-disease-training", image=image)
 
 @app.function(
-    gpu=modal.gpu.A100(),
-    timeout=1800,  # 30 minutes (30 * 60 seconds)
+    gpu="A100-40GB",
+    timeout=7200,
     secrets=[
         modal.Secret.from_name("wandb-secret"),
         modal.Secret.from_name("gcs-secret"),
     ],
     volumes={
-        "/checkpoints": modal.Volume.from_name("training-checkpoints", create_if_missing=True),
-        "/gcs-data": modal.CloudBucketMount(
-            bucket_name="derma-datasets-2",
-            secret=modal.Secret.from_name("gcs-secret")
-        )
+        "/checkpoints": modal.Volume.from_name("training-checkpoints", create_if_missing=True)
     }
 )
 def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
     import os
     import sys
+    import json
+    
+    # Set up GCS authentication by writing JSON credentials to a file
+    if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
+        creds_path = "/tmp/gcs_credentials.json"
+        try:
+            # Parse the JSON string and write to file
+            creds_data = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+            with open(creds_path, 'w') as f:
+                json.dump(creds_data, f)
+            
+            # Set the environment variable that gcsfs will use
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
+            print(f"✓ GCS credentials written to {creds_path}")
+        except json.JSONDecodeError as e:
+            print(f"⚠ Error parsing GCS credentials JSON: {e}")
+        except Exception as e:
+            print(f"⚠ Error setting up GCS credentials: {e}")
+    else:
+        print("⚠ Warning: GOOGLE_APPLICATION_CREDENTIALS_JSON not found")
     
     # Set up Python path FIRST, before ANY other imports
-    # This ensures Python recognizes ml_workflow as a package
     src_path = "/app/src"
     if src_path not in sys.path:
         sys.path.insert(0, src_path)
@@ -72,11 +87,10 @@ def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
     # Set working directory for config file resolution
     os.chdir(ml_workflow_path)
     
-    # Ensure checkpoint directory exists and is writable (for Modal volumes)
+    # Ensure checkpoint directory exists and is writable
     checkpoint_dir = "/checkpoints"
     try:
         os.makedirs(checkpoint_dir, mode=0o755, exist_ok=True)
-        # Verify write permissions
         test_file = os.path.join(checkpoint_dir, '.modal_test')
         with open(test_file, 'w') as f:
             f.write('test')
@@ -84,19 +98,9 @@ def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
         print(f"✓ Checkpoint directory {checkpoint_dir} is writable")
     except (OSError, IOError) as e:
         print(f"⚠ Warning: Cannot write to {checkpoint_dir}: {e}")
-        print("  Checkpoints may not be saved. Verify Modal volume is properly mounted.")
     
-    # Verify GCS mount (optional - we can use gs:// paths directly)
-    gcs_mount_path = "/gcs-data"
-    if os.path.exists(gcs_mount_path):
-        print(f"✓ GCS bucket mounted at {gcs_mount_path}")
-        try:
-            contents = os.listdir(gcs_mount_path)
-            print(f"  Mount contents (first 5): {contents[:5]}")
-        except Exception as e:
-            print(f"  Warning: Could not list mount contents: {e}")
-    else:
-        print(f"⚠ GCS mount not found at {gcs_mount_path}")
+    # Remove GCS mount verification since we're not mounting
+    print("✓ Using direct gs:// path access (no mount needed)")
     
     # Login to wandb
     import wandb
@@ -145,3 +149,4 @@ def main(config_path: str = "configs/modal_template.yaml"):
     """
     result = train_with_gcs.remote(config_path=config_path)
     print(result)
+    

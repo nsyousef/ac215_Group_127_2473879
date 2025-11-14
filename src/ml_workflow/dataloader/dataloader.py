@@ -12,10 +12,10 @@ try:
     from .transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
     from .embedding_utils import embedding_to_array
 except ImportError:
-    from constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
-    from utils import (logger, stratified_split)
-    from dataloader.transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
-    from dataloader.embedding_utils import embedding_to_array
+    from ml_workflow.constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
+    from ml_workflow.utils import (logger, stratified_split)
+    from ml_workflow.dataloader.transform_utils import (get_basic_transform, get_train_transform, get_test_valid_transform, compute_dataset_stats)
+    from ml_workflow.dataloader.embedding_utils import embedding_to_array
     
 # If we use multiple workers with GCP, we need to ensure each worker has its own filesystem object
 import gcsfs

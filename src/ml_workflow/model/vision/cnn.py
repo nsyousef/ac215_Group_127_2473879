@@ -5,9 +5,14 @@ from torchvision.models import ResNet50_Weights, ResNet101_Weights, DenseNet121_
 from typing import Dict, Any
 
 try:
-    from ..utils import logger
+    from ...utils import logger  # Three dots to go up to ml_workflow/utils.py
 except ImportError:
-    from utils import logger
+    try:
+        from ml_workflow.utils import logger  # Absolute import fallback
+    except ImportError:
+        # Create a simple logger as final fallback
+        import logging
+        logger = logging.getLogger(__name__)
 
 class CNNModel(nn.Module):
     """CNN-based transfer learning model that returns embeddings only"""

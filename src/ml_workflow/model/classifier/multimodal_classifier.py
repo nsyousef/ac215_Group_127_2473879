@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 from typing import Dict, Any, Optional
-from model.utils import MLP, FocalLoss
+try:
+    from ..utils import MLP, FocalLoss
+except ImportError:
+    from ml_workflow.model.utils import MLP, FocalLoss
 
 class MultimodalClassifier(nn.Module):
     """

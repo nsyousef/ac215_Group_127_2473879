@@ -7,8 +7,8 @@ data:
   img_prefix: "gs://derma-datasets-2/final/imgs"  # Direct GCS path
   min_samples_per_label: 1000
   datasets:
-    - fitzpatrick17k
-    # - ddi
+    # - fitzpatrick17k
+    - ddi
     # - isic
   has_text: null # True to filter for only datasets with text descriptions; False to filter for datasets without text descriptions.
 
@@ -27,7 +27,7 @@ training:
   batch_size: 12
   num_workers: 0
   prefetch_factor: 1
-  num_epochs: 100
+  num_epochs: 1
   patience: 100
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
   n_warmup_epochs: 5  # Number of epochs to freeze backbone (0 = no freezing)
