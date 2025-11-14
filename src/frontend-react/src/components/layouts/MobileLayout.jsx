@@ -10,6 +10,7 @@ import {
     BottomNavigationAction,
     Typography,
     Fab,
+    useTheme,
 } from '@mui/material';
 import {
     Home as HomeIcon,
@@ -35,10 +36,15 @@ export default function MobileLayout({ children, currentPage = 'list', showBotto
         }
     };
 
+    const theme = useTheme();
+    const primary = theme.palette.primary.main;
+    const bg = theme.palette.background.default;
+    const paper = theme.palette.background.paper;
+
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: bg }}>
             {/* App Bar */}
-            <AppBar position="static" sx={{ bgcolor: '#fff', color: '#000', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <AppBar position="static" sx={{ bgcolor: paper, color: theme.palette.text.primary, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                 <Toolbar>
                     {showBackButton && (
                         <IconButton
@@ -77,12 +83,12 @@ export default function MobileLayout({ children, currentPage = 'list', showBotto
                         bottom: 0,
                         left: 0,
                         right: 0,
-                        bgcolor: '#fff',
+                        bgcolor: paper,
                         borderTop: '1px solid #e0e0e0',
                         '& .MuiBottomNavigationAction-root': {
                             color: '#999',
                             '&.Mui-selected': {
-                                color: '#1976d2',
+                                color: primary,
                             },
                         },
                     }}
@@ -101,9 +107,9 @@ export default function MobileLayout({ children, currentPage = 'list', showBotto
                         position: 'fixed',
                         bottom: 80, // Above bottom nav
                         right: 16,
-                        bgcolor: '#1976d2',
+                        bgcolor: primary,
                         '&:hover': {
-                            bgcolor: '#1565c0',
+                            bgcolor: '#067891',
                         },
                     }}
                 >

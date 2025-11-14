@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Card, CardContent, Typography, Button, IconButton } from '@mui/material';
+import { Box, Card, CardContent, Typography, Button, IconButton, useTheme } from '@mui/material';
 import { ArrowForwardOutlined, CloseOutlined } from '@mui/icons-material';
 
 /**
@@ -91,9 +91,9 @@ export default function ConditionPopover({ condition, onViewResults, onDismiss }
                         onClick={onViewResults}
                         sx={{
                             textTransform: 'none',
-                            bgcolor: '#1976d2',
+                            bgcolor: useTheme().palette.primary.main,
                             '&:hover': {
-                                bgcolor: '#1565c0',
+                                bgcolor: '#067891',
                             },
                         }}
                     >

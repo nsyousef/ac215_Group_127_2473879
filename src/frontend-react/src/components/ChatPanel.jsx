@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { Box, Card, CardContent, Typography, TextField, IconButton } from '@mui/material';
+import { Box, Card, CardContent, Typography, TextField, IconButton, useTheme } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import FileAdapter from '@/services/adapters/fileAdapter';
 import { isElectron } from '@/utils/config';
@@ -10,6 +10,10 @@ export default function ChatPanel({ conditionId }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const listRef = useRef(null);
+
+  const theme = useTheme();
+  const primary = theme?.palette?.primary?.main || '#0891B2';
+  const primaryContrast = theme?.palette?.primary?.contrastText || '#fff';
 
   useEffect(() => {
     let mounted = true;
@@ -77,7 +81,7 @@ export default function ChatPanel({ conditionId }) {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {messages.map((m) => (
             <Box key={m.id} sx={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
-              <Box sx={{ bgcolor: m.role === 'user' ? '#1976d2' : '#eee', color: m.role === 'user' ? '#fff' : '#000', p: 1.5, borderRadius: 2 }}>
+              <Box sx={{ bgcolor: m.role === 'user' ? primary : '#eee', color: m.role === 'user' ? primaryContrast : '#000', p: 1.5, borderRadius: 2 }}>
                 <Typography variant="body2">{m.text}</Typography>
               </Box>
               <Typography variant="caption" sx={{ color: '#999' }}>{new Date(m.time).toLocaleString()}</Typography>
@@ -95,7 +99,15 @@ export default function ChatPanel({ conditionId }) {
           size="small"
           onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
         />
-        <IconButton color="primary" onClick={send} sx={{ bgcolor: '#1976d2', color: '#fff' }}>
+        <IconButton
+          color="primary"
+          onClick={send}
+          sx={{
+            bgcolor: primary,
+            color: primaryContrast,
+            '&:hover': { bgcolor: '#067891' },
+          }}
+        >
           <SendIcon />
         </IconButton>
       </Box>

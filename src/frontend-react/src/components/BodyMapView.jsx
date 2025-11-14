@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { Box } from '@mui/material';
+import { Box, useTheme } from '@mui/material';
 import { BODY_MAP_SPOTS } from '@/lib/constants';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import ConditionPopover from './ConditionPopover';
@@ -52,6 +52,9 @@ export default function BodyMapView({
     const handlePopoverDismiss = () => {
         setPopoverCondition(null);
     };
+    const theme = useTheme();
+    const primary = theme.palette.primary.main;
+
     return (
         <>
             <Box
@@ -106,7 +109,7 @@ export default function BodyMapView({
                                 cursor: 'pointer',
                                 boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
                                 transition: 'all 0.2s',
-                                outline: isSelected ? '2px solid #1976d2' : 'none',
+                                outline: isSelected ? `2px solid ${primary}` : 'none',
                                 outlineOffset: '3px',
                                 '&:hover': {
                                     width: 18,

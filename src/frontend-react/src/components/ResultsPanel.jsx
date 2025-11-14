@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { Box, Card, CardContent, Typography, Button, ButtonGroup } from '@mui/material';
+import { Box, Card, CardContent, Typography, Button, ButtonGroup, useTheme } from '@mui/material';
 import { AssignmentReturnOutlined, QuestionAnswerOutlined } from '@mui/icons-material';
 
 /**
@@ -11,8 +11,12 @@ import { AssignmentReturnOutlined, QuestionAnswerOutlined } from '@mui/icons-mat
  * @param {boolean} props.showActions - If true, show Track Progress and Ask Question buttons (default: true)
  */
 export default function ResultsPanel({ selectedCondition, showActions = true, isMobile = false, onBack, onTrack, onAsk, onCombined }) {
+    const theme = useTheme();
+    const primary = theme.palette.primary.main;
+    const primaryHover = '#067891';
+
     return (
-        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <CardContent sx={{ flex: 1, overflow: 'auto' }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                     {selectedCondition ? 'Results' : 'Overview'}
@@ -81,10 +85,10 @@ export default function ResultsPanel({ selectedCondition, showActions = true, is
                                 },
                             }}
                         >
-                            <Button startIcon={<AssignmentReturnOutlined />} sx={{ bgcolor: '#1976d2' }} onClick={() => onTrack && onTrack(selectedCondition)}>
+                            <Button startIcon={<AssignmentReturnOutlined />} sx={{ bgcolor: primary, '&:hover': { bgcolor: primaryHover } }} onClick={() => onTrack && onTrack(selectedCondition)}>
                                 Track Progress
                             </Button>
-                            <Button startIcon={<QuestionAnswerOutlined />} sx={{ bgcolor: '#1976d2' }} onClick={() => onAsk && onAsk(selectedCondition)}>
+                            <Button startIcon={<QuestionAnswerOutlined />} sx={{ bgcolor: primary, '&:hover': { bgcolor: primaryHover } }} onClick={() => onAsk && onAsk(selectedCondition)}>
                                 Ask Question
                             </Button>
                         </ButtonGroup>

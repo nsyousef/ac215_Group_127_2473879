@@ -188,6 +188,7 @@ export default function Home() {
                                 selectedConditionId={selectedCondition?.id}
                                 onChange={handleSelectCondition}
                                 onAddDisease={handleAddDisease}
+                                showAddButton={false}
                             />
                         </>
                     )}
@@ -264,30 +265,35 @@ export default function Home() {
                         </IconButton>
                     </Box>
 
-                    <Grid container spacing={3}>
+                    <Grid container spacing={3} sx={{ height: 'calc(100vh - 160px)' }}>
                         {/* Left: Conditions list */}
-                        <Grid item xs={12} md={4}>
+                        <Grid item xs={12} md={4} sx={{ height: '100%' }}>
                             <ConditionListView
                                 selectedConditionId={selectedCondition?.id}
                                 onChange={handleSelectCondition}
                                 onAddDisease={handleAddDisease}
+                                showAddButton={true}
                             />
                         </Grid>
 
                         {/* Center: Body map */}
                         <Grid item xs={12} md={4}>
-                            <Card sx={{ p: 2, mb: 2, display: 'flex', justifyContent: 'center' }}>
-                                <BodyMapView
-                                    selectedConditionId={selectedCondition?.id}
-                                    onSpotClick={handleSpotClick}
-                                    maxWidth="420px"
-                                    showPopover={false}
-                                />
-                            </Card>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                                <Card sx={{ flex: 1, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
+                                    <BodyMapView
+                                        selectedConditionId={selectedCondition?.id}
+                                        onSpotClick={handleSpotClick}
+                                        maxWidth="420px"
+                                        showPopover={false}
+                                    />
+                                </Card>
+                                {/* optional footer space if needed */}
+                                <Box sx={{ height: 12 }} />
+                            </Box>
                         </Grid>
 
-                        {/* Right: Results with single combined button to open full page */}
-                        <Grid item xs={12} md={4}>
+                        {/* Right: Results */}
+                        <Grid item xs={12} md={4} sx={{ height: '100%', overflow: 'auto' }}>
                             <ResultsPanel
                                 selectedCondition={selectedCondition}
                                 showActions={true}

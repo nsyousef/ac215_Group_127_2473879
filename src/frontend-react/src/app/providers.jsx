@@ -8,14 +8,61 @@ import { ProfileProvider } from '@/contexts/ProfileContext';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#1976d2',
+      main: '#0891B2', // brand primary
+      contrastText: '#FFFFFF',
     },
     secondary: {
-      main: '#dc004e',
+      main: '#50B4D1', // brand secondary
+      contrastText: '#394150',
+    },
+    background: {
+      default: '#E5E7EB', // main app background (swapped as requested)
+      paper: '#FFFFFF', // card/toolbars background
+    },
+    text: {
+      primary: '#394150', // dark text default
     },
   },
   typography: {
     fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        containedPrimary: {
+          backgroundColor: '#0891B2',
+          color: '#FFFFFF',
+          '&:hover': {
+            backgroundColor: '#067891',
+          },
+        },
+        containedSecondary: {
+          backgroundColor: '#50B4D1',
+          color: '#394150',
+          '&:hover': {
+            backgroundColor: '#3da6bf',
+          },
+        },
+        textSecondary: {
+          color: '#50B4D1',
+        },
+      },
+    },
+    MuiAppBar: {
+      styleOverrides: {
+        colorDefault: {
+          backgroundColor: '#FFFFFF',
+          color: '#394150',
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          backgroundColor: '#FFFFFF',
+        },
+      },
+    },
   },
 });
 
