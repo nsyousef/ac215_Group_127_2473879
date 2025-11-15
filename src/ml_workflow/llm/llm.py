@@ -1,0 +1,191 @@
+import re
+import time
+import torch
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    AutoProcessor,
+    AutoModelForImageTextToText,
+    StoppingCriteria,
+    StoppingCriteriaList
+)
+
+
+class ThoughtStoppingCriteria(StoppingCriteria):
+    """Stop generation when 'thought' token is encountered."""
+    
+    def __init__(self, tokenizer, prompt_length):
+        self.tokenizer = tokenizer
+        self.prompt_length = prompt_length
+        self.thought_tokens = tokenizer.encode("thought", add_special_tokens=False)
+        self.thought_token = self.thought_tokens[0] if self.thought_tokens else None
+    
+    def __call__(self, input_ids, scores, **kwargs):
+        if self.thought_token is not None:
+            generated_ids = input_ids[0][self.prompt_length:]
+            if len(generated_ids) > 0 and generated_ids[-1] == self.thought_token:
+                return True
+        return False
+
+
+class LLM:
+    """LLM wrapper for dermatology assistant with Modal deployment support."""
+    
+    def __init__(
+        self,
+        model_name: str = "medgemma-27b",
+        max_new_tokens: int = 700,
+        base_prompt: str = "",
+        question_prompt: str = "",
+    ):
+        self.max_new_tokens = max_new_tokens
+        self.base_prompt = ' '.join(base_prompt.split()) if base_prompt else ""
+        self.question_prompt = ' '.join(question_prompt.split()) if question_prompt else ""
+        self.model_name = model_name
+        
+        print(f"Loading model: {model_name}")
+        
+        if model_name == "medgemma-4b":
+            model_id = "google/medgemma-4b-it"
+            self.processor = AutoProcessor.from_pretrained(model_id)
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                model_id,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+            )
+        elif model_name == "medgemma-27b":
+            model_id = "google/medgemma-27b-text-it"
+            self.processor = AutoTokenizer.from_pretrained(model_id)
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_id,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+            )
+        else:
+            raise ValueError(f"Unknown model: {model_name}")
+        
+        if torch.cuda.is_available():
+            print(f"GPU: {torch.cuda.get_device_name(0)}")
+            print(f"Memory: {torch.cuda.memory_allocated(0)/1e9:.2f}GB")
+    
+    def build_prompt(self, predictions: dict, metadata: dict) -> str:
+        """Build prompt from predictions and metadata."""
+        summary = [f"{pred} ({conf*100:.1f}%)" for pred, conf in predictions.items()]
+        prompt = f"{self.base_prompt}\n\nINPUT DATA: {', '.join(summary)}.\n"
+        
+        if 'user_input' in metadata:
+            prompt += f"User input: {metadata['user_input']}\n"
+        
+        if 'cv_analysis' in metadata:
+            cv = metadata['cv_analysis']
+            area = str(cv.get('area', 'N/A'))
+            color_profile = cv.get('color_profile', {})
+            parts = [f"area={area}"]
+            if color_profile:
+                redness = color_profile.get('redness_index', 'N/A')
+                parts.append(f"redness={redness}")
+            prompt += f"Latest CV Analysis: {', '.join(parts)}.\n"
+        
+        if 'history' in metadata and metadata['history']:
+            prompt += "\nHistorical Data:\n"
+            for date, data in sorted(metadata['history'].items()):
+                prompt += f"Date: {date}.\n"
+                if 'cv_analysis' in data:
+                    cv = data['cv_analysis']
+                    area = str(cv.get('area', 'N/A'))
+                    color_profile = cv.get('color_profile', {})
+                    redness = color_profile.get('redness_index', 'N/A') if color_profile else 'N/A'
+                    prompt += f"  CV Analysis: area={area}, redness={redness}.\n"
+                if 'text_summary' in data:
+                    prompt += f"  Text Summary: {data['text_summary']}.\n"
+        
+        return prompt
+    
+    @torch.inference_mode()
+    def generate(self, prompt: str, temperature: float = 0.3) -> str:
+        """Generate response with thought stopping."""
+        messages = [{"role": "user", "content": prompt}]
+        formatted_prompt = self.processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        
+        inputs = self.processor(
+            formatted_prompt,
+            return_tensors="pt",
+            add_special_tokens=True
+        ).to(self.model.device)
+        
+        input_length = inputs['input_ids'].shape[1]
+        
+        stopping_criteria = StoppingCriteriaList([
+            ThoughtStoppingCriteria(self.processor, input_length)
+        ])
+        
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=temperature > 0,
+            temperature=temperature if temperature > 0 else None,
+            pad_token_id=self.processor.pad_token_id,
+            eos_token_id=self.processor.eos_token_id,
+            stopping_criteria=stopping_criteria,
+        )
+        
+        generated_ids = outputs[0][input_length:]
+        text = self.processor.decode(generated_ids, skip_special_tokens=True).strip()
+        
+        return self._extract_user_response(text)
+    
+    def _extract_user_response(self, text: str) -> str:
+        """Remove thought markers and their content."""
+        text = re.sub(r'<thought>.*?</thought>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        
+        if 'thought' in text.lower():
+            thought_match = re.search(r'\bthought\b', text, re.IGNORECASE)
+            if thought_match:
+                text = text[:thought_match.start()]
+        
+        if '<thought>' in text.lower():
+            thought_pos = text.lower().find('<thought>')
+            text = text[:thought_pos]
+        
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+    
+    def explain(self, predictions: dict, metadata: dict, temperature: float = 0.3) -> str:
+        """Generate explanation from predictions and metadata."""
+        prompt = self.build_prompt(predictions, metadata)
+        return self.generate(prompt, temperature)
+    
+    def ask_followup(
+        self,
+        initial_answer: str,
+        question: str,
+        conversation_history: list = None,
+        temperature: float = 0.3
+    ) -> dict:
+        """Answer follow-up question with conversation history."""
+        if conversation_history is None:
+            conversation_history = []
+        
+        conversation_history = conversation_history[-4:] if len(conversation_history) >= 4 else conversation_history
+        conversation_history.append(question)
+        
+        history_text = ""
+        if len(conversation_history) > 1:
+            history_text = "\n\nPrevious questions in this conversation:\n"
+            for i, q in enumerate(conversation_history[:-1], 1):
+                history_text += f"{i}. {q}\n"
+            history_text += f"\nCurrent question: {question}"
+        else:
+            history_text = f"\n\nQuestion: {question}"
+        
+        followup_prompt = f"{self.question_prompt}\n\nYour previous analysis:\n{initial_answer}{history_text}"
+        answer = self.generate(followup_prompt, temperature)
+        
+        return {
+            "answer": answer,
+            "conversation_history": conversation_history
+        }
