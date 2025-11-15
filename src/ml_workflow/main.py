@@ -69,6 +69,7 @@ def initialize_model(config_path):
         metadata_path, 
         min_samples=data_config['min_samples_per_label'], 
         datasets=data_config.get('datasets'),  # None = all datasets
+        derm1m_sources=data_config.get('derm1m_sources'),
         has_text=data_config.get('has_text'),
         data_fraction=data_config.get('data_fraction')  # None = all data, 0.0-1.0 = fraction
     )

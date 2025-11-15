@@ -10,9 +10,9 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from typing import Tuple, List, Dict, Any, Optional
 try:
-    from .constants import TEXT_DESC_COL
+    from .constants import TEXT_DESC_COL, ORIG_FILENAME_COL
 except ImportError:
-    from constants import TEXT_DESC_COL
+    from constants import TEXT_DESC_COL, ORIG_FILENAME_COL
 
 # Setup logging
 def setup_logger(name: str = __name__, level: int = logging.INFO) -> logging.Logger:
@@ -30,7 +30,7 @@ def setup_logger(name: str = __name__, level: int = logging.INFO) -> logging.Log
 
 logger = setup_logger()
 
-def load_metadata(source: str, min_samples: int, datasets: List[str] = None, has_text: bool = None, data_fraction: float = None) -> pd.DataFrame:
+def load_metadata(source: str, min_samples: int, datasets: List[str] = None, derm1m_sources: List[str] = None, has_text: bool = None, data_fraction: float = None) -> pd.DataFrame:
     """
     Load metadata from GCS or local file and filter by minimum samples and datasets to be used
     
@@ -38,6 +38,7 @@ def load_metadata(source: str, min_samples: int, datasets: List[str] = None, has
         source: Path to CSV (gs://bucket/path or local/path.csv)
         min_samples: Minimum images per label
         datasets: List of datasets to be used (None = all datasets)
+        derm1m_sources: List of Derm1M sources to be used
         has_text: If `True`, include only entries with text data. If `False`, include only entries without text data. If `None`, do not filter on text data.
         data_fraction: Fraction of data to use (0.0-1.0). If None, use all data. Sampling is stratified by label.
     """
@@ -65,6 +66,14 @@ def load_metadata(source: str, min_samples: int, datasets: List[str] = None, has
             keep_rows = metadata[TEXT_DESC_COL].isna() | (metadata[TEXT_DESC_COL] == '')
         metadata = metadata[keep_rows].reset_index(drop=True)
         logger.info(f"Images {'with' if has_text else 'without'} text descriptions: {metadata.shape[0]}")
+
+    # If using Derm1M, filter for listed sources only
+    if 'derm1m' in datasets:
+        keep_mask = (
+            (metadata['dataset'] != 'derm1m') |  # Keep all non-derm1m
+            (metadata[ORIG_FILENAME_COL].str.split('/').str[0].isin(derm1m_sources))  # Keep matching derm1m
+        )
+        metadata = metadata[keep_mask].reset_index(drop=True)
 
     # Sample a fraction of data if specified (stratified by label)
     if data_fraction is not None and 0 < data_fraction < 1:
