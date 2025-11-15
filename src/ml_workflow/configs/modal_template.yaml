@@ -7,9 +7,19 @@ data:
   img_prefix: "gs://derma-datasets-2/final/imgs"  # Direct GCS path
   min_samples_per_label: 1000
   datasets:
-    # - fitzpatrick17k
+    - fitzpatrick17k
     - ddi
-    # - isic
+    - isic
+    - derm1m
+  derm1m_sources: # Only applicable if derm1m is being used under "datasets"
+    - IIYI 
+    - edu
+    - note
+    - public
+    - pubmed 
+    - reddit
+    - twitter
+    - youtube
   has_text: null # True to filter for only datasets with text descriptions; False to filter for datasets without text descriptions.
 
   # Data splits

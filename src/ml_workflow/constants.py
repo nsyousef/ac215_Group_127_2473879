@@ -19,6 +19,7 @@ LABEL_COL = "label"
 TEXT_DESC_COL = "text_desc"
 IMG_ID_COL = "image_id"
 EMBEDDING_COL = "embedding"
+ORIG_FILENAME_COL = 'orig_filename'
 
 MAX_RETRIES = 3
 
