@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    reactStrictMode: true,
+    output: 'export',  // Required for Electron
+    distDir: 'out',
+    reactStrictMode: false,
+    images: {
+        unoptimized: true  // Required for static export (Electron)
+    },
     webpack: (config) => {
         config.module.rules.push({
             test: /\.svg$/,
@@ -8,7 +13,6 @@ const nextConfig = {
         });
         return config;
     },
-    reactStrictMode: false,
 };
 
 module.exports = nextConfig;

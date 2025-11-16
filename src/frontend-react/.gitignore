@@ -6,3 +6,7 @@ node_modules/
 env.local
 .eslintcache
 scratch.txt
+
+# production builds
+/out/
+/dist/

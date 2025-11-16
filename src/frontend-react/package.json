@@ -2,9 +2,15 @@
   "name": "react-app-nextjs",
   "version": "1.0.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "WATCHPACK_POLLING=true next dev",
+    "electron": "electron .",
+    "electron:debug": "electron --enable-logging .",
+    "wait-and-launch": "echo 'Waiting for server...' && npx wait-on -v -t 30000 http://127.0.0.1:3000 && echo 'Server ready, launching Electron...' && npm run electron:debug",
+    "dev-electron": "concurrently -k -n WEB,EL -c \"cyan,magenta\" \"npm run dev\" \"npm run wait-and-launch\"",
     "build": "next build",
+    "build-electron": "next build && electron-builder",
     "start": "next start",
     "lint": "next lint"
   },
@@ -22,7 +28,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "concurrently": "^9.2.1",
-    "electron": "^39.2.0",
     "electron-builder": "^26.0.12",
     "electron-is-dev": "^3.0.1",
     "lucide-react": "^0.552.0",
@@ -36,6 +41,7 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.19",
+    "electron": "^39.2.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.1.0",
     "postcss": "^8.4.40",

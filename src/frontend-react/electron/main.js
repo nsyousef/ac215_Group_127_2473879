@@ -244,22 +244,26 @@ ipcMain.handle('reset-app-data', async () => {
 // Window Creation
 // ============================================================================
 
-const createWindow = () => {
-  mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+function createWindow() {
+  const mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
       contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
-  const startUrl = isDev
-    ? 'http://localhost:3000' // Next.js dev server
-    : `file://${path.join(__dirname, '../out/index.html')}`; // Built app
+  const startURL = isDev
+    ? 'http://127.0.0.1:3000'
+    : url.format({
+        pathname: path.join(__dirname, '../out/index.html'),
+        protocol: 'file:',
+        slashes: true,
+      });
 
-  mainWindow.loadURL(startUrl);
+  mainWindow.loadURL(startURL);
 
   if (isDev) {
     mainWindow.webContents.openDevTools();
