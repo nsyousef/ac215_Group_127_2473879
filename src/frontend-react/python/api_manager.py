@@ -1,14 +1,3 @@
-"""
-API Manager for Dermatology Assistant
-
-This class acts as a messenger between the frontend and various backend services:
-- Local ML models (embeddings and CV analysis)
-- Cloud prediction APIs
-- LLM APIs (Modal deployment)
-
-Author: AC215 Group 127
-"""
-
 import json
 import os
 from pathlib import Path
@@ -25,25 +14,32 @@ class APIManager:
     back to the frontend.
     """
     
-    def __init__(self, case_id: str):
+    def __init__(self, case_id: str, dummy: bool = False):
         """
         Initialize APIManager for a specific case.
         
         Args:
             case_id: Unique identifier for the case
+            dummy: If True, use dummy data for all operations (for frontend testing)
         """
         self.case_id = case_id
+        self.dummy = dummy
         
-        # Storage path for case data
+        # Set up storage directories
         self.history_dir = Path("history")
+        self.conversation_dir = Path("conversations")
         self.history_dir.mkdir(exist_ok=True)
+        self.conversation_dir.mkdir(exist_ok=True)
         
-        # Load case history
+        # File paths
+        self.history_file = self.history_dir / f"{case_id}.json"
+        self.conversation_file = self.conversation_dir / f"{case_id}.json"
+        
+        # Load existing data
         self.history = self._load_history(case_id)
         
-        # TODO: Configure these URLs from environment variables or config file
-        self.llm_explain_url = "https://your-modal-url.modal.run/explain"
-        self.llm_followup_url = "https://your-modal-url.modal.run/ask_followup"
+        self.llm_explain_url = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explain-dev.modal.run"
+        self.llm_followup_url = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-as-a085de-dev.modal.run"
     
     def get_initial_prediction(
         self, 
@@ -75,41 +71,58 @@ class APIManager:
         """
         print(f"Processing initial prediction for case {case_id}...")
         
-        # Step 1: Run local ML model for CV analysis and embeddings
-        print("  → Running local ML model...")
-        ml_results = self._run_local_ml_model(image)
-        embedding = ml_results["embedding"]
-        cv_analysis = ml_results["cv_analysis"]
+        # Step 1: Run local ML model for embeddings TODO
+        print("  → Running local ML model for embeddings...")
+        embedding = self._run_local_ml_model(image)
         
-        # Step 2: Get predictions from cloud ML model
+        # Step 2: Run CV analysis TODO
+        print("  → Running CV analysis...")
+        cv_analysis = self._run_cv_analysis(image)
+        
+        # Step 3: Get predictions from cloud ML model TODO
         print("  → Getting cloud predictions...")
         predictions = self._run_cloud_ml_model(embedding, text_description)
         
-        # Step 3: Build metadata for LLM
+        # Step 4: Build metadata for LLM
         metadata = {
             "user_input": text_description,
             "cv_analysis": cv_analysis,
             "history": self.history
         }
         
-        # Step 4: Call LLM API for explanation
+        # Step 5: Call LLM API for explanation
         print("  → Calling LLM for explanation...")
         llm_response = self._call_llm_explain(predictions, metadata)
         
-        # Step 5: Prepare complete results
+        # Step 6: Save to conversation history (initial LLM response)
+        print("  → Saving conversation...")
+        self._save_conversation_entry(
+            case_id=case_id,
+            user_message=text_description,
+            llm_response=llm_response,
+            is_initial=True
+        )
+        
+        # Step 7: Save to history (CV analysis, predictions, image path)
+        print("  → Saving history...")
+        from datetime import datetime
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        self._save_history_entry(
+            case_id=case_id,
+            date=current_date,
+            cv_analysis=cv_analysis,
+            predictions=predictions,
+            image_path=str(image) if image else None
+        )
+        
+        # Step 8: Prepare complete results
         results = {
             "llm_response": llm_response,
             "predictions": predictions,
             "cv_analysis": cv_analysis,
             "embedding": embedding,
-            "text_description": text_description,
-            "initial_answer": llm_response,  # Store for future chat context
-            "conversation_history": []  # Initialize empty conversation history
+            "text_description": text_description
         }
-        
-        # Step 6: Save results to disk/browser
-        print("  → Saving results...")
-        self._save_results(case_id, results)
         
         print(f"✓ Initial prediction complete for case {case_id}")
         return results
@@ -119,10 +132,10 @@ class APIManager:
         Handle follow-up chat messages from the user.
         
         Workflow:
-        1. Load case history and previous conversation
-        2. Call LLM API with user's question
-        3. Update conversation history
-        4. Save updated data
+        1. Load conversation history
+        2. Get initial answer from first conversation entry
+        3. Call LLM API with user's question
+        4. Save updated conversation
         5. Return response
         
         Args:
@@ -132,25 +145,34 @@ class APIManager:
         Returns:
             Dictionary containing:
                 - answer: LLM's response to the question
-                - conversation_history: Updated list of questions
+                - conversation_history: All conversation entries
         """
+        if self.dummy:
+            print(f"[DUMMY MODE] Using dummy chat message for case {case_id}")
+            return {
+                "answer": "This is a dummy response for frontend testing",
+                "conversation_history": []
+            }
+        
         print(f"Processing chat message for case {case_id}...")
         
-        # Step 1: Load case history
-        print("  → Loading case history...")
-        case_data = self._load_history(case_id)
+        # Step 1: Load conversation history
+        print("  → Loading conversation history...")
+        conversation_data = self._load_conversation_history(case_id)
         
-        # Extract initial answer and conversation history
-        initial_answer = case_data.get("initial_answer", "")
-        conversation_history = case_data.get("conversation_history", [])
-        
-        if not initial_answer:
+        if not conversation_data or len(conversation_data) == 0:
             raise ValueError(
-                f"No initial analysis found for case {case_id}. "
+                f"No conversation found for case {case_id}. "
                 "Please run get_initial_prediction first."
             )
         
-        # Step 2: Call LLM API for follow-up
+        # Step 2: Get initial answer from first entry
+        initial_answer = conversation_data[0].get("llm_response", "")
+        
+        # Build conversation history for context (list of previous questions)
+        conversation_history = [entry["user_message"] for entry in conversation_data[1:]]
+        
+        # Step 3: Call LLM API for follow-up
         print("  → Calling LLM for follow-up answer...")
         response = self._call_llm_followup(
             initial_answer=initial_answer,
@@ -158,18 +180,20 @@ class APIManager:
             conversation_history=conversation_history
         )
         
-        # Step 3: Update conversation history
-        updated_history = response["conversation_history"]
-        
-        # Step 4: Save updated conversation
+        # Step 4: Save new conversation entry
         print("  → Saving conversation...")
-        case_data["conversation_history"] = updated_history
-        case_data["last_question"] = user_query
-        case_data["last_answer"] = response["answer"]
-        self._save_results(case_id, case_data)
+        self._save_conversation_entry(
+            case_id=case_id,
+            user_message=user_query,
+            llm_response=response["answer"],
+            is_initial=False
+        )
         
         print(f"✓ Chat message processed for case {case_id}")
-        return response
+        return {
+            "answer": response["answer"],
+            "conversation_history": response["conversation_history"]
+        }
     
     # ==================== Helper Methods ====================
     
@@ -177,24 +201,70 @@ class APIManager:
         """
         Load case history from disk.
         
+        History structure:
+        {
+            "dates": {
+                "2025-11-15": {
+                    "cv_analysis": {...},
+                    "predictions": {...},
+                    "image_path": "path/to/image.jpg"
+                }
+            }
+        }
+        
         Args:
             case_id: Unique identifier for the case
             
         Returns:
-            Dictionary containing case history, or empty dict if not found
+            Dictionary containing case history
         """
-        history_file = self.history_dir / f"{case_id}.json"
+        if self.dummy:
+            print(f"[DUMMY MODE] Using dummy history for case {case_id}")
+            return {
+                "dates": {
+                    "2025-10-10": {
+                        "cv_analysis": {
+                            "area": 12.6,
+                            "color_profile": {
+                                "average_Lab": [63.5, 22.1, 10.8],
+                                "redness_index": 0.46,
+                                "texture_contrast": 0.17
+                            }
+                        },
+                        "predictions": {
+                            "eczema": 0.82,
+                            "contact_dermatitis": 0.12
+                        },
+                        "image_path": "images/case_001_2025-10-10.jpg"
+                    },
+                    "2025-10-20": {
+                        "cv_analysis": {
+                            "area": 9.8,
+                            "color_profile": {
+                                "average_Lab": [65.8, 20.0, 10.1],
+                                "redness_index": 0.38,
+                                "texture_contrast": 0.15
+                            }
+                        },
+                        "predictions": {
+                            "eczema": 0.75,
+                            "contact_dermatitis": 0.18
+                        },
+                        "image_path": "images/case_001_2025-10-20.jpg"
+                    }
+                }
+            }
         
-        if history_file.exists():
+        if self.history_file.exists():
             try:
-                with open(history_file, 'r') as f:
+                with open(self.history_file, 'r') as f:
                     return json.load(f)
             except json.JSONDecodeError:
                 print(f"Warning: Could not parse history file for case {case_id}")
-                return {}
+                return {"dates": {}}
         else:
             print(f"No history found for case {case_id}, starting fresh")
-            return {}
+            return {"dates": {}}
     
     def _save_results(self, case_id: str, data: Dict[str, Any]) -> None:
         """
@@ -204,6 +274,10 @@ class APIManager:
             case_id: Unique identifier for the case
             data: Dictionary of data to save
         """
+        if self.dummy:
+            print(f"  [DUMMY MODE] Skipping save for case {case_id}")
+            return
+        
         history_file = self.history_dir / f"{case_id}.json"
         
         # TODO: Implement browser storage for frontend integration
@@ -214,9 +288,9 @@ class APIManager:
         
         print(f"  Saved data to {history_file}")
     
-    def _run_local_ml_model(self, image: Any) -> Dict[str, Any]:
+    def _run_local_ml_model(self, image: Any) -> List[float]:
         """
-        Run local ML model for embeddings and CV analysis.
+        Run local ML model for embeddings.
         
         TODO: Integrate with actual ML model from src/ml_workflow/
         TODO: Handle different image input formats (PIL, numpy, file path)
@@ -226,16 +300,37 @@ class APIManager:
             image: Image data (format TBD)
             
         Returns:
-            Dictionary containing:
-                - embedding: Image embedding vector
-                - cv_analysis: Computer vision analysis (area, color, texture)
+            Image embedding vector (list of floats)
         """
-        # DUMMY IMPLEMENTATION
-        print("    [DUMMY] Running local ML model...")
+        if self.dummy:
+            print("    [DUMMY MODE] Returning dummy embeddings...")
+            return [0.1, 0.2, 0.3, 0.4] * 128  # Dummy 512-dim embedding
         
-        return {
-            "embedding": [0.1, 0.2, 0.3, 0.4] * 128,  # Dummy 512-dim embedding
-            "cv_analysis": {
+        # TODO: REAL IMPLEMENTATION
+        print("    [TODO] Running local ML model for embeddings...")
+        return [0.1, 0.2, 0.3, 0.4] * 128  # Placeholder
+    
+    def _run_cv_analysis(self, image: Any) -> Dict[str, Any]:
+        """
+        Run computer vision analysis on the image.
+        
+        TODO: Integrate with actual CV analysis from src/ml_workflow/
+        TODO: Handle different image input formats (PIL, numpy, file path)
+        TODO: Add proper error handling
+        
+        Args:
+            image: Image data (format TBD)
+            
+        Returns:
+            Dictionary containing CV analysis:
+                - area: Lesion area
+                - color_profile: Color metrics (Lab values, redness, etc.)
+                - boundary_irregularity: Shape metrics
+                - symmetry_score: Symmetry metrics
+        """
+        if self.dummy:
+            print("    [DUMMY MODE] Returning dummy CV analysis...")
+            return {
                 "area": 8.4,
                 "color_profile": {
                     "average_Lab": [67.2, 18.4, 9.3],
@@ -245,6 +340,16 @@ class APIManager:
                 "boundary_irregularity": 0.23,
                 "symmetry_score": 0.78
             }
+        
+        # TODO: REAL IMPLEMENTATION
+        print("    [TODO] Running CV analysis...")
+        return {
+            "area": 8.4,
+            "color_profile": {
+                "average_Lab": [67.2, 18.4, 9.3],
+                "redness_index": 0.34,
+                "texture_contrast": 0.12
+            },
         }
     
     def _run_cloud_ml_model(
@@ -267,9 +372,18 @@ class APIManager:
         Returns:
             Dictionary mapping disease names to confidence scores
         """
-        # DUMMY IMPLEMENTATION
-        print("    [DUMMY] Calling cloud ML model...")
+        if self.dummy:
+            print("    [DUMMY MODE] Returning dummy predictions...")
+            return {
+                "eczema": 0.78,
+                "contact_dermatitis": 0.15,
+                "psoriasis": 0.04,
+                "tinea_corporis": 0.02,
+                "seborrheic_dermatitis": 0.01
+            }
         
+        # TODO: REAL IMPLEMENTATION
+        print("    [TODO] Calling cloud ML model...")
         return {
             "eczema": 0.78,
             "contact_dermatitis": 0.15,
@@ -297,33 +411,32 @@ class APIManager:
         Returns:
             LLM-generated explanation text
         """
-        # DUMMY IMPLEMENTATION
-        print("    [DUMMY] Calling LLM explain API...")
+        if self.dummy:
+            print("    [DUMMY MODE] Returning dummy LLM explanation...")
+            return (
+                "It sounds like you might be dealing with eczema, which is a common "
+                "skin condition that causes red, itchy patches. Based on what you've "
+                "described and the analysis, the affected area shows signs of inflammation "
+                "with increased redness and texture changes typical of eczematous skin.\n\n"
+                "[DUMMY RESPONSE - This is test data for frontend integration]"
+            )
         
-        # TODO: Uncomment and configure when API is ready
-        # try:
-        #     response = requests.post(
-        #         self.llm_explain_url,
-        #         json={
-        #             "predictions": predictions,
-        #             "metadata": metadata
-        #         },
-        #         timeout=30
-        #     )
-        #     response.raise_for_status()
-        #     return response.json()  # or response.text depending on API format
-        # except requests.exceptions.RequestException as e:
-        #     print(f"Error calling LLM API: {e}")
-        #     raise
-        
-        # Dummy response for now
-        return (
-            "It sounds like you might be dealing with eczema, which is a common "
-            "skin condition that causes red, itchy patches. Based on what you've "
-            "described and the analysis, the affected area shows signs of inflammation "
-            "with increased redness and texture changes typical of eczematous skin.\n\n"
-            "[DUMMY RESPONSE - Replace with actual LLM call]"
-        )
+        # TODO: REAL IMPLEMENTATION
+        print("    [TODO] Calling LLM explain API...")
+        try:
+            response = requests.post(
+                self.llm_explain_url,
+                json={
+                    "predictions": predictions,
+                    "metadata": metadata
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()  # or response.text depending on API format
+        except requests.exceptions.RequestException as e:
+            print(f"Error calling LLM API: {e}")
+            raise
     
     def _call_llm_followup(
         self,
@@ -348,34 +461,33 @@ class APIManager:
                 - answer: LLM's response
                 - conversation_history: Updated conversation history
         """
-        # DUMMY IMPLEMENTATION
-        print("    [DUMMY] Calling LLM followup API...")
+        if self.dummy:
+            print("    [DUMMY MODE] Returning dummy LLM followup...")
+            updated_history = conversation_history + [question]
+            return {
+                "answer": (
+                    f"That's a great question about: '{question}'. "
+                    "[DUMMY RESPONSE - This is test data for frontend integration]"
+                ),
+                "conversation_history": updated_history
+            }
         
-        # TODO: Uncomment and configure when API is ready
-        # try:
-        #     response = requests.post(
-        #         self.llm_followup_url,
-        #         json={
-        #             "initial_answer": initial_answer,
-        #             "question": question,
-        #             "conversation_history": conversation_history
-        #         },
-        #         timeout=30
-        #     )
-        #     response.raise_for_status()
-        #     return response.json()
-        # except requests.exceptions.RequestException as e:
-        #     print(f"Error calling LLM API: {e}")
-        #     raise
-        
-        # Dummy response for now
-        updated_history = conversation_history + [question]
-        return {
-            "answer": (
-                f"That's a great question about: '{question}'. "
-                "[DUMMY RESPONSE - Replace with actual LLM call]"
-            ),
-            "conversation_history": updated_history
-        }
+        # TODO: REAL IMPLEMENTATION
+        print("    [TODO] Calling LLM followup API...")
+        try:
+            response = requests.post(
+                self.llm_followup_url,
+                json={
+                    "initial_answer": initial_answer,
+                    "question": question,
+                    "conversation_history": conversation_history
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error calling LLM API: {e}")
+            raise
 
 
