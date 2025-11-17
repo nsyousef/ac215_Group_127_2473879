@@ -13,7 +13,7 @@ import seaborn as sns
 
 class Trainer:
     
-    def __init__(self, config, train_loader, val_loader, test_loader, info, vision_model, multimodal_classifier, device):
+    def __init__(self, config, train_loader, val_loader, test_loader, info, vision_model, multimodal_classifier, device, config_path=None, config_filename=None):
         """
         Initialize trainer with configuration, dataloaders, model, and device
         
@@ -26,6 +26,8 @@ class Trainer:
             vision_model: Initialized vision model
             multimodal_classifier: Initialized multimodal classifier
             device: Device to use for training (cuda/cpu)
+            config_path: Path to the config file (optional)
+            config_filename: Filename of the config (without path/extension) for wandb naming (optional)
         """
         self.config = config
         self.train_loader = train_loader
@@ -35,6 +37,8 @@ class Trainer:
         self.vision_model = vision_model
         self.multimodal_classifier = multimodal_classifier
         self.device = device
+        self.config_path = config_path
+        self.config_filename = config_filename
         
         # Extract configuration sections
         self.data_config = config['data']
@@ -130,7 +134,9 @@ class Trainer:
         if 'fusion_weights' in multimodal_info:
             logger.info(f"Fusion weights -> alpha_vision: {multimodal_info['fusion_weights']['alpha_vision']:.3f}, alpha_text: {multimodal_info['fusion_weights']['alpha_text']:.3f}")
 
-        with wandb.init(project=self.output_config['wandb_project'], name=self.output_config['experiment_name'], config=self.config) as run:
+        # Use config filename for wandb run name if available, otherwise fall back to experiment_name
+        run_name = self.config_filename if self.config_filename else self.output_config['experiment_name']
+        with wandb.init(project=self.output_config['wandb_project'], name=run_name, config=self.config) as run:
         
             for epoch in range(self.start_epoch, num_epochs):
                 self.current_epoch = epoch

@@ -211,7 +211,12 @@ def load_parquet(path: str, **read_parquet_kwargs):
         import io
         import pandas as pd
 
-        return pd.read_parquet(io.BytesIO(data), **read_parquet_kwargs)
+        # Use engine='pyarrow' for better performance if available
+        try:
+            return pd.read_parquet(io.BytesIO(data), engine='pyarrow', **read_parquet_kwargs)
+        except (ImportError, ValueError):
+            # Fall back to default engine if pyarrow not available
+            return pd.read_parquet(io.BytesIO(data), **read_parquet_kwargs)
     else:
         import pandas as pd
         return pd.read_parquet(path, **read_parquet_kwargs)

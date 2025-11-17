@@ -43,8 +43,9 @@ image = (
 app = modal.App("skin-disease-training", image=image)
 
 @app.function(
-    gpu="H200",
-    timeout=7200,
+    gpu="A100-80GB",
+    timeout=14400,
+    region="us-east",
     secrets=[
         modal.Secret.from_name("wandb-secret"),
         modal.Secret.from_name("gcs-secret"),

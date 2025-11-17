@@ -37,7 +37,8 @@ def _get_worker_fs():
                 _worker_fs = gcsfs.GCSFileSystem(
                     token=credentials,  # Pass credentials object directly
                     cache_timeout=600,      
-                    default_block_size=2**22,
+                    default_block_size=2**24, 
+                    cache_type='bytes',  # Better memory efficiency
                     retry_reads=True
                 )
             except DefaultCredentialsError:
@@ -46,7 +47,8 @@ def _get_worker_fs():
                 _worker_fs = gcsfs.GCSFileSystem(
                     token="cloud",
                     cache_timeout=600,
-                    default_block_size=2**22,
+                    default_block_size=2**24,
+                    cache_type='bytes',  # Better memory efficiency
                     retry_reads=True
                 )
         except ImportError:
@@ -54,7 +56,8 @@ def _get_worker_fs():
             _worker_fs = gcsfs.GCSFileSystem(
                 token="cloud",
                 cache_timeout=600,
-                default_block_size=2**22,
+                default_block_size=2**24,
+                cache_type='bytes',  # Better memory efficiency
                 retry_reads=True
             )
     return _worker_fs

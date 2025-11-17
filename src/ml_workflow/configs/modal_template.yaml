@@ -148,7 +148,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "skin_disease_classification"
+  experiment_name: "modal_template"  # Fallback name if config_filename is not available
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration
@@ -156,4 +156,3 @@ checkpoint:
   save_frequency: 1000  # Save checkpoint every N epochs (it saves the best model anyway)
   keep_last: 1  # Keep last N checkpoints
   load_from: null  # Path to checkpoint to load from (null for no loading)
-  
