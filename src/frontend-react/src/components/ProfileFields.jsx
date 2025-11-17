@@ -28,13 +28,12 @@ export default function ProfileFields({ value, onChange }) {
   return (
     <Stack spacing={3}>
       <TextField
-        label="Age"
-        type="number"
-        value={value.age || ''}
-        onChange={handleChange('age')}
+        label="Date of Birth"
+        type="date"
+        value={value.dateOfBirth || ''}
+        onChange={handleChange('dateOfBirth')}
         fullWidth
-        inputProps={{ min: 0, max: 150 }}
-        helperText="Enter your age"
+        InputLabelProps={{ shrink: true }}
       />
 
       <TextField

@@ -8,7 +8,7 @@ const ProfileContext = createContext();
 
 export function ProfileProvider({ children }) {
   const [profile, setProfile] = useState({
-    age: '',
+    dateOfBirth: '',
     sex: '',
     raceEthnicity: '',
     hasCompletedOnboarding: false,
@@ -21,7 +21,28 @@ export function ProfileProvider({ children }) {
       try {
         if (isElectron()) {
           const data = await FileAdapter.loadProfile();
-          if (data) setProfile({ hasCompletedOnboarding: false, ...data });
+          if (data) {
+            if (typeof data.age !== 'undefined' && !data.dateOfBirth) {
+              // Legacy profile detected. Clear all app data (test-only) per request.
+              try {
+                await FileAdapter.resetAppData();
+              } catch {}
+              setProfile({
+                dateOfBirth: '',
+                sex: '',
+                raceEthnicity: '',
+                hasCompletedOnboarding: false,
+              });
+            } else {
+              const normalized = {
+                dateOfBirth: data.dateOfBirth || '',
+                sex: data.sex || '',
+                raceEthnicity: data.raceEthnicity || '',
+                hasCompletedOnboarding: false,
+              };
+              setProfile(normalized);
+            }
+          }
         }
       } catch (e) {
         console.warn('Failed to load profile:', e);
@@ -37,7 +58,15 @@ export function ProfileProvider({ children }) {
     // Attempt to persist
     if (isElectron()) {
       try {
-        await FileAdapter.saveProfile({ ...profile, ...newProfile });
+        // Persist only known fields (exclude legacy 'age')
+        const toSave = {
+          dateOfBirth: (newProfile.dateOfBirth ?? profile.dateOfBirth) || '',
+          sex: (newProfile.sex ?? profile.sex) || '',
+          raceEthnicity: (newProfile.raceEthnicity ?? profile.raceEthnicity) || '',
+          hasCompletedOnboarding:
+            newProfile.hasCompletedOnboarding ?? profile.hasCompletedOnboarding ?? false,
+        };
+        await FileAdapter.saveProfile(toSave);
       } catch (e) {
         console.error('Failed to save profile:', e);
       }

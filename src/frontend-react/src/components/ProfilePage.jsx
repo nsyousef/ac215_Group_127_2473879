@@ -22,7 +22,7 @@ import ProfileFields from '@/components/ProfileFields';
 export default function ProfilePage({ onBack, showActions = true }) {
   const { profile, updateProfile, loading } = useProfile();
   const [formData, setFormData] = useState({
-    age: '',
+    dateOfBirth: '',
     sex: '',
     raceEthnicity: '',
   });
@@ -32,7 +32,7 @@ export default function ProfilePage({ onBack, showActions = true }) {
   useEffect(() => {
     if (!loading) {
       setFormData({
-        age: profile.age || '',
+        dateOfBirth: profile.dateOfBirth || '',
         sex: profile.sex || '',
         raceEthnicity: profile.raceEthnicity || '',
       });
@@ -60,7 +60,7 @@ export default function ProfilePage({ onBack, showActions = true }) {
       // ignore in non-Electron or on error
     }
     // Reset local profile to defaults and mark onboarding incomplete
-    await updateProfile({ age: '', sex: '', raceEthnicity: '', hasCompletedOnboarding: false });
+    await updateProfile({ dateOfBirth: '', sex: '', raceEthnicity: '', hasCompletedOnboarding: false });
     setConfirmOpen(false);
     // Reload to ensure all contexts pick up cleared state
     if (typeof window !== 'undefined') {

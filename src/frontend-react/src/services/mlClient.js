@@ -40,7 +40,7 @@ class MLClient {
    * @param {string} image - Base64 encoded image or file path
    * @param {string} textDescription - User's description of symptoms
    * @param {string} caseId - Unique case identifier
-   * @param {Object} metadata - Optional user metadata (age, sex, ethnicity)
+  * @param {Object} metadata - Optional user metadata (dateOfBirth, sex, ethnicity)
    * @returns {Promise<Object>} Results object with predictions, LLM response, etc.
    */
   async getInitialPrediction(image, textDescription, caseId, metadata = {}) {
