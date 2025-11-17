@@ -35,21 +35,31 @@ export default function ResultsPanel({ selectedCondition, showActions = true, is
                                 overflow: 'hidden',
                             }}
                         >
-                            <Image
-                                src="/nasty_skin.jpg"
-                                alt={selectedCondition.name}
-                                fill
-                                style={{ objectFit: 'cover' }}
-                            />
+                            {/* Display user's uploaded image if available */}
+                            {selectedCondition.image ? (
+                                <img
+                                    src={selectedCondition.image}
+                                    alt={selectedCondition.name}
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                    }}
+                                />
+                            ) : (
+                                <Image
+                                    src="/nasty_skin.jpg"
+                                    alt={selectedCondition.name}
+                                    fill
+                                    style={{ objectFit: 'cover' }}
+                                />
+                            )}
                         </Box>
                         <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
                             {selectedCondition.name}
                         </Typography>
-                        <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#666', mb: 3 }}>
-                            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                        <Typography variant="body2" sx={{ color: '#666', mb: 2, whiteSpace: 'pre-wrap' }}>
+                            {selectedCondition.llmResponse || selectedCondition.description || 'No description available.'}
                         </Typography>
                     </>
                 ) : (

@@ -1,5 +1,4 @@
 // Lightweight disease service with adapter selection
-import { CONDITIONS } from '@/lib/constants';
 import { isElectron } from '@/utils/config';
 // File adapter is a stub for future electron/file-system based loading
 import FileAdapter from './adapters/fileAdapter';
@@ -11,15 +10,13 @@ const DiseaseService = {
     if (isElectron()) {
       try {
         const data = await FileAdapter.load();
-        if (data && data.length) return data;
+        if (Array.isArray(data)) return data; // May be empty
       } catch (e) {
-        // fall back to bundled constants
-        console.warn('FileAdapter failed, falling back to bundled CONDITIONS', e);
+        console.warn('FileAdapter failed to load diseases', e);
       }
     }
-
-    // Default: return bundled constants (synchronous, but wrap in Promise)
-    return Promise.resolve(CONDITIONS);
+    // Do NOT load bundled dummy diseases anymore; return empty list
+    return Promise.resolve([]);
   },
 };
 

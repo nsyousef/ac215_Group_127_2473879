@@ -12,7 +12,9 @@
     "build": "next build",
     "build-electron": "next build && electron-builder",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "node ./scripts/setup-python-env.js",
+    "python:venv": "node ./scripts/setup-python-env.js"
   },
   "dependencies": {
     "@emotion/react": "^11.11.0",

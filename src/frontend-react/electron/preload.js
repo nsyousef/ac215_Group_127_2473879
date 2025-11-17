@@ -38,4 +38,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Reset all app data
   resetAppData: () => ipcRenderer.invoke('reset-app-data'),
+
+  // ================= ML IPC =================
+  mlGetInitialPrediction: (caseId, image, textDescription) =>
+    ipcRenderer.invoke('ml:getInitialPrediction', { caseId, image, textDescription }),
+  mlChatMessage: (caseId, question) =>
+    ipcRenderer.invoke('ml:chatMessage', { caseId, question }),
 });

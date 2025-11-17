@@ -489,5 +489,122 @@ class APIManager:
         except requests.exceptions.RequestException as e:
             print(f"Error calling LLM API: {e}")
             raise
-
-
+    
+    def _save_conversation_entry(
+        self,
+        case_id: str,
+        user_message: str,
+        llm_response: str,
+        is_initial: bool = False
+    ) -> None:
+        """
+        Save a conversation entry to disk.
+        
+        Args:
+            case_id: Unique identifier for the case
+            user_message: User's message/question
+            llm_response: LLM's response
+            is_initial: Whether this is the initial conversation entry
+        """
+        if self.dummy:
+            print(f"    [DUMMY MODE] Skipping save conversation for case {case_id}")
+            return
+        
+        conversation_file = self.conversation_dir / f"{case_id}.json"
+        
+        # Load existing conversation
+        conversation_data = []
+        if conversation_file.exists():
+            try:
+                with open(conversation_file, 'r') as f:
+                    conversation_data = json.load(f)
+            except json.JSONDecodeError:
+                print(f"Warning: Could not parse conversation file for case {case_id}")
+        
+        # Append new entry
+        entry = {
+            "user_message": user_message,
+            "llm_response": llm_response,
+            "timestamp": Path(conversation_file).stat().st_mtime if conversation_file.exists() else None,
+            "is_initial": is_initial
+        }
+        conversation_data.append(entry)
+        
+        # Save
+        with open(conversation_file, 'w') as f:
+            json.dump(conversation_data, f, indent=2)
+        
+        print(f"    Saved conversation entry to {conversation_file}")
+    
+    def _save_history_entry(
+        self,
+        case_id: str,
+        date: str,
+        cv_analysis: Dict[str, Any],
+        predictions: Dict[str, float],
+        image_path: Optional[str] = None
+    ) -> None:
+        """
+        Save a history entry to disk.
+        
+        Args:
+            case_id: Unique identifier for the case
+            date: Date of the entry (YYYY-MM-DD)
+            cv_analysis: CV analysis results
+            predictions: Disease predictions
+            image_path: Optional path to image
+        """
+        if self.dummy:
+            print(f"    [DUMMY MODE] Skipping save history for case {case_id}")
+            return
+        
+        history_file = self.history_dir / f"{case_id}.json"
+        
+        # Load existing history
+        history_data = {"dates": {}}
+        if history_file.exists():
+            try:
+                with open(history_file, 'r') as f:
+                    history_data = json.load(f)
+            except json.JSONDecodeError:
+                print(f"Warning: Could not parse history file for case {case_id}")
+        
+        # Add new entry
+        history_data["dates"][date] = {
+            "cv_analysis": cv_analysis,
+            "predictions": predictions,
+            "image_path": image_path
+        }
+        
+        # Save
+        with open(history_file, 'w') as f:
+            json.dump(history_data, f, indent=2)
+        
+        print(f"    Saved history entry to {history_file}")
+    
+    def _load_conversation_history(self, case_id: str) -> List[Dict[str, Any]]:
+        """
+        Load conversation history from disk.
+        
+        Args:
+            case_id: Unique identifier for the case
+            
+        Returns:
+            List of conversation entries
+        """
+        if self.dummy:
+            print(f"    [DUMMY MODE] Returning empty conversation for case {case_id}")
+            return []
+        
+        conversation_file = self.conversation_dir / f"{case_id}.json"
+        
+        if conversation_file.exists():
+            try:
+                with open(conversation_file, 'r') as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                print(f"Warning: Could not parse conversation file for case {case_id}")
+                return []
+        else:
+            print(f"No conversation found for case {case_id}")
+            return []

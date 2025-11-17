@@ -10,3 +10,17 @@ scratch.txt
 # production builds
 /out/
 /dist/
+
+# Python virtual environment (local dev only)
+python/.venv/
+python/__pycache__/
+python/*.pyc
+python/.python-bin-path.json
+
+# Python ML outputs (saved conversations/history)
+python/history/
+python/conversations/
+
+# Electron build artifacts
+dist/
+out/
