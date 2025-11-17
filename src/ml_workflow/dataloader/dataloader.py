@@ -139,8 +139,8 @@ class ImageDataset(Dataset):
                 if not self.use_local:
                     fs = self._get_fs()
                     with fs.open(path, "rb") as f:
-                        img = Image.open(f)
-                        img = img.convert(self.convert_mode)
+                        img = Image.open(f).convert(self.convert_mode)
+                        img.load()
                 else:
                     with open(path, "rb") as f:
                         img = Image.open(f).convert(self.convert_mode)

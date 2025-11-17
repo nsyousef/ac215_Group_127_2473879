@@ -1,11 +1,17 @@
-import modal
+import logging
 from pathlib import Path
+
+import modal
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
 # Get paths - need to mount src/ directory so ml_workflow package structure works
 SRC_DIR = Path(__file__).parent.parent  # Goes up to src/
 ML_WORKFLOW_DIR = Path(__file__).parent  # ml_workflow directory
 
 # Define the image with all required dependencies AND your local code
+
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install([
@@ -37,11 +43,12 @@ image = (
 app = modal.App("skin-disease-training", image=image)
 
 @app.function(
-    gpu="A100-40GB",
+    gpu="H200",
     timeout=7200,
     secrets=[
         modal.Secret.from_name("wandb-secret"),
         modal.Secret.from_name("gcs-secret"),
+        modal.Secret.from_name("gcp-project-secret"),
     ],
     volumes={
         "/checkpoints": modal.Volume.from_name("training-checkpoints", create_if_missing=True)
@@ -63,13 +70,13 @@ def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
             
             # Set the environment variable that gcsfs will use
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
-            print(f"✓ GCS credentials written to {creds_path}")
+            logger.info("GCS credentials written to %s", creds_path)
         except json.JSONDecodeError as e:
-            print(f"⚠ Error parsing GCS credentials JSON: {e}")
+            logger.error("Error parsing GCS credentials JSON: %s", e)
         except Exception as e:
-            print(f"⚠ Error setting up GCS credentials: {e}")
+            logger.error("Error setting up GCS credentials: %s", e)
     else:
-        print("⚠ Warning: GOOGLE_APPLICATION_CREDENTIALS_JSON not found")
+        logger.warning("GOOGLE_APPLICATION_CREDENTIALS_JSON not found")
     
     # Set up Python path FIRST, before ANY other imports
     src_path = "/app/src"
@@ -95,19 +102,19 @@ def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
         with open(test_file, 'w') as f:
             f.write('test')
         os.remove(test_file)
-        print(f"✓ Checkpoint directory {checkpoint_dir} is writable")
+        logger.info("Checkpoint directory %s is writable", checkpoint_dir)
     except (OSError, IOError) as e:
-        print(f"⚠ Warning: Cannot write to {checkpoint_dir}: {e}")
+        logger.warning("Cannot write to %s: %s", checkpoint_dir, e)
     
     # Remove GCS mount verification since we're not mounting
-    print("✓ Using direct gs:// path access (no mount needed)")
+    logger.info("Using direct gs:// path access (no mount needed)")
     
     # Login to wandb
     import wandb
     if "WANDB_API_KEY" in os.environ:
         wandb.login(key=os.environ["WANDB_API_KEY"])
     else:
-        print("Warning: WANDB_API_KEY not found. Wandb logging may fail.")
+        logger.warning("WANDB_API_KEY not found. Wandb logging may fail.")
     
     # Import using absolute import - this should work now that path is set
     # The package structure is: /app/src/ml_workflow/
@@ -115,23 +122,23 @@ def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
     try:
         from ml_workflow.main import initialize_model
     except ImportError as e:
-        print(f"Import error details:")
-        print(f"  sys.path: {sys.path[:5]}")
-        print(f"  cwd: {os.getcwd()}")
-        print(f"  ml_workflow exists: {os.path.exists(ml_workflow_path)}")
-        print(f"  ml_workflow/__init__.py exists: {os.path.exists(f'{ml_workflow_path}/__init__.py')}")
+        logger.error("Import error details:")
+        logger.error("  sys.path: %s", sys.path[:5])
+        logger.error("  cwd: %s", os.getcwd())
+        logger.error("  ml_workflow exists: %s", os.path.exists(ml_workflow_path))
+        logger.error("  ml_workflow/__init__.py exists: %s", os.path.exists(f'{ml_workflow_path}/__init__.py'))
         if os.path.exists(ml_workflow_path):
-            print(f"  ml_workflow contents: {os.listdir(ml_workflow_path)[:10]}")
+            logger.error("  ml_workflow contents: %s", os.listdir(ml_workflow_path)[:10])
         raise
 
     # Resolve config path
     if not config_path.startswith("/"):
         config_path = os.path.join(ml_workflow_path, config_path)
     
-    print(f"Starting training...")
-    print(f"  Config: {config_path}")
-    print(f"  Working dir: {os.getcwd()}")
-    print(f"  Python path: {sys.path[0]}")
+    logger.info("Starting training...")
+    logger.info("  Config: %s", config_path)
+    logger.info("  Working dir: %s", os.getcwd())
+    logger.info("  Python path: %s", sys.path[0])
     
     return_dict = initialize_model(config_path)
     trainer = return_dict['trainer']
@@ -148,5 +155,5 @@ def main(config_path: str = "configs/modal_template.yaml"):
         modal run modal_training.py --config-path configs/modal_template.yaml
     """
     result = train_with_gcs.remote(config_path=config_path)
-    print(result)
+    logger.info(result)
     
