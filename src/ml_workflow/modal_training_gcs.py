@@ -1,3 +1,7 @@
+"""
+Modal Training with GCS CloudBucketMount. This approach uses CloudBucketMount to directly access GCS bucket.
+"""
+
 import logging
 from pathlib import Path
 
@@ -164,4 +168,3 @@ def main(config_path: str = "configs/modal_template.yaml"):
     """
     result = train_with_gcs.remote(config_path=config_path)
     logger.info(result)
-    
