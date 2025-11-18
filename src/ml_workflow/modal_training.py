@@ -32,7 +32,7 @@ image = (
         "safetensors",
         "google-cloud-storage",
         "pyarrow",
-        "gcsfs",  # For GCS filesystem access
+        "gcsfs",  # For GCS filesystem access (kept for compatibility)
     ])
     .apt_install(["git"])
     # Mount src/ directory so ml_workflow package structure works
@@ -50,9 +50,16 @@ app = modal.App("skin-disease-training", image=image)
         modal.Secret.from_name("wandb-secret"),
         modal.Secret.from_name("gcs-secret"),
         modal.Secret.from_name("gcp-project-secret"),
+        modal.Secret.from_name("gcp-hmac-secret"),  # HMAC key for mounting
     ],
     volumes={
-        "/checkpoints": modal.Volume.from_name("training-checkpoints", create_if_missing=True)
+        "/checkpoints": modal.Volume.from_name("training-checkpoints", create_if_missing=True),
+        "/gcs-data": modal.CloudBucketMount(
+            "derma-datasets-2",
+            bucket_endpoint_url="https://storage.googleapis.com",
+            secret=modal.Secret.from_name("gcp-hmac-secret"),
+            read_only=True,
+        )
     }
 )
 def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
@@ -150,7 +157,7 @@ def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
 @app.local_entrypoint()
 def main(config_path: str = "configs/modal_template.yaml"):
     """
-    Local entrypoint to run training on Modal
+    Local entrypoint to run training on Modal with GCS CloudBucketMount
     
     Usage:
         modal run modal_training.py --config-path configs/modal_template.yaml

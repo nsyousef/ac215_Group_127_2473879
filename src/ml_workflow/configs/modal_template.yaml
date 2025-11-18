@@ -2,9 +2,9 @@
 
 # Data source configuration  
 data:
-  use_local: False  # Use GCS paths directly (gs://) - more reliable than mounts
-  metadata_path: "gs://derma-datasets-2/final/metadata_all_harmonized.csv"  # Direct GCS path
-  img_prefix: "gs://derma-datasets-2/final/imgs"  # Direct GCS path
+  use_local: True  # Use Modal CloudBucketMount for fast local access
+  metadata_path: "/gcs-data/final/metadata_all_harmonized.csv"  # Mounted from GCS bucket
+  img_prefix: "/gcs-data/final/imgs"  # Mounted from GCS bucket
   min_samples_per_label: 1000
   datasets:
     - fitzpatrick17k

@@ -2,9 +2,9 @@
 
 # Data source configuration  
 data:
-  use_local: False  # Use GCS paths directly (gs://) - more reliable than mounts
-  metadata_path: "gs://derma-datasets-2/final/metadata_all_harmonized.csv"  # Direct GCS path
-  img_prefix: "gs://derma-datasets-2/final/imgs"  # Direct GCS path
+  use_local: True  # Use Modal CloudBucketMount for fast local access
+  metadata_path: "/gcs-data/final/metadata_all_harmonized.csv"  # Mounted from GCS bucket
+  img_prefix: "/gcs-data/final/imgs"  # Mounted from GCS bucket
   min_samples_per_label: 100
   datasets:
     - fitzpatrick17k
@@ -21,7 +21,6 @@ data:
     - twitter
     - youtube
   has_text: True # True to filter for only datasets with text descriptions; False to filter for datasets without text descriptions.
-  data_fraction: 0.25  # Use 10% of data for faster testing/training
 
   # Data splits
   test_size: 0.1
@@ -37,7 +36,7 @@ data:
 training:
   batch_size: 16
   num_workers: 8
-  prefetch_factor: 4
+  prefetch_factor: 2
   num_epochs: 10
   patience: 5
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
@@ -59,13 +58,13 @@ augmentation:
   brightness_jitter: 0.1
   contrast_jitter: 0.1
   saturation_jitter: 0.1
-  hue_jitter: 0.05
+  hue_jitter: 0.01
   rotation_degrees: 25
   translate: null
   scale: [0.9, 1.1]
   grayscale_prob: null
   horizontal_flip_prob: 0.5
-  vertical_flip_prob: 0.5
+  vertical_flip_prob: null
 
 # Vision model configuration
 vision_model:
