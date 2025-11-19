@@ -556,7 +556,9 @@ class Trainer:
         additional_info = {
             'best_val_loss': self.best_val_loss,
             'patience_counter': self.patience_counter,
-            'device': str(self.device)
+            'device': str(self.device),
+            'normalization_mean': self.info['mean'],
+            'normalization_std': self.info['std'],
         }
 
         # Include all optimizer states

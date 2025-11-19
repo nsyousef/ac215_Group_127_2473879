@@ -54,65 +54,50 @@ class VisionEncoder:
         logger.info(f"Loading vision model from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         
-  
+        # Extract config (at top level)
         config = checkpoint.get('config', {})
-        # Try different possible config locations
-        if 'vision_model' in config:
-            # Config is at top level: config['vision_model']
-            vision_config = config['vision_model']
-        elif 'model' in config and 'vision_model' in config['model']:
-            # Config is nested: config['model']['vision_model']
-            vision_config = config['model']['vision_model']
-        else:
-            # Fallback: try to reconstruct from checkpoint metadata
-            logger.warning("Could not find vision_model config in checkpoint, using defaults")
-            vision_config = {
-                'name': checkpoint.get('model_name', 'resnet50'),
-                'pretrained': False,  # Already trained
-                'img_size': checkpoint.get('img_size', (224, 224)),
-                'pooling_type': checkpoint.get('pooling_type', 'avg')
-            }
+        if not config:
+            raise ValueError("No config found in checkpoint")
         
-        # Create model with config
+        vision_config = config.get('vision_model')
+        if vision_config is None:
+            raise ValueError(
+                f"No 'vision_model' key found in checkpoint config. "
+                f"Available keys: {list(config.keys())}"
+            )
+        
+        # Create model with config from checkpoint
         logger.info(f"Creating vision model: {vision_config}")
         self.model = CNNModel(vision_config)
         
-        # 🔧 FIX: Load weights with better error handling
-        state_dict = checkpoint['model_state_dict']
-        
-        # Extract only vision_model weights
-        vision_state = {}
-        for k, v in state_dict.items():
-            if k.startswith('vision_model.'):
-                # Remove 'vision_model.' prefix
-                new_key = k.replace('vision_model.', '')
-                vision_state[new_key] = v
-        
-        if not vision_state:
+        # Load vision model weights (saved directly, no prefix)
+        if 'vision_model_state_dict' not in checkpoint:
             raise ValueError(
-                f"No vision_model weights found in checkpoint. "
-                f"Available keys: {list(state_dict.keys())[:5]}..."
+                f"No 'vision_model_state_dict' found in checkpoint. "
+                f"Available keys: {list(checkpoint.keys())}"
             )
         
-        # Load weights
-        missing_keys, unexpected_keys = self.model.load_state_dict(vision_state, strict=False)
-        
-        if missing_keys:
-            logger.warning(f"Missing keys when loading vision model: {missing_keys}")
-        if unexpected_keys:
-            logger.warning(f"Unexpected keys when loading vision model: {unexpected_keys}")
+        state_dict = checkpoint['vision_model_state_dict']
+        self.model.load_state_dict(state_dict, strict=True)
         
         self.model.to(self.device)
         self.model.eval()
         
-        # Setup preprocessing with checkpoint's normalization stats
+        # Get normalization from checkpoint
         mean = checkpoint.get('normalization_mean', [0.485, 0.456, 0.406])
         std = checkpoint.get('normalization_std', [0.229, 0.224, 0.225])
-        self.transform = get_test_valid_transform(mean, std, img_size)
+        
+        # Use img_size from config (not constructor param when loading checkpoint)
+        self.img_size = tuple(vision_config.get('img_size', (224, 224)))
+        
+        self.transform = get_test_valid_transform(mean, std, self.img_size)
         
         logger.info(f"Vision encoder loaded successfully from checkpoint")
         logger.info(f"  Device: {self.device}")
         logger.info(f"  Embedding dim: {self.model.embedding_dim}")
+        logger.info(f"  Image size: {self.img_size}")
+        logger.info(f"  Normalization: mean={mean}, std={std}")
+        logger.info(f"  Model: {vision_config['name']}")
     
     @torch.no_grad()
     def encode(self, image: Union[Image.Image, str, np.ndarray]) -> np.ndarray:
