@@ -20,20 +20,17 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
       try {
         let data = [];
 
-        // In Electron, try to load from FileAdapter (file system); otherwise fall back to bundled JSON
+        // In Electron, try to load from FileAdapter (file system); else start empty
         if (isElectron() && conditionId) {
           try {
             data = await FileAdapter.loadTimeTracking(conditionId);
           } catch (e) {
-            console.warn('FileAdapter failed, falling back to bundled data', e);
-            // Fall back to bundled JSON
-            const res = await fetch('/assets/data/time_tracking.json');
-            data = await res.json();
+            console.warn('FileAdapter failed to load time tracking', e);
+            data = [];
           }
         } else if (!isElectron()) {
-          // Not in Electron, load from bundled JSON
-          const res = await fetch('/assets/data/time_tracking.json');
-          data = await res.json();
+          // Not in Electron, do not load bundled data
+          data = [];
         }
 
         // Filter by conditionId: if conditionId is provided, only show its entries.

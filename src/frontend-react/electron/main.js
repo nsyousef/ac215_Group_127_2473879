@@ -7,6 +7,8 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const isDev = require('electron-is-dev');
+const { spawn } = require('child_process');
+const fsSync = require('fs');
 
 let mainWindow;
 
@@ -241,25 +243,163 @@ ipcMain.handle('reset-app-data', async () => {
 });
 
 // ============================================================================
-// Window Creation
+// ML: Python Process Manager (one process per caseId)
 // ============================================================================
 
-const createWindow = () => {
-  mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
+const PY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+const pyProcesses = new Map(); // caseId -> { child, buffer, pending, lastUsed }
+
+function resolvePythonBin() {
+  // Dev path to repo-local venv
+  const devVenvPy = path.join(__dirname, '..', 'python', '.venv', 'bin', 'python3');
+  if (fsSync.existsSync(devVenvPy)) return devVenvPy;
+
+  // Optional meta file written by setup script
+  const metaPath = path.join(__dirname, '..', 'python', '.python-bin-path.json');
+  try {
+    if (fsSync.existsSync(metaPath)) {
+      const { python } = JSON.parse(fsSync.readFileSync(metaPath, 'utf8'));
+      if (python && fsSync.existsSync(python)) return python;
+    }
+  } catch {}
+
+  // Fallback to env or system
+  return process.env.PYTHON || 'python3';
+}
+
+function spawnPythonForCase(caseId) {
+  const existing = pyProcesses.get(caseId);
+  if (existing) {
+    existing.lastUsed = Date.now();
+    return existing;
+  }
+
+  const scriptPath = path.join(__dirname, '..', 'python', 'ml_server.py');
+  const pyBin = resolvePythonBin();
+  const pyCwd = path.join(__dirname, '..', 'python');
+  const child = spawn(pyBin, [scriptPath], {
+    cwd: pyCwd,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      PYTHONPATH: [pyCwd, process.env.PYTHONPATH || ''].filter(Boolean).join(path.delimiter),
     },
   });
 
-  const startUrl = isDev
-    ? 'http://localhost:3000' // Next.js dev server
-    : `file://${path.join(__dirname, '../out/index.html')}`; // Built app
+  const state = {
+    child,
+    buffer: '',
+    pending: new Map(), // id -> { resolve, reject }
+    lastUsed: Date.now(),
+  };
 
-  mainWindow.loadURL(startUrl);
+  child.stdout.on('data', (chunk) => {
+    state.buffer += chunk.toString();
+    let idx;
+    while ((idx = state.buffer.indexOf('\n')) >= 0) {
+      const line = state.buffer.slice(0, idx);
+      state.buffer = state.buffer.slice(idx + 1);
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        const { id, ok, result, error } = msg;
+        const p = state.pending.get(id);
+        if (p) {
+          state.pending.delete(id);
+          if (ok) p.resolve(result);
+          else p.reject(new Error(error || 'Python error'));
+        }
+      } catch (e) {
+        console.error('Failed to parse Python response:', e, line);
+      }
+    }
+  });
+
+  child.stderr.on('data', (chunk) => {
+    console.error(`[PY ${caseId}]`, chunk.toString());
+  });
+
+  child.on('exit', (code, signal) => {
+    console.warn(`Python process for case ${caseId} exited: code=${code} signal=${signal}`);
+    // Reject any pending requests
+    for (const [, p] of state.pending) {
+      p.reject(new Error('Python process exited'));
+    }
+    state.pending.clear();
+    pyProcesses.delete(caseId);
+  });
+
+  pyProcesses.set(caseId, state);
+  return state;
+}
+
+let reqSeq = 0;
+function pyRequest(caseId, cmd, data) {
+  const state = spawnPythonForCase(caseId);
+  const id = `${Date.now()}_${reqSeq++}`;
+  const payload = { id, cmd, data: { ...data, case_id: caseId } };
+  state.lastUsed = Date.now();
+
+  return new Promise((resolve, reject) => {
+    state.pending.set(id, { resolve, reject });
+    try {
+      state.child.stdin.write(JSON.stringify(payload) + '\n');
+    } catch (e) {
+      state.pending.delete(id);
+      reject(e);
+    }
+  });
+}
+
+// Cleanup timer for idle Python processes
+setInterval(() => {
+  const now = Date.now();
+  for (const [caseId, state] of pyProcesses.entries()) {
+    if (now - state.lastUsed > PY_IDLE_TIMEOUT_MS) {
+      console.log(`Killing idle Python process for case ${caseId}`);
+      try { state.child.kill(); } catch {}
+      pyProcesses.delete(caseId);
+    }
+  }
+}, 60 * 1000);
+
+// IPC handlers to call Python
+ipcMain.handle('ml:getInitialPrediction', async (event, { caseId, image, textDescription }) => {
+  if (!caseId) throw new Error('caseId required');
+  return await pyRequest(caseId, 'predict', { image, text_description: textDescription });
+});
+
+ipcMain.handle('ml:chatMessage', async (event, { caseId, question }) => {
+  if (!caseId) throw new Error('caseId required');
+  if (!question) throw new Error('question required');
+  return await pyRequest(caseId, 'chat', { question });
+});
+
+// ============================================================================
+// Window Creation
+// ============================================================================
+
+function createWindow() {
+  const mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  const startURL = isDev
+    ? 'http://127.0.0.1:3000'
+    : url.format({
+        pathname: path.join(__dirname, '../out/index.html'),
+        protocol: 'file:',
+        slashes: true,
+      });
+
+  mainWindow.loadURL(startURL);
 
   if (isDev) {
     mainWindow.webContents.openDevTools();

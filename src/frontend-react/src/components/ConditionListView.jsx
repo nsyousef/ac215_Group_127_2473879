@@ -45,7 +45,31 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
                                     primary={<Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{condition.name}</Typography>}
                                     secondary={<Typography variant="caption" sx={{ color: 'text.secondary' }}>{condition.description}</Typography>}
                                 />
-                                <Avatar sx={{ bgcolor: 'grey.200', width: compact ? 28 : 32, height: compact ? 28 : 32, ml: 1 }} />
+                                {/* Show image thumbnail if available, otherwise show avatar */}
+                                {condition.image ? (
+                                    <Box
+                                        sx={{
+                                            width: compact ? 28 : 40,
+                                            height: compact ? 28 : 40,
+                                            borderRadius: '4px',
+                                            overflow: 'hidden',
+                                            ml: 1,
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        <img
+                                            src={condition.image}
+                                            alt={condition.name}
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover',
+                                            }}
+                                        />
+                                    </Box>
+                                ) : (
+                                    <Avatar sx={{ bgcolor: 'grey.200', width: compact ? 28 : 32, height: compact ? 28 : 32, ml: 1 }} />
+                                )}
                             </ListItemButton>
                         </div>
                     ))}

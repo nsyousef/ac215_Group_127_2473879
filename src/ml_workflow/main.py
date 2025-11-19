@@ -34,6 +34,8 @@ except ImportError:
 
 def initialize_model(config_path):
     """This function will initialize everything needed for training based on config being used"""
+    import time
+    start_time = time.time()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using device: {device}")
@@ -41,6 +43,9 @@ def initialize_model(config_path):
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     logger.info(f"Loaded configuration from: {config_path}")
+    
+    # Extract config filename (without path and extension) for wandb run name
+    config_filename = Path(config_path).stem
     
     # Extract configuration sections
     data_config = config['data']
@@ -65,6 +70,8 @@ def initialize_model(config_path):
         img_prefix = GCS_IMAGE_PREFIX
     
     # Load the metadata file and filter it
+    logger.info("Loading metadata from GCS (this may take a while)...")
+    metadata_start = time.time()
     metadata = load_metadata(
         metadata_path, 
         min_samples=data_config['min_samples_per_label'], 
@@ -73,8 +80,11 @@ def initialize_model(config_path):
         has_text=data_config.get('has_text'),
         data_fraction=data_config.get('data_fraction')  # None = all data, 0.0-1.0 = fraction
     )
+    logger.info(f"Metadata loaded in {time.time() - metadata_start:.2f}s ({len(metadata):,} samples)")
 
     # Pre-compute embeddings and store in GCP
+    logger.info("Loading/computing embeddings (this may take a while for large datasets)...")
+    embedding_start = time.time()
     embeddings = load_or_compute_embeddings(
         data=metadata[['image_id', 'text_desc']],
         path=encoding_config['pre_existing_path'],
@@ -85,6 +95,7 @@ def initialize_model(config_path):
         pooling_strategy=encoding_config['pooling_type'],
         qwen_instr=encoding_config['qwen_instr'],
     )
+    logger.info(f"Embeddings loaded/computed in {time.time() - embedding_start:.2f}s")
 
     # combine embeddings with metadata
     metadata = metadata.merge(embeddings, how="left", on=IMG_ID_COL, validate="1:1")
@@ -95,6 +106,8 @@ def initialize_model(config_path):
     logger.info(f"Text embedding dimension: {text_embedding_dim}")
     
     # Create dataloaders with splits
+    logger.info("Creating dataloaders...")
+    dataloader_start = time.time()
     train_loader, val_loader, test_loader, info = create_dataloaders(
         metadata_df=metadata,
         img_prefix=img_prefix,
@@ -102,6 +115,7 @@ def initialize_model(config_path):
         training_config=training_config,
         augmentation_config=augmentation_config,
     )
+    logger.info(f"Dataloaders created in {time.time() - dataloader_start:.2f}s")
     
     logger.info(f"  Image size: {info['img_size']}")
     logger.info(f"  Batch size: {info['batch_size']}")    
@@ -110,7 +124,8 @@ def initialize_model(config_path):
     vision_config['img_size'] = data_config['img_size']
     
     # Initialize vision model
-    logger.info("Initializing vision model...")
+    logger.info("Initializing vision model (downloading weights if needed)...")
+    model_start = time.time()
     if vision_config['name'] in ['vit_b_16', 'vit_b_32', 'vit_l_16', 'vit_l_32']:
         vision_model = VisionTransformer(vision_config)
     else:
@@ -155,7 +170,9 @@ def initialize_model(config_path):
                 info = info, 
                 vision_model = vision_model,
                 multimodal_classifier = multimodal_classifier,
-                device = device
+                device = device,
+                config_path = config_path,
+                config_filename = config_filename
                 )
     
     # Load checkpoint if specified
@@ -194,7 +211,8 @@ def initialize_model(config_path):
             logger.error(f"Error loading checkpoint: {e}")
             logger.info("Continuing with untrained model...")
     
-    logger.info("Model and training setup initialized!")
+    logger.info(f"Vision model initialized in {time.time() - model_start:.2f}s")
+    logger.info(f"Model and training setup initialized! Total startup time: {time.time() - start_time:.2f}s")
 
     return_dict = {
         'trainer': trainer,

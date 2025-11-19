@@ -22,10 +22,11 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import FileAdapter from '@/services/adapters/fileAdapter';
-import { CONDITIONS, BODY_MAP_SPOTS } from '@/lib/constants';
+import { BODY_MAP_SPOTS } from '@/lib/constants';
 import BodyMapPicker from '@/components/BodyMapPicker';
 import { inferBodyPartFromCoords } from '@/lib/bodyMapUtils';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
+import mlClient from '@/services/mlClient';
 
 const BODY_PARTS = [
   'Head',
@@ -101,29 +102,75 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     setAnalyzing(true);
     setError(null);
     try {
-      // Simulate analysis delay (real ML will take ~30s). Keep simulation short for UX.
-      await new Promise((r) => setTimeout(r, 3000));
+      // Ensure we have map coordinates: if user picked from list only, set default based on label
+      let finalMapPos = mapPos;
+      if (!finalMapPos && bodyPart) {
+        try {
+          const match = Object.values(BODY_MAP_SPOTS).find((s) => s.label === bodyPart);
+          if (match) {
+            finalMapPos = {
+              leftPct: parseFloat(match.left),
+              topPct: parseFloat(match.top),
+            };
+            setMapPos(finalMapPos);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+      // Generate case ID for this analysis
+      const caseId = `case_${Date.now()}`;
 
-      // Simulate AI suggestion by selecting a likely condition name from bundled list
-      const suggestion = (CONDITIONS || []).find((c) => c.name && c.name !== '<disease title>');
-      const suggestedName = suggestion ? suggestion.name : 'Unknown Condition';
+      // Call ML client to get predictions (matches api_manager.py workflow)
+      const results = await mlClient.getInitialPrediction(
+        preview, // base64 image
+        note || '', // text description
+        caseId
+      );
 
-      // Create disease object (include map position if available)
+      // Find disease with highest confidence from predictions
+      const predictions = results.predictions || {};
+      let topDisease = 'Unknown Condition';
+      let maxConfidence = 0;
+      Object.entries(predictions).forEach(([disease, confidence]) => {
+        if (confidence > maxConfidence) {
+          maxConfidence = confidence;
+          topDisease = disease;
+        }
+      });
+
+      // Format disease name (capitalize first letter of each word)
+      const formattedName = topDisease
+        .split('_')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+      // Create brief description from first 50 chars of LLM response
+      const briefDesc = results.llm_response
+        ? results.llm_response.substring(0, 50) + '...'
+        : 'AI-analyzed condition';
+
+      // Create disease object with all ML results
       const newDisease = {
         id: Date.now(),
-        name: suggestedName,
-        description: note || '',
+        name: formattedName,
+        description: briefDesc,
         bodyPart,
-        mapPosition: mapPos || null,
-        // store preview as image for time-tracking initial entry
-        image: preview,
+        mapPosition: finalMapPos || null,
+        image: preview, // User's uploaded image
         createdAt: new Date().toISOString(),
+        // Store ML results for later use
+        caseId,
+        predictions: results.predictions,
+        cvAnalysis: results.cv_analysis,
+        llmResponse: results.llm_response,
+        textDescription: note || '',
       };
 
       // Add to context (and persist if possible)
       await addDisease(newDisease);
 
-      // Also save initial time-tracking entry (if FileAdapter supported)
+      // Save initial time-tracking entry with the uploaded image
       try {
         const entry = {
           id: Date.now(),
@@ -136,12 +183,30 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
           await FileAdapter.saveTimeEntry(newDisease.id, entry);
         }
       } catch (e) {
-        // ignore
+        console.warn('Failed to save time entry:', e);
+      }
+
+      // Save initial conversation entry (assistant initial LLM response)
+      try {
+        const conversationEntry = {
+          id: `conv_${Date.now()}`,
+          role: 'assistant',
+          text: results.llm_response,
+          time: new Date().toISOString(),
+          conditionId: newDisease.id,
+          isInitial: true,
+        };
+        if (FileAdapter && FileAdapter.saveChat) {
+          await FileAdapter.saveChat(newDisease.id, conversationEntry);
+        }
+      } catch (e) {
+        console.warn('Failed to save conversation:', e);
       }
 
       setAnalyzing(false);
       if (onSaved) onSaved(newDisease);
     } catch (e) {
+      console.error('Analysis failed:', e);
       setAnalyzing(false);
       setError('Analysis failed. Please try again.');
       // allow user to retry by going back to photo step

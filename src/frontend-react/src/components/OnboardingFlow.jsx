@@ -20,12 +20,12 @@ export default function OnboardingFlow({ onComplete }) {
   const { updateProfile, profile } = useProfile();
   const [step, setStep] = useState('splash'); // 'splash' | 'profile' | 'add'
   const [showAddFlow, setShowAddFlow] = useState(false);
-  const [formData, setFormData] = useState({ age: '', sex: '', raceEthnicity: '' });
+  const [formData, setFormData] = useState({ dateOfBirth: '', sex: '', raceEthnicity: '' });
 
   useEffect(() => {
     if (profile) {
       setFormData({
-        age: profile.age || '',
+        dateOfBirth: profile.dateOfBirth || '',
         sex: profile.sex || '',
         raceEthnicity: profile.raceEthnicity || '',
       });

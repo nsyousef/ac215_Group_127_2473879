@@ -37,7 +37,8 @@ def _get_worker_fs():
                 _worker_fs = gcsfs.GCSFileSystem(
                     token=credentials,  # Pass credentials object directly
                     cache_timeout=600,      
-                    default_block_size=2**22,
+                    default_block_size=2**24, 
+                    cache_type='bytes',  # Better memory efficiency
                     retry_reads=True
                 )
             except DefaultCredentialsError:
@@ -46,7 +47,8 @@ def _get_worker_fs():
                 _worker_fs = gcsfs.GCSFileSystem(
                     token="cloud",
                     cache_timeout=600,
-                    default_block_size=2**22,
+                    default_block_size=2**24,
+                    cache_type='bytes',  # Better memory efficiency
                     retry_reads=True
                 )
         except ImportError:
@@ -54,7 +56,8 @@ def _get_worker_fs():
             _worker_fs = gcsfs.GCSFileSystem(
                 token="cloud",
                 cache_timeout=600,
-                default_block_size=2**22,
+                default_block_size=2**24,
+                cache_type='bytes',  # Better memory efficiency
                 retry_reads=True
             )
     return _worker_fs
@@ -96,8 +99,8 @@ class ImageDataset(Dataset):
         # Convert DataFrame to lists for faster, multiprocessing-safe access
         self.image_paths = df[img_col].astype(str).tolist()
         self.labels_raw = df[label_col].astype(str).tolist()
-        # Pre-convert embeddings to torch tensors for better performance
-        self.text_embeddings = [torch.tensor(embedding_to_array(emb)) for emb in df[embedding_col].tolist()]
+        # Store embeddings as serialized arrays
+        self.text_embeddings = df[embedding_col].tolist()
         self.max_retries = MAX_RETRIES
         
         self.img_prefix = img_prefix.rstrip("/")
@@ -133,17 +136,26 @@ class ImageDataset(Dataset):
                 filename = self.image_paths[current_idx].lstrip("/")
                 path = f"{self.img_prefix}/{filename}" if self.img_prefix else filename
                 label = self.labels[current_idx]
-                text_embd = self.text_embeddings[current_idx]
+                # Convert embedding to tensor on-demand (avoids memory duplication in workers)
+                text_embd = torch.tensor(embedding_to_array(self.text_embeddings[current_idx]), dtype=torch.float32)
                 
                 # Load image from GCS or local
                 if not self.use_local:
                     fs = self._get_fs()
                     with fs.open(path, "rb") as f:
                         img = Image.open(f)
+                        # Handle palette images with transparency properly
+                        if img.mode == 'P' and 'transparency' in img.info:
+                            img = img.convert('RGBA')
                         img = img.convert(self.convert_mode)
+                        img.load()
                 else:
                     with open(path, "rb") as f:
-                        img = Image.open(f).convert(self.convert_mode)
+                        img = Image.open(f)
+                        # Handle palette images with transparency properly
+                        if img.mode == 'P' and 'transparency' in img.info:
+                            img = img.convert('RGBA')
+                        img = img.convert(self.convert_mode)
                         img.load()
                 
                 if self.transform:
@@ -187,6 +199,7 @@ def create_dataloaders(
     elif not img_prefix:
         logger.warning("No img_prefix provided, using paths as-is")
     
+    # Keep persistent workers enabled
     use_persistent_workers = num_workers > 0
     split_result = stratified_split(metadata_df, LABEL_COL, test_size, val_size, seed)
     
@@ -201,11 +214,12 @@ def create_dataloaders(
     logger.info(f"Total classes: {num_classes}")
     
     # Build dataloader kwargs once (reused for temp_loader and main dataloaders)
+    use_pin_memory = torch.cuda.is_available()
     dataloader_kwargs = {
         'batch_size': batch_size, 
         'num_workers': num_workers, 
         'prefetch_factor': prefetch_factor if num_workers > 0 else None, 
-        'pin_memory': torch.cuda.is_available(),
+        'pin_memory': use_pin_memory,
         'persistent_workers': use_persistent_workers,
     }
     if not use_local and num_workers > 0:
