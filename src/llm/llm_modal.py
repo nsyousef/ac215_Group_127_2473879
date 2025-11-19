@@ -46,7 +46,7 @@ app = modal.App(
     gpu=GPU,
     min_containers=0,
     max_containers=1,
-    scaledown_window=1000
+    scaledown_window=100
 )
 class DermatologyLLM:
     """Modal class for dermatology LLM assistant."""

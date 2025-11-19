@@ -1,9 +1,17 @@
 import json
 import os
+import shutil
+from copy import deepcopy
+import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import requests
 
+SAVE_DIR = Path(os.getcwd())
+
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 class APIManager:
     """
@@ -26,26 +34,45 @@ class APIManager:
         self.dummy = dummy
         
         # Set up storage directories
-        self.history_dir = Path("history")
-        self.conversation_dir = Path("conversations")
-        self.history_dir.mkdir(exist_ok=True)
-        self.conversation_dir.mkdir(exist_ok=True)
+        self.case_dir = SAVE_DIR / case_id
+        self.case_dir.mkdir(exist_ok=True)
+        print(self.case_dir)
         
         # File paths
-        self.history_file = self.history_dir / f"{case_id}.json"
-        self.conversation_file = self.conversation_dir / f"{case_id}.json"
+        self.case_history_file = self.case_dir / f"case_history.json"
+        self.conversation_file = self.case_dir / f"conversation_history.json"
+        self.demographics_file = SAVE_DIR / "demographics.json"
         
         # Load existing data
-        self.history = self._load_history(case_id)
+        self.case_history = self._load_json_file(
+            file_path=self.case_history_file,
+            # Case history structure: dict with keys 'dates' and 'location'
+            # dates structure: dict with keys 'cv_analysis' and 'image_path' and 'text_summary' and 'predictions
+            # location structure: {"location": {"coordinates": (x,y), "nlp": "elbow"}}
+            default_value={"dates": {}, "location": {}},
+            description="case history"
+        )
+        self.conversation_history = self._load_json_file(
+            file_path=self.conversation_file,
+            # conversation history structure: List of dicts
+            # Each dict has {'user': {'message': str, 'timestamp': str}, 'llm': {'message': str, 'timestamp': str}}
+            default_value=[],
+            description="conversation history"
+        )
+        self.demographics = self._load_json_file(
+            file_path=self.demographics_file,
+            default_value={},
+            description="demographics"
+        )
         
-        self.llm_explain_url = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explain-dev.modal.run"
-        self.llm_followup_url = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-as-a085de-dev.modal.run"
+        self.llm_explain_url = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explain.modal.run"
+        self.llm_followup_url = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-followup.modal.run"
     
     def get_initial_prediction(
         self, 
         image: Any, 
         text_description: str, 
-        case_id: str
+        user_timestamp: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Process initial image and text input to generate predictions and LLM analysis.
@@ -69,50 +96,53 @@ class APIManager:
                 - cv_analysis: Computer vision analysis results
                 - embedding: Image embedding vector
         """
-        print(f"Processing initial prediction for case {case_id}...")
+        print(f"Processing initial prediction for case {self.case_id}...")
+        # Step 0: Save image to case directory #COMPLETED
+        print("  → Saving image...") 
+        image_path = self._save_image(image)
         
         # Step 1: Run local ML model for embeddings TODO
         print("  → Running local ML model for embeddings...")
-        embedding = self._run_local_ml_model(image)
+        embedding = self._run_local_ml_model(image_path)
         
         # Step 2: Run CV analysis TODO
         print("  → Running CV analysis...")
-        cv_analysis = self._run_cv_analysis(image)
+        cv_analysis = self._run_cv_analysis(image_path)
         
         # Step 3: Get predictions from cloud ML model TODO
         print("  → Getting cloud predictions...")
-        predictions = self._run_cloud_ml_model(embedding, text_description)
+        updated_text_description = self.update_text_input(text_description)
+        predictions = self._run_cloud_ml_model(embedding, updated_text_description)
         
         # Step 4: Build metadata for LLM
         metadata = {
-            "user_input": text_description,
+            "user_input": updated_text_description,
             "cv_analysis": cv_analysis,
-            "history": self.history
+            "history": self.case_history['dates']
         }
         
         # Step 5: Call LLM API for explanation
         print("  → Calling LLM for explanation...")
-        llm_response = self._call_llm_explain(predictions, metadata)
+        llm_response, llm_timestamp = self._call_llm_explain(predictions, metadata)
         
         # Step 6: Save to conversation history (initial LLM response)
         print("  → Saving conversation...")
         self._save_conversation_entry(
-            case_id=case_id,
-            user_message=text_description,
+            user_message=updated_text_description,
             llm_response=llm_response,
-            is_initial=True
+            user_timestamp=user_timestamp,
+            llm_timestamp=llm_timestamp
         )
         
         # Step 7: Save to history (CV analysis, predictions, image path)
         print("  → Saving history...")
-        from datetime import datetime
         current_date = datetime.now().strftime("%Y-%m-%d")
         self._save_history_entry(
-            case_id=case_id,
             date=current_date,
             cv_analysis=cv_analysis,
             predictions=predictions,
-            image_path=str(image) if image else None
+            image_path=image_path,
+            text_summary=updated_text_description,
         )
         
         # Step 8: Prepare complete results
@@ -124,10 +154,62 @@ class APIManager:
             "text_description": text_description
         }
         
-        print(f"✓ Initial prediction complete for case {case_id}")
+        print(f"✓ Initial prediction complete for case {self.case_id}")
         return results
+
+    def update_text_input(self, text_input: str) -> str:
+        """
+        Augment user-provided text input with demographic details.
+        """
+        if not isinstance(text_input, str):
+            text_input = str(text_input)
+
+        demographic_sentences = []
+        demographics = self.demographics or {}
+
+        # DOB → age sentence if possible
+        dob = demographics.get("DOB")
+        if dob:
+            try:
+                from datetime import datetime, date
+
+                birth_date = datetime.strptime(dob, "%Y-%m-%d").date()
+                today = date.today()
+                age = today.year - birth_date.year - (
+                    (today.month, today.day) < (birth_date.month, birth_date.day)
+                )
+                demographic_sentences.append(f"The age is {age}.")
+            except ValueError:
+                demographic_sentences.append(f"The date of birth is {dob}.")
+
+        sex = demographics.get("Sex")
+        if sex:
+            demographic_sentences.append(f"Sex is {sex}.")
+
+        race = demographics.get("Race")
+        if race:
+            demographic_sentences.append(f"Race is {race}.")
+
+        country = demographics.get("Country")
+        if country:
+            demographic_sentences.append(f"Country is {country}.")
+        location_nlp = (
+            (self.case_history or {}).get("location", {}).get("nlp")
+            if isinstance(self.case_history, dict)
+            else None
+        )
+        if location_nlp:
+            demographic_sentences.append(
+                f"The body location of the affected area is {location_nlp}."
+            )
+
+        if demographic_sentences:
+            text_input = text_input.strip()
+            text_input = f"{text_input} {' '.join(demographic_sentences)}"
+
+        return text_input
     
-    def chat_message(self, case_id: str, user_query: str) -> Dict[str, Any]:
+    def chat_message(self, user_query: str, user_timestamp: Optional[str] = None) -> Dict[str, Any]:
         """
         Handle follow-up chat messages from the user.
         
@@ -147,148 +229,152 @@ class APIManager:
                 - answer: LLM's response to the question
                 - conversation_history: All conversation entries
         """
-        if self.dummy:
-            print(f"[DUMMY MODE] Using dummy chat message for case {case_id}")
-            return {
-                "answer": "This is a dummy response for frontend testing",
-                "conversation_history": []
-            }
-        
-        print(f"Processing chat message for case {case_id}...")
+
+        print(f"Processing chat message for case {self.case_id}...")
         
         # Step 1: Load conversation history
         print("  → Loading conversation history...")
-        conversation_data = self._load_conversation_history(case_id)
+        conversation_data = self._load_json_file(
+            file_path=self.conversation_file,
+            default_value=[],
+            description="conversation history"
+        )
         
         if not conversation_data or len(conversation_data) == 0:
             raise ValueError(
-                f"No conversation found for case {case_id}. "
+                f"No conversation found for case {self.case_id}. "
                 "Please run get_initial_prediction first."
             )
         
-        # Step 2: Get initial answer from first entry
-        initial_answer = conversation_data[0].get("llm_response", "")
-        
-        # Build conversation history for context (list of previous questions)
-        conversation_history = [entry["user_message"] for entry in conversation_data[1:]]
+        # Step 2: Extract initial message and build conversation history
+        initial_message = conversation_data[0]
+        conversation_history = conversation_data[1:]  # All entries after first
         
         # Step 3: Call LLM API for follow-up
         print("  → Calling LLM for follow-up answer...")
-        response = self._call_llm_followup(
-            initial_answer=initial_answer,
+        response, llm_timestamp = self._call_llm_followup(
+            initial_message=initial_message,
             question=user_query,
-            conversation_history=conversation_history
+            conversation_history=conversation_history[-5:]  # Last 5 entries
         )
         
         # Step 4: Save new conversation entry
         print("  → Saving conversation...")
         self._save_conversation_entry(
-            case_id=case_id,
             user_message=user_query,
             llm_response=response["answer"],
-            is_initial=False
+            user_timestamp=user_timestamp,
+            llm_timestamp=llm_timestamp
         )
         
-        print(f"✓ Chat message processed for case {case_id}")
+        print(f"✓ Chat message processed for case {self.case_id}")
         return {
             "answer": response["answer"],
             "conversation_history": response["conversation_history"]
         }
     
     # ==================== Helper Methods ====================
-    
-    def _load_history(self, case_id: str) -> Dict[str, Any]:
+    def _save_conversation_entry(
+        self,
+        user_message: str,
+        llm_response: str,
+        user_timestamp: Optional[str],
+        llm_timestamp: Optional[str],
+    ) -> None:
         """
-        Load case history from disk.
-        
-        History structure:
+        Persist conversation turns using the structured format:
         {
-            "dates": {
-                "2025-11-15": {
-                    "cv_analysis": {...},
-                    "predictions": {...},
-                    "image_path": "path/to/image.jpg"
-                }
-            }
+            "user": {"message": str, "timestamp": str},
+            "llm": {"message": str, "timestamp": str}
         }
-        
-        Args:
-            case_id: Unique identifier for the case
-            
-        Returns:
-            Dictionary containing case history
         """
-        if self.dummy:
-            print(f"[DUMMY MODE] Using dummy history for case {case_id}")
-            return {
-                "dates": {
-                    "2025-10-10": {
-                        "cv_analysis": {
-                            "area": 12.6,
-                            "color_profile": {
-                                "average_Lab": [63.5, 22.1, 10.8],
-                                "redness_index": 0.46,
-                                "texture_contrast": 0.17
-                            }
-                        },
-                        "predictions": {
-                            "eczema": 0.82,
-                            "contact_dermatitis": 0.12
-                        },
-                        "image_path": "images/case_001_2025-10-10.jpg"
-                    },
-                    "2025-10-20": {
-                        "cv_analysis": {
-                            "area": 9.8,
-                            "color_profile": {
-                                "average_Lab": [65.8, 20.0, 10.1],
-                                "redness_index": 0.38,
-                                "texture_contrast": 0.15
-                            }
-                        },
-                        "predictions": {
-                            "eczema": 0.75,
-                            "contact_dermatitis": 0.18
-                        },
-                        "image_path": "images/case_001_2025-10-20.jpg"
-                    }
-                }
-            }
-        
-        if self.history_file.exists():
-            try:
-                with open(self.history_file, 'r') as f:
-                    return json.load(f)
-            except json.JSONDecodeError:
-                print(f"Warning: Could not parse history file for case {case_id}")
-                return {"dates": {}}
-        else:
-            print(f"No history found for case {case_id}, starting fresh")
-            return {"dates": {}}
+        entry = {
+            "user": {
+                "message": user_message,
+                "timestamp": str(user_timestamp) if user_timestamp else _timestamp(),
+            },
+            "llm": {
+                "message": llm_response,
+                "timestamp": str(llm_timestamp) if llm_timestamp else _timestamp(),
+            },
+        }
+
+        if not isinstance(self.conversation_history, list):
+            self.conversation_history = []
+
+        self.conversation_history.append(entry)
+
+        try:
+            with open(self.conversation_file, "w") as f:
+                json.dump(self.conversation_history, f, indent=2)
+        except OSError as exc:
+            print(f"Error saving conversation history: {exc}")
+
+    def _save_history_entry(
+        self,
+        date: str,
+        cv_analysis: Dict[str, Any],
+        predictions: Dict[str, Any],
+        image_path: Optional[str],
+        text_summary: Optional[str] = None,
+    ) -> None:
+        """
+        Persist a history entry following the case history schema.
+        """
+
+        dates = self.case_history.setdefault("dates", {})
+        dates[date] = {
+            "cv_analysis": cv_analysis,
+            "predictions": predictions,
+            "image_path": image_path,
+            "text_summary": text_summary or "",
+        }
+
+        try:
+            with open(self.case_history_file, "w") as f:
+                json.dump(self.case_history, f, indent=2)
+        except OSError as exc:
+            print(f"Error saving history: {exc}")
+
+    def _save_image(self, image: Any) -> Optional[str]:
+        """Save image to the case images folder (sequentially numbered)."""
+
+        images_dir = self.case_dir / "images"
+        images_dir.mkdir(exist_ok=True)
+
+        next_idx = len(list(images_dir.glob("image_*.png"))) + 1
+        filename = f"image_{next_idx:04d}.png"
+        destination = images_dir / filename
+
+        try:
+            image.save(destination)
+            return str(destination)
+
+        except Exception as exc:
+            raise ValueError(f"Error saving image: {exc}")
     
-    def _save_results(self, case_id: str, data: Dict[str, Any]) -> None:
+
+    def _load_json_file(
+        self,
+        file_path: Path,
+        default_value: Any,
+        description: str,
+    ) -> Any:
         """
-        Save case data to disk.
-        
-        Args:
-            case_id: Unique identifier for the case
-            data: Dictionary of data to save
+        Generic JSON loader with graceful fallbacks.
         """
-        if self.dummy:
-            print(f"  [DUMMY MODE] Skipping save for case {case_id}")
-            return
-        
-        history_file = self.history_dir / f"{case_id}.json"
-        
-        # TODO: Implement browser storage for frontend integration
-        # TODO: Add error handling for file write failures
-        
-        with open(history_file, 'w') as f:
-            json.dump(data, f, indent=2)
-        
-        print(f"  Saved data to {history_file}")
+        if not file_path.exists():
+            print(f"No {description} file found for case {self.case_id}, using default.")
+            return deepcopy(default_value)
+
+        try:
+            with open(file_path, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            print(f"Warning: Could not parse {description} file for case {self.case_id}. Using default.")
+            return deepcopy(default_value)
     
-    def _run_local_ml_model(self, image: Any) -> List[float]:
+    def _run_local_ml_model(self, image_path: str) -> List[float]:
         """
         Run local ML model for embeddings.
         
@@ -297,7 +383,7 @@ class APIManager:
         TODO: Add proper error handling
         
         Args:
-            image: Image data (format TBD)
+            image_path: Path to the image file
             
         Returns:
             Image embedding vector (list of floats)
@@ -310,7 +396,7 @@ class APIManager:
         print("    [TODO] Running local ML model for embeddings...")
         return [0.1, 0.2, 0.3, 0.4] * 128  # Placeholder
     
-    def _run_cv_analysis(self, image: Any) -> Dict[str, Any]:
+    def _run_cv_analysis(self, image_path: str) -> Dict[str, Any]:
         """
         Run computer vision analysis on the image.
         
@@ -319,7 +405,7 @@ class APIManager:
         TODO: Add proper error handling
         
         Args:
-            image: Image data (format TBD)
+            image_path: Path to the image file
             
         Returns:
             Dictionary containing CV analysis:
@@ -396,7 +482,7 @@ class APIManager:
         self, 
         predictions: Dict[str, float], 
         metadata: Dict[str, Any]
-    ) -> str:
+    ) -> Tuple[Any, str]:
         """
         Call LLM API to generate initial explanation.
         
@@ -409,20 +495,10 @@ class APIManager:
             metadata: Additional context (user input, CV analysis, history)
             
         Returns:
-            LLM-generated explanation text
+            Tuple of (LLM-generated explanation payload, timestamp string)
         """
-        if self.dummy:
-            print("    [DUMMY MODE] Returning dummy LLM explanation...")
-            return (
-                "It sounds like you might be dealing with eczema, which is a common "
-                "skin condition that causes red, itchy patches. Based on what you've "
-                "described and the analysis, the affected area shows signs of inflammation "
-                "with increased redness and texture changes typical of eczematous skin.\n\n"
-                "[DUMMY RESPONSE - This is test data for frontend integration]"
-            )
         
-        # TODO: REAL IMPLEMENTATION
-        print("    [TODO] Calling LLM explain API...")
+        print(" Calling LLM explain API...")
         try:
             response = requests.post(
                 self.llm_explain_url,
@@ -430,62 +506,57 @@ class APIManager:
                     "predictions": predictions,
                     "metadata": metadata
                 },
-                timeout=30
+                timeout=300
             )
             response.raise_for_status()
-            return response.json()  # or response.text depending on API format
+            llm_timestamp = _timestamp()
+            return response.json(), llm_timestamp  # or response.text depending on API format
         except requests.exceptions.RequestException as e:
             print(f"Error calling LLM API: {e}")
             raise
     
     def _call_llm_followup(
         self,
-        initial_answer: str,
+        initial_message: Dict[str, Any],
         question: str,
-        conversation_history: List[str]
-    ) -> Dict[str, Any]:
+        conversation_history: List[Dict[str, Any]]
+    ) -> Tuple[Dict[str, Any], str]:
         """
         Call LLM API for follow-up question.
         
-        TODO: Handle API errors and timeouts
-        TODO: Add retry logic
-        TODO: Validate response format
-        
         Args:
-            initial_answer: The original LLM explanation
+            initial_message: The first conversation entry (dict with 'user' and 'llm' keys)
             question: User's follow-up question
-            conversation_history: List of previous questions in conversation
+            conversation_history: List of conversation entry dicts (last 5)
             
         Returns:
-            Dictionary containing:
-                - answer: LLM's response
-                - conversation_history: Updated conversation history
+            Tuple containing:
+                - Dictionary with answer and updated conversation history
+                - Timestamp string for the LLM response
         """
-        if self.dummy:
-            print("    [DUMMY MODE] Returning dummy LLM followup...")
-            updated_history = conversation_history + [question]
-            return {
-                "answer": (
-                    f"That's a great question about: '{question}'. "
-                    "[DUMMY RESPONSE - This is test data for frontend integration]"
-                ),
-                "conversation_history": updated_history
-            }
+        # Extract initial answer from initial_message dict
+        initial_answer = initial_message.get("llm", {}).get("message", "")
         
-        # TODO: REAL IMPLEMENTATION
-        print("    [TODO] Calling LLM followup API...")
+        # Extract user messages from conversation history dicts
+        history_questions = [
+            entry.get("user", {}).get("message", "")
+            for entry in conversation_history
+            if entry.get("user", {}).get("message")
+        ]
+        
+        print(" Calling LLM followup API...")
         try:
             response = requests.post(
                 self.llm_followup_url,
                 json={
                     "initial_answer": initial_answer,
                     "question": question,
-                    "conversation_history": conversation_history
+                    "conversation_history": history_questions
                 },
-                timeout=30
+                timeout=60
             )
             response.raise_for_status()
-            return response.json()
+            return response.json(), _timestamp()
         except requests.exceptions.RequestException as e:
             print(f"Error calling LLM API: {e}")
             raise
