@@ -229,9 +229,9 @@ class Trainer:
         total_loss = 0.0
         correct = 0
         total = 0
-        # Running confusion matrix for macro-F1
-        num_classes = self.info['num_classes']
-        confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
+        # Accumulate predictions/targets on GPU, transfer once at end (no blocking)
+        all_preds = []
+        all_targets = []
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Training")
 
         for batch_idx, (images, targets, text_embeddings) in enumerate(pbar):
@@ -243,10 +243,10 @@ class Trainer:
                 text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
             text_embeddings = text_embeddings.to(self.device, non_blocking=True)
             
-            # Zero gradients
+            # Zero gradients (set_to_none=True for better memory efficiency)
             if not self.vision_frozen:
-                self.optimizer_vision.zero_grad()
-            self.optimizer_multimodal.zero_grad()
+                self.optimizer_vision.zero_grad(set_to_none=True)
+            self.optimizer_multimodal.zero_grad(set_to_none=True)
             
             # Forward pass through vision model
             vision_embeddings = self.vision_model(images)
@@ -258,25 +258,26 @@ class Trainer:
             # Compute loss (includes auxiliary losses if enabled)
             loss = self.multimodal_classifier.compute_loss(outputs, targets)
             
+            # Clear references to intermediate outputs to free memory
+            del vision_embeddings
+            
             # Backward pass
             loss.backward()
             if not self.vision_frozen:
                 self.optimizer_vision.step()
             self.optimizer_multimodal.step()
             
-            # Statistics
-            total_loss += loss.item()
+            # Statistics (detach to avoid keeping computation graph)
+            total_loss += loss.detach().item()
             pred = logits.argmax(dim=1, keepdim=True)
             batch_correct = pred.eq(targets.view_as(pred)).sum().item()
             batch_total = targets.size(0)
             correct += batch_correct
             total += batch_total
 
-            # Update confusion matrix
-            pred_flat = pred.view(-1).detach().cpu().numpy()
-            target_flat = targets.view(-1).detach().cpu().numpy()
-            for t, p in zip(target_flat, pred_flat):
-                confusion[t, p] += 1
+            # Accumulate predictions on GPU (non-blocking, no CPU transfer)
+            all_preds.append(pred.view(-1).detach())
+            all_targets.append(targets.view(-1).detach())
 
             avg_running_loss = total_loss / (batch_idx + 1)
             running_accuracy = 100. * correct / total
@@ -286,10 +287,28 @@ class Trainer:
                 'Loss': f'{avg_running_loss:.4f}',
                 'Acc': f'{running_accuracy:.2f}%'
             })
+            
+            # Periodic CUDA cache cleanup to prevent fragmentation
+            if batch_idx % 50 == 0 and torch.cuda.is_available():
+                torch.cuda.empty_cache()
         
         avg_loss = total_loss / len(self.train_loader)
         accuracy = 100. * correct / total
-        # Compute macro-F1 from confusion
+        
+        # Compute macro-F1 from accumulated predictions (single CPU transfer at end)
+        all_preds_tensor = torch.cat(all_preds)
+        all_targets_tensor = torch.cat(all_targets)
+        
+        # Transfer to CPU only once at end of epoch
+        pred_np = all_preds_tensor.cpu().numpy()
+        target_np = all_targets_tensor.cpu().numpy()
+        
+        # Build confusion matrix
+        num_classes = self.info['num_classes']
+        confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
+        for t, p in zip(target_np, pred_np):
+            confusion[t, p] += 1
+        
         with np.errstate(divide='ignore', invalid='ignore'):
             tp = np.diag(confusion).astype(np.float64)
             fp = confusion.sum(axis=0) - tp

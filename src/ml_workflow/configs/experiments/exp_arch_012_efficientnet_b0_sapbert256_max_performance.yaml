@@ -1,0 +1,128 @@
+# Experiment: EfficientNet-B0 + SapBERT (256 tokens) - MAXIMUM PERFORMANCE
+# All optimizations enabled: Focal Loss + Weighted Sampling + Cosine Annealing + Auxiliary Losses
+# Extended training: 20 epochs for full convergence
+# Additional: Larger projections + Optimized dropout
+
+data:
+  use_local: True
+  metadata_path: "/data/final/metadata_all_harmonized.csv"
+  img_prefix: "/data/final/imgs"
+  min_samples_per_label: 100
+  datasets:
+    - fitzpatrick17k
+    - ddi
+    - isic
+    - derm1m
+  derm1m_sources:
+    - IIYI 
+    - edu
+    - note
+    - public
+    - pubmed 
+    - reddit
+    - twitter
+    - youtube
+  has_text: True
+  test_size: 0.1
+  val_size: 0.1
+  img_size: [224, 224]
+  seed: 42
+
+# Training parameters - EXTENDED FOR MAXIMUM PERFORMANCE
+training:
+  batch_size: 256
+  num_workers: 16
+  prefetch_factor: 8
+  num_epochs: 20  # CHANGED: Extended from 10 to 20 for full convergence
+  patience: 10  # CHANGED: Increased patience for longer training
+  validation_interval: 1
+  n_warmup_epochs: 3
+  compute_stats: False
+  weighted_sampling: true  # CHANGED: Enable weighted sampling for imbalanced classes
+  
+  scheduler:
+    use_cosine_annealing: true  # CHANGED: Enable cosine annealing for smooth decay
+    vision_eta_min: 0.00001  # CHANGED: Better minimum LR
+    multimodal_classifier_eta_min: 0.00001
+
+# Augmentation parameters
+# Set to null to disable a transform, or provide a value to enable it
+augmentation:
+  brightness_jitter: 0.1
+  contrast_jitter: 0.1
+  saturation_jitter: 0.1
+  hue_jitter: 0.01
+  rotation_degrees: 25
+  translate: null
+  scale: [0.9, 1.1]
+  grayscale_prob: null
+  horizontal_flip_prob: 0.5
+  vertical_flip_prob: null
+
+# Vision model - EfficientNet-B0 (MAXIMUM FINE-TUNING)
+vision_model:
+  name: "efficientnet_b0"
+  pretrained: true
+  pooling_type: "avg"
+  unfreeze_layers: -1  # CHANGED: Unfreeze ALL layers for maximum adaptation
+
+# Multimodal classifier - ENHANCED FOR MAXIMUM PERFORMANCE
+multimodal_classifier:
+  projection_dim: 512  # CHANGED: Increased from 256 to 512 (more capacity)
+  image_projection_hidden: [768]  # CHANGED: Increased from [512] (1280 → 768 → 512)
+  text_projection_hidden: [768]   # CHANGED: Increased from [512] (768 → 768 → 512)
+  projection_activation: "relu"
+  projection_dropout: 0.2  # CHANGED: Reduced from 0.3 (less regularization with more data)
+  
+  final_hidden_sizes: [512, 256]  # CHANGED: Increased from [256, 128] (more capacity)
+  final_activation: "relu"
+  final_dropout: 0.3
+  fusion_strategy: "concat_mlp"
+  
+  use_auxiliary_loss: true  # CHANGED: Enable auxiliary losses for modality alignment
+  auxiliary_loss_weight: 0.2  # Weight for auxiliary losses
+  loss_fn: "cross_entropy"
+  label_smoothing: 0.1
+  
+  # Focal loss parameters
+  gamma: 2.0  # Focusing parameter (higher = more focus on hard examples)
+  # alpha will auto-use class_weights from data
+
+# Encoder - SapBERT with 256 tokens
+encoder:
+  pre_existing_path: null  # Force recompute
+  model_name: "sapbert"
+  max_length: 256  # Balanced: 2x faster than 512, captures more context than 128
+  pooling_type: "cls" 
+  batch_size: 32
+  qwen_instr: ""
+
+# Optimizer
+optimizer:
+  vision_model:
+    name: "adamw"
+    learning_rate: 0.0001
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+  
+  multimodal_classifier:
+    name: "adamw"
+    learning_rate: 0.0005
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+
+# Output
+output:
+  save_dir: "/checkpoints"
+  log_dir: "./logs"
+  experiment_name: "exp_arch_012_efficientnet_b0_sapbert256_max_performance"
+  wandb_project: "APCOMP215"
+
+# Checkpoint
+checkpoint:
+  save_frequency: 10
+  keep_last: 1
+  load_from: null
+

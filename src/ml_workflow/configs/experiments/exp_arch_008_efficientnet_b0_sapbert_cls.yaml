@@ -1,0 +1,122 @@
+# Experiment: EfficientNet-B0 + SapBERT (512 tokens, CLS pooling)
+# Variation: Test CLS pooling vs Mean pooling for SapBERT
+# CLS token often better for entity-focused models like SapBERT
+
+data:
+  use_local: True
+  metadata_path: "/data/final/metadata_all_harmonized.csv"
+  img_prefix: "/data/final/imgs"
+  min_samples_per_label: 100
+  datasets:
+    - fitzpatrick17k
+    - ddi
+    - isic
+    - derm1m
+  derm1m_sources:
+    - IIYI 
+    - edu
+    - note
+    - public
+    - pubmed 
+    - reddit
+    - twitter
+    - youtube
+  has_text: True
+  test_size: 0.1
+  val_size: 0.1
+  img_size: [224, 224]
+  seed: 42
+
+# Training parameters
+training:
+  batch_size: 256
+  num_workers: 16
+  prefetch_factor: 8
+  num_epochs: 10
+  patience: 5
+  validation_interval: 1
+  n_warmup_epochs: 3
+  compute_stats: False
+  weighted_sampling: False
+  
+  scheduler:
+    use_cosine_annealing: False
+    vision_eta_min: 0.0000001
+    multimodal_classifier_eta_min: 0.0000001
+
+# Augmentation parameters
+# Set to null to disable a transform, or provide a value to enable it
+augmentation:
+  brightness_jitter: 0.1
+  contrast_jitter: 0.1
+  saturation_jitter: 0.1
+  hue_jitter: 0.01
+  rotation_degrees: 25
+  translate: null
+  scale: [0.9, 1.1]
+  grayscale_prob: null
+  horizontal_flip_prob: 0.5
+  vertical_flip_prob: null
+
+# Vision model - EfficientNet-B0
+vision_model:
+  name: "efficientnet_b0"
+  pretrained: true
+  pooling_type: "avg"
+  unfreeze_layers: 10
+
+# Multimodal classifier
+multimodal_classifier:
+  projection_dim: 256
+  image_projection_hidden: [512]
+  text_projection_hidden: [512]
+  projection_activation: "relu"
+  projection_dropout: 0.3
+  
+  final_hidden_sizes: [256, 128]
+  final_activation: "relu"
+  final_dropout: 0.3
+  fusion_strategy: "concat_mlp"
+  
+  use_auxiliary_loss: False
+  auxiliary_loss_weight: 0.0
+  loss_fn: "cross_entropy"
+  label_smoothing: 0.1
+
+# Encoder - SapBERT with CLS pooling
+encoder:
+  pre_existing_path: null  # Force recompute
+  model_name: "sapbert"
+  max_length: 512
+  pooling_type: "cls"
+  batch_size: 32
+  qwen_instr: ""
+
+# Optimizer
+optimizer:
+  vision_model:
+    name: "adamw"
+    learning_rate: 0.0001
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+  
+  multimodal_classifier:
+    name: "adamw"
+    learning_rate: 0.0005
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+
+# Output
+output:
+  save_dir: "/checkpoints"
+  log_dir: "./logs"
+  experiment_name: "exp_arch_008_efficientnet_b0_sapbert_cls"
+  wandb_project: "APCOMP215"
+
+# Checkpoint
+checkpoint:
+  save_frequency: 10
+  keep_last: 1
+  load_from: null

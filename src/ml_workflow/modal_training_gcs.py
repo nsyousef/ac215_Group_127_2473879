@@ -71,6 +71,9 @@ def train_with_gcs(config_path: str = "configs/modal_template.yaml"):
     import sys
     import json
     
+    # Suppress HuggingFace tokenizers parallelism warning (safe to disable with multiprocessing)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    
     # Set up GCS authentication by writing JSON credentials to a file
     if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
         creds_path = "/tmp/gcs_credentials.json"

@@ -172,7 +172,8 @@ def sync_data_from_gcs():
 
 @app.function(
     gpu="A100-80GB",
-    timeout=14400,
+    cpu=20.0,
+    timeout=7200,
     region="us-east",
     secrets=[
         modal.Secret.from_name("wandb-secret"),
@@ -189,6 +190,9 @@ def train_with_volume(config_path: str = "configs/modal_template.yaml"):
     """
     import os
     import sys
+    
+    # Suppress HuggingFace tokenizers parallelism warning (safe to disable with multiprocessing)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     
     # Set up Python path FIRST, before ANY other imports
     src_path = "/app/src"
@@ -226,7 +230,6 @@ def train_with_volume(config_path: str = "configs/modal_template.yaml"):
         logger.info("✓ Data volume mounted and ready!")
         logger.info(f"  Files: {file_count:,}")
         logger.info(f"  Location: {data_dir}")
-        logger.info(f"  I/O: Fast local SSD (<1ms latency)")
         logger.info("=" * 70)
     else:
         logger.error("=" * 70)

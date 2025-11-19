@@ -37,7 +37,7 @@ export MODAL_MAX_TOKENS="$MAX_TOKENS"
 export MODAL_GPU="$GPU"
 
 # Deploy
-modal serve llm_modal.py
+modal deploy llm_modal.py
 
 if [ $? -eq 0 ]; then
     echo ""
