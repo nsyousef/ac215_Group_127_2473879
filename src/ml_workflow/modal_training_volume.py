@@ -171,7 +171,7 @@ def sync_data_from_gcs():
 # ============================================================================
 
 @app.function(
-    gpu="H200",
+    gpu="A100-80GB",
     timeout=14400,
     region="us-east",
     secrets=[
