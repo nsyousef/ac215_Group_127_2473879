@@ -1,5 +1,5 @@
 # Model Training Configuration for Modal
-# ViT-B/16 Vision Model Experiment
+# DenseNet-121 Vision Model Experiment
 
 # Data source configuration  
 data:
@@ -35,13 +35,13 @@ data:
 
 # Training parameters
 training:
-  batch_size: 32  # Increased for better GPU utilization
-  num_workers: 8  # Can use more workers with local data
-  prefetch_factor: 4  # More prefetching with fast local storage
+  batch_size: 256
+  num_workers: 16
+  prefetch_factor: 8
   num_epochs: 10
   patience: 5
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
-  n_warmup_epochs: 5  # Number of epochs to freeze backbone (0 = no freezing)
+  n_warmup_epochs: 3  # Number of epochs to freeze backbone (0 = no freezing)
   
   # Statistics and sampling
   compute_stats: False
@@ -69,9 +69,9 @@ augmentation:
 
 # Vision model configuration
 vision_model:
-  name: "vit_b_16"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
+  name: "densenet121"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
   pretrained: true
-  pooling_type: "avg"  # For ImageNet models: avg, max, concat (not used for ViT)
+  pooling_type: "avg"  # For ImageNet models: avg, max, concat
   unfreeze_layers: 10  # Number of layers to unfreeze from end
 
 # Multimodal classifier configuration
@@ -141,7 +141,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_004_vit_b16"
+  experiment_name: "exp_003_densenet121"
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration
