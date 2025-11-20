@@ -567,15 +567,95 @@ class Trainer:
         }
     
     def _save_checkpoint(self, epoch, loss, is_best=False):
-        """Save model checkpoint"""
+        """Save model checkpoint with all information needed for inference"""
         save_dir = self.output_config['save_dir']
         experiment_name = self.output_config['experiment_name']
         
-        # Prepare additional info
+        # ========================================================================
+        # Get actual model configurations (with all runtime values filled in)
+        # ========================================================================
+        vision_model_info = self.vision_model.get_vision_info()
+        multimodal_info = self.multimodal_classifier.get_model_info()
+        
+        # Build complete vision model config for inference
+        vision_config = {
+            'name': vision_model_info['model_name'],
+            'pretrained': vision_model_info['pretrained'],
+            'pooling_type': vision_model_info['pooling_type'],
+            'img_size': self.info['img_size'],
+            'unfreeze_layers': self.config['vision_model'].get('unfreeze_layers', 0)
+        }
+        
+        # Build complete multimodal classifier config for inference
+        multimodal_config = {
+            # Runtime values (critical for inference)
+            'num_classes': multimodal_info['num_classes'],
+            'vision_embedding_dim': multimodal_info['vision_embedding_dim'],
+            'text_embedding_dim': multimodal_info['text_embedding_dim'],
+            
+            # Architecture configuration
+            'projection_dim': multimodal_info['projection_dim'],
+            'fusion_strategy': multimodal_info['fusion_strategy'],
+            'image_projection_hidden': multimodal_info['image_projection_hidden'],
+            'text_projection_hidden': multimodal_info['text_projection_hidden'],
+            'projection_activation': self.config['multimodal_classifier'].get('projection_activation', 'relu'),
+            'projection_dropout': self.config['multimodal_classifier'].get('projection_dropout', 0.2),
+            'final_hidden_sizes': multimodal_info['final_hidden_sizes'],
+            'final_activation': self.config['multimodal_classifier'].get('final_activation', 'relu'),
+            'final_dropout': self.config['multimodal_classifier'].get('final_dropout', 0.3),
+            
+            # Auxiliary loss configuration
+            'use_auxiliary_loss': multimodal_info['use_auxiliary_loss'],
+            'auxiliary_loss_weight': self.config['multimodal_classifier'].get('auxiliary_loss_weight', 0.3),
+            
+            # Loss function configuration
+            'loss_fn': self.config['multimodal_classifier']['loss_fn'],
+            'label_smoothing': self.config['multimodal_classifier'].get('label_smoothing', 0.0),
+        }
+        
+        # Add focal loss parameters if using focal loss
+        if multimodal_config['loss_fn'] == 'focal':
+            multimodal_config['gamma'] = self.config['multimodal_classifier'].get('gamma', 2.0)
+            multimodal_config['reduction'] = self.config['multimodal_classifier'].get('reduction', 'mean')
+        
+        # Build complete encoder config for inference (text embedding)
+        encoder_config = {
+            'model_name': self.config['encoder']['model_name'],
+            'max_length': self.config['encoder']['max_length'],
+            'pooling_type': self.config['encoder']['pooling_type'],
+            'qwen_instr': self.config['encoder'].get('qwen_instr', ''),
+        }
+        
+        # ========================================================================
+        # Create modified config with actual runtime values
+        # ========================================================================
+        config_to_save = {
+            # Inference-critical configs (with runtime values)
+            'vision_model': vision_config,
+            'multimodal_classifier': multimodal_config,
+            'encoder': encoder_config,
+            
+            # Keep original configs for reference/resuming training
+            'data': self.config['data'],
+            'training': self.config['training'],
+            'augmentation': self.config['augmentation'],
+            'optimizer': self.config['optimizer'],
+            'output': self.config['output'],
+            'checkpoint': self.config['checkpoint'],
+        }
+        
+        # ========================================================================
+        # Prepare additional info (training state + inference metadata)
+        # ========================================================================
         additional_info = {
+            # Training state (for resuming training)
             'best_val_loss': self.best_val_loss,
             'patience_counter': self.patience_counter,
+            'vision_frozen': self.vision_frozen,
+            'n_warmup_epochs': self.n_warmup_epochs,
             'device': str(self.device),
+            
+            # Inference metadata (critical for proper inference)
             'normalization_mean': self.info['mean'],
             'normalization_std': self.info['std'],
             'classes': self.info['classes'],
@@ -583,14 +663,14 @@ class Trainer:
             'num_classes': self.info['num_classes'],
         }
 
-        # Include all optimizer states
+        # Include optimizer states (for resuming training)
         if self.optimizer_vision is not None and self.optimizer_multimodal is not None:
             additional_info['optimizers_state_dict'] = {
                 'vision': self.optimizer_vision.state_dict(),
                 'multimodal_classifier': self.optimizer_multimodal.state_dict(),
             }
         
-        # Include scheduler states
+        # Include scheduler states (for resuming training)
         if self.scheduler_vision is not None or self.scheduler_multimodal is not None:
             additional_info['schedulers_state_dict'] = {}
             if self.scheduler_vision is not None:
@@ -598,17 +678,15 @@ class Trainer:
             if self.scheduler_multimodal is not None:
                 additional_info['schedulers_state_dict']['multimodal_classifier'] = self.scheduler_multimodal.state_dict()
         
-        # Include vision freeze state
-        additional_info['vision_frozen'] = self.vision_frozen
-        additional_info['n_warmup_epochs'] = self.n_warmup_epochs
-        
-        # Save checkpoint
+        # ========================================================================
+        # Save checkpoint with complete config
+        # ========================================================================
         checkpoint_path = save_checkpoint(
             model=None,
             optimizer=None,
             epoch=epoch,
             loss=loss,
-            config=self.config,
+            config=config_to_save,  # Complete config with all runtime values
             save_dir=save_dir,
             experiment_name=experiment_name,
             is_best=is_best,
