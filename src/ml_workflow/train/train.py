@@ -578,6 +578,9 @@ class Trainer:
             'device': str(self.device),
             'normalization_mean': self.info['mean'],
             'normalization_std': self.info['std'],
+            'classes': self.info['classes'],
+            'class_to_idx': self.info['class_to_idx'],
+            'num_classes': self.info['num_classes'],
         }
 
         # Include all optimizer states
