@@ -26,6 +26,7 @@ import ProfilePage from '@/components/ProfilePage';
 import OnboardingFlow from '@/components/OnboardingFlow';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import { useProfile } from '@/contexts/ProfileContext';
+import DiseaseService from '@/services/diseaseService';
 
 export default function Home() {
     const theme = useTheme();
@@ -40,7 +41,7 @@ export default function Home() {
     const [mobileView, setMobileView] = useState(viewParam);
     const [previousMobileView, setPreviousMobileView] = useState('home'); // Track previous view for back navigation
 
-    const { diseases } = useDiseaseContext();
+    const { diseases, reload: reloadDiseases } = useDiseaseContext();
     const { profile, loading: profileLoading, updateProfile } = useProfile();
 
     // Sync mobileView with URL query param and track previous view
@@ -132,10 +133,17 @@ export default function Home() {
     // Add disease modal state
     const [showAddFlow, setShowAddFlow] = useState(false);
 
-    const handleAddSaved = (newDisease) => {
-        // Close modal and select condition, navigate to results/detail
+    const handleAddSaved = async (newDisease) => {
+        // Close modal
         setShowAddFlow(false);
+        
+        // newDisease already contains all enriched fields from Python
+        // (description, bodyPart, mapPosition, llmResponse, timelineData, conversationHistory)
+        // AND it's already been added to the diseases array by AddDiseaseFlow's addDisease() call
+        // So just set it as selected and navigate!
         setSelectedCondition(newDisease);
+        
+        // Navigate to results view
         router.push('/?view=results');
     };
 
@@ -143,14 +151,13 @@ export default function Home() {
     if (!profileLoading && !profile?.hasCompletedOnboarding) {
         return (
             <OnboardingFlow
-                onComplete={(newDisease) => {
-                    // Set selected condition and navigate appropriately
+                onComplete={async (newDisease) => {
+                    // newDisease already contains all enriched fields from Python
+                    // AND it's already in the diseases array (added by OnboardingFlow's addDisease call)
                     setSelectedCondition(newDisease);
-                    if (isMobile) {
-                        router.push('/?view=results');
-                    } else {
-                        router.push('/?view=results');
-                    }
+                    
+                    // Navigate to results view
+                    router.push('/?view=results');
                 }}
             />
         );

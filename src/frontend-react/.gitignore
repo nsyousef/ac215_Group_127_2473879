@@ -24,3 +24,8 @@ python/conversations/
 # Electron build artifacts
 dist/
 out/
+
+# User Data
+python/case_*
+python/demographics.json
+python/diseases.json

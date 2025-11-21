@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import DiseaseService from '@/services/diseaseService';
-import FileAdapter from '@/services/adapters/fileAdapter';
 
 const DiseaseContext = createContext({
   diseases: [],
@@ -38,20 +37,19 @@ export function DiseaseProvider({ children }) {
     load();
   }, []);
 
-  // Add a disease to in-memory state and persist if possible
+  // Add a disease to in-memory state and persist via Python
   const addDisease = async (disease) => {
     // Append to current list
     setDiseases((prev) => {
       const next = [...prev, disease];
-      // Try to persist via FileAdapter (Electron) but don't block UI
+      // Persist via Python (non-blocking)
       (async () => {
         try {
-          if (FileAdapter && FileAdapter.saveDiseases) {
-            await FileAdapter.saveDiseases(next);
+          if (window.electronAPI?.saveDiseasesToPython) {
+            await window.electronAPI.saveDiseasesToPython(next);
           }
         } catch (e) {
-          // ignore persistence errors for now
-          console.warn('Failed to persist diseases', e);
+          console.warn('Failed to persist diseases to Python', e);
         }
       })();
       return next;

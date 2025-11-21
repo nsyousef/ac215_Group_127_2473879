@@ -16,9 +16,10 @@ import {
   useTheme,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import FileAdapter from '@/services/adapters/fileAdapter';
+import { useDiseaseContext } from '@/contexts/DiseaseContext';
 
 export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }) {
+  const { diseases } = useDiseaseContext();
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -59,37 +60,54 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
 
   const analyze = async () => {
     if (!conditionId) return setError('No condition selected');
+    if (!file) return setError('No image selected');
+    
     setAnalyzing(true);
     setError(null);
+    
     try {
-      // Simulate analysis delay
-      await new Promise((r) => setTimeout(r, 3000));
-
-      // Create entry
-      const entry = {
-        id: Date.now(),
-        conditionId,
-        date: new Date().toISOString(),
-        image: preview,
-        note: note || '',
-        llmComment: 'Placeholder: AI summary will appear here.',
-      };
-
-      // Persist via FileAdapter if available
-      try {
-        if (FileAdapter && FileAdapter.saveTimeEntry) {
-          await FileAdapter.saveTimeEntry(conditionId, entry);
-        }
-      } catch (e) {
-        console.warn('Failed to persist time entry', e);
+      // Find the case ID from the condition
+      const condition = diseases.find(d => d.id === conditionId);
+      const caseId = condition?.caseId || `case_${conditionId}`;
+      
+      // Step 1: Save the image file to disk via IPC
+      let imagePath;
+      if (window.electronAPI?.saveUploadedImage) {
+        const buffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(buffer);
+        const timestamp = Date.now();
+        imagePath = await window.electronAPI.saveUploadedImage(caseId, `timeline_${timestamp}_${file.name}`, uint8Array);
+      } else {
+        throw new Error('Image upload is only available in Electron runtime.');
       }
+      
+      // Step 2: Add timeline entry to case_history.json via Python
+      // Use date + timestamp to ensure uniqueness if multiple uploads on same day
+      const now = new Date();
+      const dateKey = `${now.toISOString().split('T')[0]}_${Date.now()}`; // "2025-11-21_1763762693117"
+      
+      if (window.electronAPI?.addTimelineEntry) {
+        await window.electronAPI.addTimelineEntry(caseId, imagePath, note || '', dateKey);
+      } else {
+        throw new Error('Timeline entry save is only available in Electron runtime.');
+      }
+      
+      // Create entry object for callback
+      const entry = {
+        id: dateKey,
+        conditionId,
+        date: dateKey,
+        image: imagePath,
+        note: note || '',
+      };
 
       setAnalyzing(false);
       onSaved && onSaved(entry);
       close();
     } catch (e) {
+      console.error('Failed to save timeline entry:', e);
       setAnalyzing(false);
-      setError('Analysis failed. Please try again.');
+      setError('Failed to save image. Please try again.');
       setStep(2);
     }
   };
@@ -146,8 +164,8 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
 
         {step === 5 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 4 }}>
-            <Typography variant="h6">Analyzing...</Typography>
-            <Typography variant="body2" sx={{ color: '#666', textAlign: 'center' }}>Analyzing image. This may take a few seconds.</Typography>
+            <Typography variant="h6">Saving...</Typography>
+            <Typography variant="body2" sx={{ color: '#666', textAlign: 'center' }}>Saving image to timeline. This may take a moment.</Typography>
             <Box sx={{ width: '80%', mt: 2 }}>
               <LinearProgress />
             </Box>
@@ -179,7 +197,7 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
             <Button variant="text" onClick={() => setStep(2)}>Back</Button>
             <Box>
               <Button variant="text" onClick={close}>Cancel</Button>
-              <Button variant="contained" onClick={() => { setStep(5); analyze(); }} sx={{ ml: 1 }}>Analyze</Button>
+              <Button variant="contained" onClick={() => { setStep(5); analyze(); }} sx={{ ml: 1 }}>Save</Button>
             </Box>
           </Box>
         )}

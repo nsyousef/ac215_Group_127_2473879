@@ -28,6 +28,23 @@ class MLClient {
   }
 
   /**
+   * Save body location before processing prediction
+   * 
+   * @param {string} caseId - Unique case identifier
+   * @param {Object} bodyLocation - Object with coordinates and nlp fields
+   * @returns {Promise<Object>} Success result
+   */
+  async saveBodyLocation(caseId, bodyLocation) {
+    await this.initialize();
+
+    if (isElectron() && window.electronAPI && window.electronAPI.mlSaveBodyLocation) {
+      return await window.electronAPI.mlSaveBodyLocation(caseId, bodyLocation);
+    }
+
+    throw new Error('Body location save is only available in Electron runtime.');
+  }
+
+  /**
    * Get initial prediction from ML model
    * 
    * Workflow (matching api_manager.py):
@@ -37,18 +54,19 @@ class MLClient {
    * 4. LLM generates explanation from predictions + context
    * 5. Results saved to local storage
    * 
-   * @param {string} image - Base64 encoded image or file path
+   * @param {string} imagePath - File path to uploaded image
    * @param {string} textDescription - User's description of symptoms
    * @param {string} caseId - Unique case identifier
-  * @param {Object} metadata - Optional user metadata (dateOfBirth, sex, ethnicity)
+   * @param {Object} metadata - Optional user metadata (dateOfBirth, sex, ethnicity)
    * @returns {Promise<Object>} Results object with predictions, LLM response, etc.
    */
-  async getInitialPrediction(image, textDescription, caseId, metadata = {}) {
+  async getInitialPrediction(imagePath, textDescription, caseId, metadata = {}) {
     await this.initialize();
 
     if (isElectron() && window.electronAPI && window.electronAPI.mlGetInitialPrediction) {
+      const userTimestamp = new Date().toISOString();
       // Route to Python via Electron IPC
-      return await window.electronAPI.mlGetInitialPrediction(caseId, image, textDescription);
+      return await window.electronAPI.mlGetInitialPrediction(caseId, imagePath, textDescription, userTimestamp);
     }
 
     // Non-Electron fallback: no public dummy loading; return a structured error
@@ -72,7 +90,8 @@ class MLClient {
     await this.initialize();
 
     if (isElectron() && window.electronAPI && window.electronAPI.mlChatMessage) {
-      return await window.electronAPI.mlChatMessage(caseId, userQuery);
+      const userTimestamp = new Date().toISOString();
+      return await window.electronAPI.mlChatMessage(caseId, userQuery, userTimestamp);
     }
     throw new Error('Chat is only available in Electron runtime.');
   }

@@ -1,21 +1,23 @@
-// Lightweight disease service with adapter selection
+// Lightweight disease service - loads from Python in Electron
 import { isElectron } from '@/utils/config';
-// File adapter is a stub for future electron/file-system based loading
-import FileAdapter from './adapters/fileAdapter';
 
 const DiseaseService = {
   // loadDiseases returns a Promise resolving to an array of disease objects
   async loadDiseases() {
-    // In Electron we may load from file system via FileAdapter
+    // In Electron, load from Python
     if (isElectron()) {
       try {
-        const data = await FileAdapter.load();
-        if (Array.isArray(data)) return data; // May be empty
+        if (window.electronAPI?.loadDiseasesFromPython) {
+          const data = await window.electronAPI.loadDiseasesFromPython();
+          // Handle both array response and potential {diseases: [...]} object
+          const diseases = Array.isArray(data) ? data : (data?.diseases || []);
+          if (diseases.length > 0) return diseases;
+        }
       } catch (e) {
-        console.warn('FileAdapter failed to load diseases', e);
+        console.warn('Failed to load diseases from Python', e);
       }
     }
-    // Do NOT load bundled dummy diseases anymore; return empty list
+    // Return empty list if not in Electron or loading failed
     return Promise.resolve([]);
   },
 };

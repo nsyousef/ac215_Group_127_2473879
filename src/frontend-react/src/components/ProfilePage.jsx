@@ -54,14 +54,25 @@ export default function ProfilePage({ onBack, showActions = true }) {
 
   const handleConfirmReset = async () => {
     try {
-      // Clear persisted data in Electron
+      // Clear Electron-managed data (diseases, chat, time_tracking, profile)
       await FileAdapter.resetAppData();
     } catch (e) {
-      // ignore in non-Electron or on error
+      console.warn('Failed to clear Electron data:', e);
     }
+
+    try {
+      // Clear Python-managed data (demographics, case directories)
+      if (window.electronAPI?.resetPythonData) {
+        await window.electronAPI.resetPythonData();
+      }
+    } catch (e) {
+      console.warn('Failed to clear Python data:', e);
+    }
+
     // Reset local profile to defaults and mark onboarding incomplete
     await updateProfile({ dateOfBirth: '', sex: '', raceEthnicity: '', hasCompletedOnboarding: false });
     setConfirmOpen(false);
+    
     // Reload to ensure all contexts pick up cleared state
     if (typeof window !== 'undefined') {
       window.location.href = '/';

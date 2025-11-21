@@ -28,194 +28,8 @@ const ensureDataDirExists = async () => {
 };
 
 // ============================================================================
-// IPC Handlers for Diseases
+// Old Electron file handlers removed - all data now managed by Python
 // ============================================================================
-
-ipcMain.handle('load-diseases', async () => {
-  try {
-    const dataDir = getDataDir();
-    const diseasesPath = path.join(dataDir, 'diseases.json');
-
-    // If file doesn't exist, return empty array (caller will use bundled CONDITIONS as fallback)
-    try {
-      const data = await fs.readFile(diseasesPath, 'utf-8');
-      return JSON.parse(data);
-    } catch (e) {
-      if (e.code === 'ENOENT') {
-        return null; // File not found, signal fallback to bundled data
-      }
-      throw e;
-    }
-  } catch (e) {
-    console.error('Error loading diseases:', e);
-    throw e;
-  }
-});
-
-// Save diseases to disk
-ipcMain.handle('save-diseases', async (event, diseases) => {
-  try {
-    const dataDir = getDataDir();
-    const diseasesPath = path.join(dataDir, 'diseases.json');
-    await fs.writeFile(diseasesPath, JSON.stringify(diseases, null, 2), 'utf-8');
-    return diseases;
-  } catch (e) {
-    console.error('Error saving diseases:', e);
-    throw e;
-  }
-});
-
-// ============================================================================
-// IPC Handlers for Chat History
-// ============================================================================
-
-ipcMain.handle('load-chat-history', async (event, conditionId) => {
-  try {
-    const dataDir = getDataDir();
-    const chatDir = path.join(dataDir, 'chat');
-    const chatPath = path.join(chatDir, `${conditionId}.json`);
-
-    try {
-      const data = await fs.readFile(chatPath, 'utf-8');
-      return JSON.parse(data);
-    } catch (e) {
-      if (e.code === 'ENOENT') {
-        return []; // No chat history for this condition yet
-      }
-      throw e;
-    }
-  } catch (e) {
-    console.error(`Error loading chat history for condition ${conditionId}:`, e);
-    throw e;
-  }
-});
-
-ipcMain.handle('save-chat-message', async (event, conditionId, message) => {
-  try {
-    const dataDir = getDataDir();
-    const chatDir = path.join(dataDir, 'chat');
-    await fs.mkdir(chatDir, { recursive: true });
-
-    const chatPath = path.join(chatDir, `${conditionId}.json`);
-    let messages = [];
-
-    // Load existing messages
-    try {
-      const data = await fs.readFile(chatPath, 'utf-8');
-      messages = JSON.parse(data);
-    } catch (e) {
-      if (e.code !== 'ENOENT') throw e;
-    }
-
-    // Add new message
-    messages.push(message);
-
-    // Save back
-    await fs.writeFile(chatPath, JSON.stringify(messages, null, 2), 'utf-8');
-    return message;
-  } catch (e) {
-    console.error(`Error saving chat message for condition ${conditionId}:`, e);
-    throw e;
-  }
-});
-
-// ============================================================================
-// IPC Handlers for Time Tracking
-// ============================================================================
-
-ipcMain.handle('load-time-tracking', async (event, conditionId) => {
-  try {
-    const dataDir = getDataDir();
-    const timeDir = path.join(dataDir, 'time_tracking');
-    const timePath = path.join(timeDir, `${conditionId}.json`);
-
-    try {
-      const data = await fs.readFile(timePath, 'utf-8');
-      return JSON.parse(data);
-    } catch (e) {
-      if (e.code === 'ENOENT') {
-        return []; // No time tracking entries for this condition yet
-      }
-      throw e;
-    }
-  } catch (e) {
-    console.error(`Error loading time tracking for condition ${conditionId}:`, e);
-    throw e;
-  }
-});
-
-ipcMain.handle('save-time-entry', async (event, conditionId, entry) => {
-  try {
-    const dataDir = getDataDir();
-    const timeDir = path.join(dataDir, 'time_tracking');
-    await fs.mkdir(timeDir, { recursive: true });
-
-    const timePath = path.join(timeDir, `${conditionId}.json`);
-    let entries = [];
-
-    // Load existing entries
-    try {
-      const data = await fs.readFile(timePath, 'utf-8');
-      entries = JSON.parse(data);
-    } catch (e) {
-      if (e.code !== 'ENOENT') throw e;
-    }
-
-    // Add new entry
-    entries.push(entry);
-
-    // Save back
-    await fs.writeFile(timePath, JSON.stringify(entries, null, 2), 'utf-8');
-    return entry;
-  } catch (e) {
-    console.error(`Error saving time entry for condition ${conditionId}:`, e);
-    throw e;
-  }
-});
-
-// ============================================================================
-// Utility IPC Handler
-// ============================================================================
-
-ipcMain.handle('get-app-data-path', () => {
-  return getDataDir();
-});
-
-// ============================================================================
-// IPC Handlers for Profile
-// ============================================================================
-
-ipcMain.handle('load-profile', async () => {
-  try {
-    const dataDir = getDataDir();
-    const profilePath = path.join(dataDir, 'profile.json');
-
-    try {
-      const data = await fs.readFile(profilePath, 'utf-8');
-      return JSON.parse(data);
-    } catch (e) {
-      if (e.code === 'ENOENT') {
-        return null; // No profile saved yet
-      }
-      throw e;
-    }
-  } catch (e) {
-    console.error('Error loading profile:', e);
-    throw e;
-  }
-});
-
-ipcMain.handle('save-profile', async (event, profile) => {
-  try {
-    const dataDir = getDataDir();
-    const profilePath = path.join(dataDir, 'profile.json');
-    await fs.writeFile(profilePath, JSON.stringify(profile, null, 2), 'utf-8');
-    return profile;
-  } catch (e) {
-    console.error('Error saving profile:', e);
-    throw e;
-  }
-});
 
 // Open external links in system browser
 ipcMain.handle('open-external', async (event, url) => {
@@ -338,7 +152,8 @@ let reqSeq = 0;
 function pyRequest(caseId, cmd, data) {
   const state = spawnPythonForCase(caseId);
   const id = `${Date.now()}_${reqSeq++}`;
-  const payload = { id, cmd, data: { ...data, case_id: caseId } };
+  // Only add case_id if not already present (for static methods that pass their own case_id)
+  const payload = { id, cmd, data: data.case_id ? data : { ...data, case_id: caseId } };
   state.lastUsed = Date.now();
 
   return new Promise((resolve, reject) => {
@@ -365,15 +180,116 @@ setInterval(() => {
 }, 60 * 1000);
 
 // IPC handlers to call Python
-ipcMain.handle('ml:getInitialPrediction', async (event, { caseId, image, textDescription }) => {
+ipcMain.handle('ml:getInitialPrediction', async (event, { caseId, imagePath, textDescription, userTimestamp }) => {
   if (!caseId) throw new Error('caseId required');
-  return await pyRequest(caseId, 'predict', { image, text_description: textDescription });
+  if (!imagePath) throw new Error('imagePath required');
+  return await pyRequest(caseId, 'predict', { 
+    image_path: imagePath, 
+    text_description: textDescription,
+    user_timestamp: userTimestamp 
+  });
 });
 
-ipcMain.handle('ml:chatMessage', async (event, { caseId, question }) => {
+ipcMain.handle('ml:chatMessage', async (event, { caseId, question, userTimestamp }) => {
   if (!caseId) throw new Error('caseId required');
   if (!question) throw new Error('question required');
-  return await pyRequest(caseId, 'chat', { question });
+  return await pyRequest(caseId, 'chat', { 
+    question,
+    user_timestamp: userTimestamp 
+  });
+});
+
+ipcMain.handle('ml:saveBodyLocation', async (event, { caseId, bodyLocation }) => {
+  if (!caseId) throw new Error('caseId required');
+  if (!bodyLocation) throw new Error('bodyLocation required');
+  // Static method but needs real case_id - pass case_id in data so pyRequest doesn't override
+  return await pyRequest('static', 'save_body_location', { 
+    case_id: caseId, 
+    body_location: bodyLocation 
+  });
+});
+
+ipcMain.handle('ml:loadConversationHistory', async (event, { caseId }) => {
+  if (!caseId) throw new Error('caseId required');
+  return await pyRequest(caseId, 'load_conversation_history', {});
+});
+
+ipcMain.handle('data:saveDemographics', async (event, demographics) => {
+  if (!demographics) throw new Error('demographics required');
+  return await pyRequest('static', 'save_demographics', { demographics });
+});
+
+ipcMain.handle('data:loadDemographics', async () => {
+  return await pyRequest('static', 'load_demographics', {});
+});
+
+ipcMain.handle('data:resetPythonData', async () => {
+  return await pyRequest('static', 'reset_all_data', {});
+});
+
+ipcMain.handle('data:loadDiseases', async () => {
+  const result = await pyRequest('static', 'load_diseases', {});
+  // Python returns {diseases: [...]}, extract the array
+  return result.diseases || [];
+});
+
+ipcMain.handle('data:saveDiseases', async (event, diseases) => {
+  if (!diseases) throw new Error('diseases required');
+  return await pyRequest('static', 'save_diseases', { diseases });
+});
+
+ipcMain.handle('data:loadCaseHistory', async (event, caseId) => {
+  if (!caseId) throw new Error('caseId required');
+  return await pyRequest('static', 'load_case_history', { case_id: caseId });
+});
+
+ipcMain.handle('data:saveCaseHistory', async (event, caseId, caseHistory) => {
+  if (!caseId) throw new Error('caseId required');
+  if (!caseHistory) throw new Error('caseHistory required');
+  return await pyRequest('static', 'save_case_history', { case_id: caseId, case_history: caseHistory });
+});
+
+ipcMain.handle('data:addTimelineEntry', async (event, caseId, imagePath, note, date) => {
+  if (!caseId) throw new Error('caseId required');
+  if (!imagePath) throw new Error('imagePath required');
+  if (!date) throw new Error('date required');
+  return await pyRequest('static', 'add_timeline_entry', { 
+    case_id: caseId, 
+    image_path: imagePath, 
+    note: note || '', 
+    date: date 
+  });
+});
+
+// Save uploaded image to temp directory
+ipcMain.handle('save-uploaded-image', async (event, caseId, filename, buffer) => {
+  try {
+    const tempDir = path.join(app.getPath('temp'), 'pibu_uploads');
+    await fs.mkdir(tempDir, { recursive: true });
+    
+    const imagePath = path.join(tempDir, `${caseId}_${filename}`);
+    await fs.writeFile(imagePath, Buffer.from(buffer));
+    
+    return imagePath;
+  } catch (e) {
+    console.error('Error saving uploaded image:', e);
+    throw e;
+  }
+});
+
+// Read image file and convert to base64 data URL for renderer display
+ipcMain.handle('read-image-as-data-url', async (event, imagePath) => {
+  try {
+    const imageBuffer = await fs.readFile(imagePath);
+    const base64 = imageBuffer.toString('base64');
+    // Detect image type from extension
+    const ext = path.extname(imagePath).toLowerCase();
+    const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+    return `data:${mimeType};base64,${base64}`;
+  } catch (e) {
+    console.error('Error reading image:', e);
+    throw e;
+  }
 });
 
 // ============================================================================

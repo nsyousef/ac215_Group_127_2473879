@@ -118,12 +118,35 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
           // ignore
         }
       }
+      
       // Generate case ID for this analysis
-      const caseId = `case_${Date.now()}`;
+      const timestamp = Date.now();
+      const diseaseId = `${timestamp}`;  // Disease ID (no prefix, just timestamp)
+      const caseId = `case_${timestamp}`;  // Folder name for Python storage
 
-      // Call ML client to get predictions (matches api_manager.py workflow)
+      // Save uploaded file to temp location for Python to access via IPC
+      let imagePath;
+      if (window.electronAPI && window.electronAPI.saveUploadedImage) {
+        // Use IPC to save file in main process
+        const buffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(buffer);
+        imagePath = await window.electronAPI.saveUploadedImage(caseId, file.name, uint8Array);
+      } else {
+        throw new Error('Image upload is only available in Electron runtime.');
+      }
+
+      // Build body location object with coordinates and NLP label
+      const bodyLocation = {
+        coordinates: finalMapPos ? [finalMapPos.leftPct, finalMapPos.topPct] : null,
+        nlp: bodyPart || 'Unknown',
+      };
+
+      // Step 1: Save body location FIRST (before APIManager instantiation)
+      await mlClient.saveBodyLocation(caseId, bodyLocation);
+
+      // Step 2: Call ML client to get predictions (matches api_manager.py workflow)
       const results = await mlClient.getInitialPrediction(
-        preview, // base64 image
+        imagePath, // file path
         note || '', // text description
         caseId
       );
@@ -145,65 +168,34 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
 
-      // Create brief description from first 50 chars of LLM response
-      const briefDesc = results.llm_response
-        ? results.llm_response.substring(0, 50) + '...'
-        : 'AI-analyzed condition';
-
-      // Create disease object with all ML results
+      // Get the enriched disease object from Python response (includes all UI fields)
+      // Python's _build_enriched_disease() returns: id, name, description, bodyPart, 
+      // mapPosition, image, confidenceLevel, llmResponse, timelineData, conversationHistory
+      const enrichedDisease = results.enriched_disease || {};
+      
+      // Build complete disease object with both minimal data (for diseases.json) 
+      // and enriched data (for immediate UI display)
       const newDisease = {
-        id: Date.now(),
+        // Minimal fields (saved to diseases.json)
+        id: diseaseId,  // Use timestamp without "case_" prefix
         name: formattedName,
-        description: briefDesc,
-        bodyPart,
-        mapPosition: finalMapPos || null,
-        image: preview, // User's uploaded image
-        createdAt: new Date().toISOString(),
-        // Store ML results for later use
-        caseId,
-        predictions: results.predictions,
-        cvAnalysis: results.cv_analysis,
-        llmResponse: results.llm_response,
-        textDescription: note || '',
+        image: preview,
+        // Enriched fields (from case_history.json, already loaded by Python)
+        description: enrichedDisease.description || '',
+        bodyPart: enrichedDisease.bodyPart || bodyPart || 'Unknown',
+        mapPosition: enrichedDisease.mapPosition || null,
+        confidenceLevel: enrichedDisease.confidenceLevel || 0,
+        date: enrichedDisease.date || '',
+        llmResponse: enrichedDisease.llmResponse || '',
+        timelineData: enrichedDisease.timelineData || [],
+        conversationHistory: enrichedDisease.conversationHistory || []
       };
 
-      // Add to context (and persist if possible)
+      // Add to context (saves minimal fields to diseases.json)
       await addDisease(newDisease);
 
-      // Save initial time-tracking entry with the uploaded image
-      try {
-        const entry = {
-          id: Date.now(),
-          conditionId: newDisease.id,
-          date: new Date().toISOString(),
-          image: preview,
-          note: note || 'Initial upload',
-        };
-        if (FileAdapter && FileAdapter.saveTimeEntry) {
-          await FileAdapter.saveTimeEntry(newDisease.id, entry);
-        }
-      } catch (e) {
-        console.warn('Failed to save time entry:', e);
-      }
-
-      // Save initial conversation entry (assistant initial LLM response)
-      try {
-        const conversationEntry = {
-          id: `conv_${Date.now()}`,
-          role: 'assistant',
-          text: results.llm_response,
-          time: new Date().toISOString(),
-          conditionId: newDisease.id,
-          isInitial: true,
-        };
-        if (FileAdapter && FileAdapter.saveChat) {
-          await FileAdapter.saveChat(newDisease.id, conversationEntry);
-        }
-      } catch (e) {
-        console.warn('Failed to save conversation:', e);
-      }
-
       setAnalyzing(false);
+      // Pass complete enriched object to parent so it can be immediately used
       if (onSaved) onSaved(newDisease);
     } catch (e) {
       console.error('Analysis failed:', e);

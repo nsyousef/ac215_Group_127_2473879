@@ -19,6 +19,74 @@ def handle_message(msg):
     data = msg.get("data", {})
 
     try:
+        # Static commands that don't need case_id or manager instance
+        if cmd == "save_demographics":
+            demographics_data = data.get("demographics")
+            if not demographics_data:
+                raise ValueError("Missing demographics data")
+            APIManager.save_demographics(demographics_data)
+            send({"id": req_id, "ok": True, "result": {"success": True}})
+            return
+        elif cmd == "load_demographics":
+            result = APIManager.load_demographics()
+            send({"id": req_id, "ok": True, "result": result})
+            return
+        elif cmd == "save_body_location":
+            case_id = data.get("case_id")
+            body_location = data.get("body_location")
+            if not case_id or not body_location:
+                raise ValueError("Missing case_id or body_location")
+            APIManager.save_body_location(case_id, body_location)
+            send({"id": req_id, "ok": True, "result": {"success": True}})
+            return
+        elif cmd == "reset_all_data":
+            APIManager.reset_all_data()
+            send({"id": req_id, "ok": True, "result": {"success": True}})
+            return
+        elif cmd == "load_diseases":
+            diseases = APIManager.load_diseases()
+            send({"id": req_id, "ok": True, "result": {"diseases": diseases}})
+            return
+        elif cmd == "save_diseases":
+            diseases = data.get("diseases", [])
+            APIManager.save_diseases(diseases)
+            send({"id": req_id, "ok": True, "result": {"success": True}})
+            return
+        elif cmd == "load_case_history":
+            case_id = data.get("case_id")
+            if not case_id:
+                raise ValueError("Missing case_id")
+            history = APIManager.load_case_history(case_id)
+            send({"id": req_id, "ok": True, "result": history})
+            return
+        elif cmd == "save_case_history":
+            case_id = data.get("case_id")
+            case_history = data.get("case_history")
+            if not case_id or not case_history:
+                raise ValueError("Missing case_id or case_history")
+            APIManager.save_case_history(case_id, case_history)
+            send({"id": req_id, "ok": True, "result": {"success": True}})
+            return
+        elif cmd == "update_disease_name":
+            case_id = data.get("case_id")
+            name = data.get("name")
+            if not case_id or not name:
+                raise ValueError("Missing case_id or name")
+            APIManager.update_disease_name(case_id, name)
+            send({"id": req_id, "ok": True, "result": {"success": True}})
+            return
+        elif cmd == "add_timeline_entry":
+            case_id = data.get("case_id")
+            image_path = data.get("image_path")
+            note = data.get("note", "")
+            date = data.get("date")
+            if not case_id or not image_path or not date:
+                raise ValueError("Missing case_id, image_path, or date")
+            APIManager.add_timeline_entry(case_id, image_path, note, date)
+            send({"id": req_id, "ok": True, "result": {"success": True}})
+            return
+
+        # Commands that need case_id and manager instance
         case_id = data.get("case_id")
         if not case_id:
             raise ValueError("Missing case_id")
@@ -28,15 +96,27 @@ def handle_message(msg):
             manager = APIManager(case_id=case_id, dummy=True)
 
         if cmd == "predict":
-            image = data.get("image")
+            image_path = data.get("image_path")
             text = data.get("text_description", "")
-            result = manager.get_initial_prediction(image=image, text_description=text, case_id=case_id)
+            user_timestamp = data.get("user_timestamp")
+            if not image_path:
+                raise ValueError("Missing image_path")
+            result = manager.get_initial_prediction(
+                image_path=image_path,
+                text_description=text,
+                user_timestamp=user_timestamp
+            )
             send({"id": req_id, "ok": True, "result": result})
         elif cmd == "chat":
             question = data.get("question")
+            user_timestamp = data.get("user_timestamp")
             if not question:
                 raise ValueError("Missing question")
-            result = manager.chat_message(case_id=case_id, user_query=question)
+            result = manager.chat_message(user_query=question, user_timestamp=user_timestamp)
+            send({"id": req_id, "ok": True, "result": result})
+        elif cmd == "load_conversation_history":
+            # Load conversation history for the case
+            result = manager.conversation_history
             send({"id": req_id, "ok": True, "result": result})
         else:
             raise ValueError(f"Unknown cmd: {cmd}")

@@ -3,10 +3,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { Box, Card, CardContent, Typography, Button, Stack, useTheme, useMediaQuery, Tooltip } from '@mui/material';
 // Use standard <img> for local/data URL previews
-import FileAdapter from '@/services/adapters/fileAdapter';
 import { isElectron } from '@/utils/config';
+import { useDiseaseContext } from '@/contexts/DiseaseContext';
 
 export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey }) {
+  const { diseases } = useDiseaseContext();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const theme = useTheme();
@@ -20,12 +21,92 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
       try {
         let data = [];
 
-        // In Electron, try to load from FileAdapter (file system); else start empty
+        // In Electron, try to load timeline data
         if (isElectron() && conditionId) {
           try {
-            data = await FileAdapter.loadTimeTracking(conditionId);
+            // Get case ID from condition
+            const condition = (diseases || []).find((d) => d.id === conditionId);
+            const caseId = condition?.caseId || `case_${conditionId}`;
+            
+            // Always try to load fresh timeline data from Python (source of truth)
+            if (window.electronAPI?.loadCaseHistoryFromPython) {
+              try {
+                const caseHistory = await window.electronAPI.loadCaseHistoryFromPython(caseId);
+                
+                // Convert dates object to array format for timeline display
+                // dates structure can be:
+                // - Simple date: "2025-11-21" (initial ML prediction entry)
+                // - Date with timestamp: "2025-11-21_1763762693117" (manual timeline entries)
+                const entries = Object.entries(caseHistory.dates || {})
+                  .map(([dateKey, entry]) => {
+                    // Parse the date key to extract date and timestamp
+                    let displayDate, sortTimestamp;
+                    if (dateKey.includes('_')) {
+                      // Format: "2025-11-21_1763762693117"
+                      const [datePart, timestampPart] = dateKey.split('_');
+                      displayDate = datePart;
+                      sortTimestamp = parseInt(timestampPart, 10);
+                    } else {
+                      // Format: "2025-11-21" (use date as timestamp for sorting)
+                      displayDate = dateKey;
+                      sortTimestamp = new Date(dateKey).getTime();
+                    }
+                    
+                    return {
+                      id: dateKey, // Use full key as unique ID
+                      conditionId: conditionId,
+                      date: displayDate, // Clean ISO date string "2025-11-21"
+                      timestamp: sortTimestamp, // Numeric timestamp for sorting
+                      image: entry.image_path || '',
+                      note: entry.text_summary || '', // Display text_summary as notes
+                      predictions: entry.predictions || {},
+                      cv_analysis: entry.cv_analysis || {}
+                    };
+                  });
+                
+                // Convert file paths to data URLs for display in renderer
+                data = await Promise.all(
+                  entries.map(async (entry) => {
+                    if (entry.image && window.electronAPI?.readImageAsDataUrl) {
+                      try {
+                        const dataUrl = await window.electronAPI.readImageAsDataUrl(entry.image);
+                        return { ...entry, image: dataUrl };
+                      } catch (e) {
+                        console.warn('Failed to load image:', entry.image, e);
+                        return entry; // Keep file path as fallback
+                      }
+                    }
+                    return entry;
+                  })
+                );
+              } catch (e) {
+                console.warn('Failed to load case history from Python via IPC, using in-memory data', e);
+                // Fallback: Use in-memory timelineData if IPC fails
+                if (condition?.timelineData && Array.isArray(condition.timelineData)) {
+                  data = await Promise.all(
+                    condition.timelineData.map(async (entry) => {
+                      if (entry.image && window.electronAPI?.readImageAsDataUrl) {
+                        try {
+                          const dataUrl = await window.electronAPI.readImageAsDataUrl(entry.image);
+                          return { ...entry, image: dataUrl, conditionId };
+                        } catch (e) {
+                          console.warn('Failed to load image:', entry.image, e);
+                          return { ...entry, conditionId };
+                        }
+                      }
+                      return { ...entry, conditionId };
+                    })
+                  );
+                }
+              }
+            } else {
+              // No IPC available - use in-memory timelineData
+              if (condition?.timelineData && Array.isArray(condition.timelineData)) {
+                data = condition.timelineData.map(entry => ({ ...entry, conditionId }));
+              }
+            }
           } catch (e) {
-            console.warn('FileAdapter failed to load time tracking', e);
+            console.warn('Failed to load timeline data', e);
             data = [];
           }
         } else if (!isElectron()) {
@@ -33,12 +114,13 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
           data = [];
         }
 
-        // Filter by conditionId: if conditionId is provided, only show its entries.
-        const filtered = (data || []).filter((e) => {
-          if (!conditionId) return false; // don't show any entries if no condition selected
-          return e.conditionId ? e.conditionId === conditionId : false;
+        // Data is already filtered by caseId (from case_history.json)
+        // Sort by timestamp descending (most recent first)
+        const sorted = (data || []).slice().sort((a, b) => {
+          const timestampA = a.timestamp || new Date(a.date).getTime() || 0;
+          const timestampB = b.timestamp || new Date(b.date).getTime() || 0;
+          return timestampB - timestampA;
         });
-        const sorted = filtered.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
         if (mounted) setEntries(sorted);
       } catch (e) {
         console.error('Failed to load time tracking data', e);

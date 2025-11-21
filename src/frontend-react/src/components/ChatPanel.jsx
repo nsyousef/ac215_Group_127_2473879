@@ -23,43 +23,68 @@ export default function ChatPanel({ conditionId }) {
     let mounted = true;
     async function load() {
       try {
-        let data = [];
-
-        // Find the selected condition to check for initial LLM response
+        // Find the selected condition to get case ID
         const condition = (diseases || []).find((d) => d.id === conditionId);
-
-        // In Electron, try to load from FileAdapter (file system); else start empty
-        if (isElectron() && conditionId) {
-          try {
-            data = await FileAdapter.loadChat(conditionId);
-          } catch (e) {
-            console.warn('FileAdapter failed to load chat history', e);
-            data = [];
-          }
-        } else if (!isElectron()) {
-          // Not in Electron, do not load bundled data
-          data = [];
+        if (!condition) {
+          if (mounted) setMessages([]);
+          return;
         }
 
-        // Filter by conditionId if provided
-        const filtered = (data || []).filter((m) => {
-          if (!conditionId) return false;
-          return m.conditionId ? m.conditionId === conditionId : false;
+        const caseId = condition.caseId || `case_${conditionId}`;
+
+        // Always try to load fresh conversation history from Python (source of truth)
+        let conversationData = null;
+        if (isElectron() && window.electronAPI?.mlLoadConversationHistory) {
+          try {
+            conversationData = await window.electronAPI.mlLoadConversationHistory(caseId);
+          } catch (e) {
+            console.error('Failed to load conversation history from Python:', e);
+            // Fallback to in-memory conversation history if IPC fails
+            conversationData = condition.conversationHistory;
+          }
+        } else {
+          // Not in Electron - use in-memory conversation history
+          conversationData = condition.conversationHistory;
+        }
+        
+        // Convert Python conversation format to UI message format
+        // Python format: [{ user: { message, timestamp }, llm: { message, timestamp } }, ...]
+        const messages = [];
+        (conversationData || []).forEach((entry, idx) => {
+          if (entry.user) {
+            messages.push({
+              id: `u_${idx}`,
+              role: 'user',
+              text: entry.user.message,
+              time: entry.user.timestamp,
+              conditionId,
+            });
+          }
+          if (entry.llm) {
+            messages.push({
+              id: `a_${idx}`,
+              role: 'assistant',
+              text: entry.llm.message,
+              time: entry.llm.timestamp,
+              conditionId,
+              isInitial: idx === 0, // First LLM response is initial
+            });
+          }
         });
 
-        // If no chat history but condition has initial LLM response, show it
-        if (filtered.length === 0 && condition?.llmResponse) {
-          filtered.push({
+        // If no conversation history but we have llmResponse, show it as initial message
+        if (messages.length === 0 && condition?.llmResponse && mounted) {
+          messages.push({
             id: `initial_${conditionId}`,
             role: 'assistant',
             text: condition.llmResponse,
-            time: condition.createdAt || new Date().toISOString(),
+            time: condition.createdAt || condition.date || new Date().toISOString(),
             conditionId,
             isInitial: true,
           });
         }
 
-        if (mounted) setMessages(filtered || []);
+        if (mounted) setMessages(messages);
       } catch (e) {
         console.error('Failed to load chat history', e);
       }
@@ -106,15 +131,7 @@ export default function ChatPanel({ conditionId }) {
       };
       setMessages((s) => [...s, assistantMsg]);
 
-      // Save conversation to FileAdapter if available
-      try {
-        if (FileAdapter && FileAdapter.saveChat) {
-          const allMessages = [...messages, userMsg, assistantMsg];
-          await FileAdapter.saveChat(conditionId, allMessages);
-        }
-      } catch (e) {
-        console.warn('Failed to save chat:', e);
-      }
+      // Note: Conversation is already saved by Python in chat_message() method
     } catch (error) {
       console.error('Failed to send message:', error);
       // Show error message to user
