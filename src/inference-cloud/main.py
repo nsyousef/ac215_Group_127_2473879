@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import Union
 import numpy as np
 from typing import List, Dict, Optional
 import os
@@ -48,7 +49,7 @@ class PredictionResponse(BaseModel):
     predicted_class: str
     predicted_idx: int
     confidence: float
-    top_k: List[Dict[str, float]]
+    top_k: List[Dict[str, Union[str, float]]]
 
 
 class TextEmbeddingResponse(BaseModel):
