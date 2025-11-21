@@ -7,10 +7,10 @@ from typing import Union, List, Dict
 import numpy as np
 from transformers import AutoTokenizer, AutoModel
 
-from ..model.classifier.multimodal_classifier import MultimodalClassifier
-from ..dataloader.embedding_utils import mean_pool, cls_pool, last_token_pool, get_detailed_instruct
-from ..constants import MODELS
-from ..utils import logger
+from ml_workflow.model.classifier.multimodal_classifier import MultimodalClassifier
+from ml_workflow.dataloader.embedding_utils import mean_pool, cls_pool, last_token_pool, get_detailed_instruct
+from ml_workflow.constants import MODELS
+from ml_workflow.utils import logger
 
 
 class InferenceClassifier:
