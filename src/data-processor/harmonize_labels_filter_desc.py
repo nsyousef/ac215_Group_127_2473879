@@ -121,6 +121,7 @@ def harmonize_labels(metadata_all):
         # Other malignancies - consolidate by tissue type
         'sebaceous-carcinoma': 'sebaceous-carcinoma',  # Keep specific - user needs to know
         'metastatic-carcinoma': 'metastatic-carcinoma',
+        'metastatic carcinoma': 'metastatic-carcinoma',
         'merkel cell carcinoma': 'merkel-cell-carcinoma',  # Keep specific - aggressive cancer
         
         # Hematologic malignancies - consolidate
@@ -256,6 +257,7 @@ def harmonize_labels(metadata_all):
         
         # Granulomas - consolidate by type
         'pyogenic-granuloma': 'pyogenic-granuloma',
+        'pyogenic granuloma': 'pyogenic-granuloma',
         'granuloma pyogenic': 'pyogenic-granuloma',
         'Pyogenic granuloma': 'pyogenic-granuloma',
         'granulation tissue': 'pyogenic-granuloma',
@@ -658,6 +660,12 @@ def harmonize_labels(metadata_all):
         'porphyria': 'metabolic-disorder',
         'eruptive odontogenic cyst': 'rare-cyst',
         'chondrodermatitis nodularis helicis': 'chondrodermatitis',
+
+        # Neutrophilic dermatoses (formatting fix)
+        'neutrophilic dermatoses': 'neutrophilic-dermatoses',
+
+        # Acrodermatitis (formatting fix)
+        'acrodermatitis enteropathica': 'acrodermatitis-enteropathica',
     }
     
     # Apply the mappings
