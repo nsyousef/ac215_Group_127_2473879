@@ -17,6 +17,10 @@ if APP_DATA_DIR:
 else:
     SAVE_DIR = Path(os.getcwd())
 
+BASE_URL = "https://inference-cloud-469023639150.us-east4.run.app"
+TEXT_EMBEDDING_URL = f"{BASE_URL}/embed-text"
+PREDICTION_URL = f"{BASE_URL}/predict"
+
 def debug_log(msg: str):
     """Print to stderr so it doesn't interfere with stdout JSON protocol"""
     print(msg, file=sys.stderr, flush=True)
@@ -78,6 +82,8 @@ class APIManager:
         
         self.llm_explain_url = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explain.modal.run"
         self.llm_followup_url = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-followup.modal.run"
+        self.text_embed_url = TEXT_EMBEDDING_URL
+        self.prediction_url = PREDICTION_URL
     
     @staticmethod
     def save_demographics(data: Dict[str, Any]) -> None:
@@ -893,15 +899,23 @@ class APIManager:
                 "seborrheic_dermatitis": 0.01
             }
         
-        # TODO: REAL IMPLEMENTATION
-        debug_log("    [TODO] Calling cloud ML model...")
-        return {
-            "eczema": 0.78,
-            "contact_dermatitis": 0.15,
-            "psoriasis": 0.04,
-            "tinea_corporis": 0.02,
-            "seborrheic_dermatitis": 0.01
-        }
+        # Embed text description using cloud API
+        debug_log("Calling cloud ML model...")
+        response = requests.post(self.text_embed_url, json={ 'text': text_description }, timeout=60)
+        response.raise_for_status()
+        text_embedding = response.json().get('embedding', [0.0]*512)
+
+        debug_log("Vision Embedding Shape: {}".format(len(embedding)))
+        debug_log("Text Embedding Shape: {}".format(len(text_embedding)))
+
+        # get predictions from cloud API
+        response = requests.post(self.prediction_url, json={
+            'vision_embedding': embedding,
+            'text_embedding': text_embedding,
+            'top_k': 5,
+        }, timeout=60)
+        response.raise_for_status()
+        return response.json().get('top_k', {})
     
     def _call_llm_explain(
         self, 

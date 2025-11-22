@@ -91,9 +91,9 @@ def handle_message(msg):
         if not case_id:
             raise ValueError("Missing case_id")
 
-        # Lazily create the APIManager per process (dummy mode True)
+        # Lazily create the APIManager per process (dummy mode False)
         if manager is None or getattr(manager, "case_id", None) != case_id:
-            manager = APIManager(case_id=case_id, dummy=True)
+            manager = APIManager(case_id=case_id, dummy=False)
 
         if cmd == "predict":
             image_path = data.get("image_path")
