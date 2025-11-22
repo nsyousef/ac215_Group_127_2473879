@@ -22,24 +22,36 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import FileAdapter from '@/services/adapters/fileAdapter';
-import { BODY_MAP_SPOTS } from '@/lib/constants';
-import BodyMapPicker from '@/components/BodyMapPicker';
-import { inferBodyPartFromCoords } from '@/lib/bodyMapUtils';
+import { BODY_PART_DEFAULTS } from '@/lib/constants';
+import BodyMapPicker, { getBodyPartFromCoordinates } from '@/components/BodyMapPicker';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import mlClient from '@/services/mlClient';
 
+// All valid body parts in order
 const BODY_PARTS = [
-  'Head',
-  'Face',
-  'Neck',
-  'Torso',
-  'Left Upper Arm',
-  'Left Lower Arm',
-  'Right Upper Arm',
-  'Right Lower Arm',
-  'Left Leg',
-  'Right Leg',
+  'head',
+  'torso',
+  'left upper arm',
+  'left lower arm',
+  'right upper arm',
+  'right lower arm',
+  'left hand',
+  'right hand',
+  'left upper leg',
+  'right upper leg',
+  'left lower leg',
+  'right lower leg',
+  'left foot',
+  'right foot',
 ];
+
+// Format body part name for display (capitalize properly)
+function formatBodyPartLabel(bodyPart) {
+  return bodyPart
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = true, onboardingBack }) {
   const theme = useTheme();
@@ -49,6 +61,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   const [step, setStep] = useState(0);
   const [bodyPart, setBodyPart] = useState('');
   const [mapPos, setMapPos] = useState(null); // { leftPct, topPct }
+  const [mapError, setMapError] = useState(null); // Error message if invalid selection
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [note, setNote] = useState('');
@@ -89,12 +102,16 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   const handleMapChange = (coords) => {
     // coords: { leftPct, topPct }
     setMapPos(coords);
-    // infer a categorical body part name from anchors
-    try {
-      const inferred = inferBodyPartFromCoords(coords, Object.values(BODY_MAP_SPOTS).map((s) => ({ name: s.label, leftPct: parseFloat(s.left), topPct: parseFloat(s.top) })));
-      if (inferred) setBodyPart(inferred);
-    } catch (e) {
-      // ignore
+    
+    // Use bounding box detection to infer body part from coordinates
+    const detectedPart = getBodyPartFromCoordinates(coords.leftPct, coords.topPct);
+    
+    if (detectedPart === 'invalid') {
+      setMapError('Please select a valid body area');
+      setBodyPart('');
+    } else {
+      setMapError(null);
+      setBodyPart(detectedPart);
     }
   };
 
@@ -243,13 +260,31 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             <Box sx={{ mb: 2 }}>
               <BodyMapPicker value={mapPos} onChange={(coords) => handleMapChange(coords)} />
             </Box>
+            {mapError && (
+              <Typography variant="body2" sx={{ color: 'error.main', mb: 2, textAlign: 'center' }}>
+                {mapError}
+              </Typography>
+            )}
 
             <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>Or pick from the list</Typography>
             <List>
               {BODY_PARTS.map((p) => (
                 <ListItem key={p} disablePadding>
-                  <ListItemButton selected={bodyPart === p} onClick={() => { setBodyPart(p); setMapPos(null); }}>
-                    <ListItemText primary={p} />
+                  <ListItemButton
+                    selected={bodyPart === p}
+                    onClick={() => {
+                      setBodyPart(p);
+                      setMapError(null);
+                      // Use default coordinates for this body part if available
+                      if (BODY_PART_DEFAULTS[p]) {
+                        const defaults = BODY_PART_DEFAULTS[p];
+                        setMapPos({ leftPct: defaults.leftPct, topPct: defaults.topPct });
+                      } else {
+                        setMapPos(null);
+                      }
+                    }}
+                  >
+                    <ListItemText primary={formatBodyPartLabel(p)} />
                   </ListItemButton>
                 </ListItem>
               ))}

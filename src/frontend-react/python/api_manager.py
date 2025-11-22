@@ -529,7 +529,10 @@ class APIManager:
         # Step 3: Get predictions from cloud ML model TODO
         debug_log("  → Getting cloud predictions...")
         updated_text_description = self.update_text_input(text_description)
-        predictions = self._run_cloud_ml_model(embedding, updated_text_description)
+        predictions_raw = self._run_cloud_ml_model(embedding, updated_text_description)
+
+        # Step 3.5: Reformat predictions for explain LLM
+        predictions = {item['class']: item['probability'] for item in predictions_raw}
         
         # Step 4: Build metadata for LLM
         metadata = {
@@ -821,11 +824,11 @@ class APIManager:
         """
         if self.dummy:
             debug_log("    [DUMMY MODE] Returning dummy embeddings...")
-            return [0.1, 0.2, 0.3, 0.4] * 128  # Dummy 512-dim embedding
+            return [0.1, 0.2, 0.3, 0.4] * 512  # Dummy 2048-dim embedding
         
         # TODO: REAL IMPLEMENTATION
         debug_log("    [TODO] Running local ML model for embeddings...")
-        return [0.1, 0.2, 0.3, 0.4] * 128  # Placeholder
+        return [0.1, 0.2, 0.3, 0.4] * 512  # Placeholder (cloud model currently expects dimension 2048 for a dummy model; this may change in the future)
     
     def _run_cv_analysis(self, image_path: str) -> Dict[str, Any]:
         """
