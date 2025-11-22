@@ -172,46 +172,61 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
         </Stack>
       </CardContent>
 
-      {/* Fixed Add Image button: appears above bottom nav on mobile and fixed bottom on desktop */}
-      <Box
-        sx={{
-          position: 'fixed',
-          right: isMobile ? 16 : '50%',
-          bottom: isMobile ? 80 : 24,
-          transform: isMobile ? 'none' : 'translateX(50%)',
-          width: isMobile ? '56px' : '280px',
-          zIndex: 1400,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: isMobile ? 'center' : 'stretch',
-        }}
-      >
-        <Tooltip title="Select a condition first" disableHoverListener={!!conditionId}>
-          <span>
-            <Button
-              variant="contained"
-              onClick={() => onAddImage && onAddImage(conditionId)}
-              fullWidth={!isMobile}
-              disabled={!conditionId}
-              sx={{
-                textTransform: 'none',
-                py: isMobile ? 0 : 1.2,
-                borderRadius: isMobile ? '50%' : 2,
-                width: isMobile ? '56px' : '100%',
-                height: isMobile ? '56px' : 'auto',
-                minWidth: isMobile ? '56px' : 'auto',
-                padding: isMobile ? 0 : undefined,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: isMobile ? 24 : 'inherit',
-              }}
-            >
-              {isMobile ? '+' : 'Add Image'}
-            </Button>
-          </span>
-        </Tooltip>
-      </Box>
+      {/* Persistent Add Image button at bottom - desktop gets static footer, mobile gets FAB */}
+      {isMobile ? (
+        <Box
+          sx={{
+            position: 'fixed',
+            right: 16,
+            bottom: 80,
+            width: '56px',
+            zIndex: 1400,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Tooltip title="Select a condition first" disableHoverListener={!!conditionId}>
+            <span>
+              <Button
+                variant="contained"
+                onClick={() => onAddImage && onAddImage(conditionId)}
+                disabled={!conditionId}
+                sx={{
+                  textTransform: 'none',
+                  py: 0,
+                  borderRadius: '50%',
+                  width: '56px',
+                  height: '56px',
+                  minWidth: '56px',
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 24,
+                }}
+              >
+                +
+              </Button>
+            </span>
+          </Tooltip>
+        </Box>
+      ) : (
+        <Box sx={{ p: 2, borderTop: '1px solid #e0e0e0' }}>
+          <Button
+            variant="contained"
+            onClick={() => onAddImage && onAddImage(conditionId)}
+            disabled={!conditionId}
+            fullWidth
+            sx={{
+              textTransform: 'none',
+              py: 1,
+            }}
+          >
+            Add Image
+          </Button>
+        </Box>
+      )}
     </Card>
   );
 }

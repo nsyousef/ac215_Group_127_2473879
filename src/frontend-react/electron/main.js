@@ -297,7 +297,9 @@ ipcMain.handle('read-image-as-data-url', async (event, imagePath) => {
 // ============================================================================
 
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  const icon = path.join(__dirname, '..', 'build-resources', 'icon.png');
+  mainWindow = new BrowserWindow({
+    icon: icon,
     width: 1200,
     height: 800,
     webPreferences: {
@@ -332,6 +334,17 @@ function createWindow() {
 
 app.on('ready', async () => {
   await ensureDataDirExists();
+  // On macOS, BrowserWindow.icon is ignored; set Dock icon explicitly in dev
+  if (process.platform === 'darwin') {
+    try {
+      const dockIconPath = path.join(__dirname, '..', 'build-resources', 'icon.png');
+      if (fsSync.existsSync(dockIconPath) && app.dock && app.dock.setIcon) {
+        app.dock.setIcon(dockIconPath);
+      }
+    } catch (e) {
+      console.warn('Failed to set macOS Dock icon:', e);
+    }
+  }
   createWindow();
 });
 

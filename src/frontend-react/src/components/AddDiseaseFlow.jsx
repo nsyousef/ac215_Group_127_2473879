@@ -265,8 +265,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
               To enable tracking of size and color, place a coin (or a similarly sized object) near the skin condition in the photo.
             </Typography>
             <Box sx={{ my: 2, display: 'flex', justifyContent: 'center' }}>
-              {/* Simplified body map placeholder */}
-              <Box sx={{ width: 160, height: 260, bgcolor: '#f0f0f0', borderRadius: 1 }} />
+              <img src="/assets/instructions.png" alt="Coin placement instructions" style={{ maxWidth: 320, width: '100%', borderRadius: 8, boxShadow: '0 2px 8px #0001' }} />
             </Box>
           </Box>
         )}

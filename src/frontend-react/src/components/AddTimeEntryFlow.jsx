@@ -126,6 +126,9 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
             <Typography variant="body2" sx={{ color: '#666', mt: 1 }}>
               Place a coin or similarly sized object near the skin condition. Take a clear photo.
             </Typography>
+            <Box sx={{ my: 2, display: 'flex', justifyContent: 'center' }}>
+              <img src="/assets/instructions.png" alt="Coin placement instructions" style={{ maxWidth: 320, width: '100%', borderRadius: 8, boxShadow: '0 2px 8px #0001' }} />
+            </Box>
           </Box>
         )}
 

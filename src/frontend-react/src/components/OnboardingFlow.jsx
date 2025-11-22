@@ -54,7 +54,7 @@ export default function OnboardingFlow({ onComplete }) {
         <Card sx={{ maxWidth: 520, width: '100%' }}>
           <CardContent>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', py: 3 }}>
-              <img src="/assets/logo.svg" alt="App Logo" width={120} height={120} style={{ marginBottom: 16 }} />
+              <img src="/assets/pibu_logo.svg" alt="pibu.ai" width={120} height={120} style={{ marginBottom: 16, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} />
               <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>Welcome</Typography>
               <Typography variant="body2" sx={{ color: '#666', mb: 3 }}>
                 Track your skin conditions over time with helpful insights.

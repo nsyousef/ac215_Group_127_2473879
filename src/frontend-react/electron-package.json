@@ -23,9 +23,9 @@
   },
   "build": {
     "appId": "com.skincare.app",
-    "productName": "SkinCare App",
+    "productName": "pibu.ai",
     "directories": {
-      "buildResources": "public"
+      "buildResources": "build-resources"
     },
     "files": [
       "electron/**/*",
@@ -33,13 +33,17 @@
       "node_modules/**/*"
     ],
     "win": {
-      "target": ["nsis"]
+      "target": ["nsis"],
+      "icon": "build-resources/icon.png"
     },
     "mac": {
-      "target": ["dmg", "zip"]
+      "target": ["dmg", "zip"],
+      "icon": "build-resources/icon.icns",
+      "category": "public.app-category.healthcare-fitness"
     },
     "linux": {
-      "target": ["AppImage"]
+      "target": ["AppImage"],
+      "icon": "build-resources/icon.png"
     }
   }
 }
