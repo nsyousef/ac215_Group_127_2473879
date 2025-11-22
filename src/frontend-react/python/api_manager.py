@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import requests
 
-SAVE_DIR = Path(os.getcwd())
+# Get app data directory from Electron, fallback to current working directory
+APP_DATA_DIR = os.getenv('APP_DATA_DIR')
+if APP_DATA_DIR:
+    SAVE_DIR = Path(APP_DATA_DIR)
+    SAVE_DIR.mkdir(parents=True, exist_ok=True)
+else:
+    SAVE_DIR = Path(os.getcwd())
 
 def debug_log(msg: str):
     """Print to stderr so it doesn't interfere with stdout JSON protocol"""

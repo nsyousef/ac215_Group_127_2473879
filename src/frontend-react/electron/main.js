@@ -97,6 +97,7 @@ function spawnPythonForCase(caseId) {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: {
       ...process.env,
+      APP_DATA_DIR: app.getPath('userData'),
       PYTHONPATH: [pyCwd, process.env.PYTHONPATH || ''].filter(Boolean).join(path.delimiter),
     },
   });
