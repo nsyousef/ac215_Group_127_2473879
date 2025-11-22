@@ -44,14 +44,8 @@ What happens on first run:
 ## Data Storage (Dev)
 
 - Python venv: `src/frontend-react/python/.venv/` (ignored by git)
-- Case history: `src/frontend-react/python/history/`
-- Chat conversations: `src/frontend-react/python/conversations/`
+- App data is stored in your system's standard folder for applications.
 - These folders are local-only and should not be committed.
-
-To clear local dev data:
-```bash
-rm -rf src/frontend-react/python/history src/frontend-react/python/conversations
-```
 
 ## Troubleshooting
 
