@@ -122,17 +122,13 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
       // Ensure we have map coordinates: if user picked from list only, set default based on label
       let finalMapPos = mapPos;
       if (!finalMapPos && bodyPart) {
-        try {
-          const match = Object.values(BODY_MAP_SPOTS).find((s) => s.label === bodyPart);
-          if (match) {
-            finalMapPos = {
-              leftPct: parseFloat(match.left),
-              topPct: parseFloat(match.top),
-            };
-            setMapPos(finalMapPos);
-          }
-        } catch (e) {
-          // ignore
+        if (BODY_PART_DEFAULTS[bodyPart]) {
+          const defaults = BODY_PART_DEFAULTS[bodyPart];
+          finalMapPos = {
+            leftPct: defaults.leftPct,
+            topPct: defaults.topPct,
+          };
+          setMapPos(finalMapPos);
         }
       }
       
