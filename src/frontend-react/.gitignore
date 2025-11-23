@@ -21,6 +21,9 @@ python/.python-bin-path.json
 python/history/
 python/conversations/
 
+# Local inference model
+python/inference_local/*.pth
+
 # Electron build artifacts
 dist/
 out/

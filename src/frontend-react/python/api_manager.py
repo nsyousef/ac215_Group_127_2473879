@@ -8,6 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import requests
+from inference_local.vision_encoder import VisionEncoder
+
+# Shared vision encoder instance (lazy-loaded)
+_VISION_ENCODER = None
 
 # Get app data directory from Electron, fallback to current working directory
 APP_DATA_DIR = os.getenv('APP_DATA_DIR')
@@ -84,6 +88,44 @@ class APIManager:
         self.llm_followup_url = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-followup.modal.run"
         self.text_embed_url = TEXT_EMBEDDING_URL
         self.prediction_url = PREDICTION_URL
+
+    @staticmethod
+    def get_vision_encoder():
+        """Get shared vision encoder instance (lazy-loaded)."""
+        global _VISION_ENCODER
+        
+        if _VISION_ENCODER is None:
+            debug_log("Initializing vision encoder...")
+            
+            # Look for checkpoint (REQUIRED)
+            current_file = Path(__file__).resolve()
+            python_dir = current_file.parent
+            MODEL_NAME = 'test_best.pth'
+            checkpoint_path = python_dir / "inference_local" / MODEL_NAME
+            
+            if not checkpoint_path.exists():
+                error_msg = (
+                    f"Model checkpoint not found at {checkpoint_path}\n"
+                    f"Please ensure {MODEL_NAME} is placed in python/inference_local/model/"
+                )
+                debug_log(f"✗ {error_msg}")
+                raise FileNotFoundError(error_msg)
+            
+            debug_log(f"Using checkpoint: {checkpoint_path}")
+            
+            try:
+                _VISION_ENCODER = VisionEncoder(
+                    checkpoint_path=str(checkpoint_path)
+                )
+                info = _VISION_ENCODER.get_model_info()
+                debug_log(f"✓ Vision encoder initialized: {info}")
+            except Exception as e:
+                debug_log(f"✗ Error initializing vision encoder: {e}")
+                import traceback
+                debug_log(traceback.format_exc())
+                raise
+        
+        return _VISION_ENCODER
     
     @staticmethod
     def save_demographics(data: Dict[str, Any]) -> None:
@@ -810,11 +852,7 @@ class APIManager:
     
     def _run_local_ml_model(self, image_path: str) -> List[float]:
         """
-        Run local ML model for embeddings.
-        
-        TODO: Integrate with actual ML model from src/ml_workflow/
-        TODO: Handle different image input formats (PIL, numpy, file path)
-        TODO: Add proper error handling
+        Run local ML model for embeddings using trained vision encoder.
         
         Args:
             image_path: Path to the image file
@@ -822,13 +860,27 @@ class APIManager:
         Returns:
             Image embedding vector (list of floats)
         """
-        if self.dummy:
-            debug_log("    [DUMMY MODE] Returning dummy embeddings...")
-            return [0.1, 0.2, 0.3, 0.4] * 512  # Dummy 2048-dim embedding
-        
-        # TODO: REAL IMPLEMENTATION
-        debug_log("    [TODO] Running local ML model for embeddings...")
-        return [0.1, 0.2, 0.3, 0.4] * 512  # Placeholder (cloud model currently expects dimension 2048 for a dummy model; this may change in the future)
+        try:
+            debug_log(f"    Encoding image: {image_path}")
+            
+            # Get shared encoder instance
+            encoder = self.get_vision_encoder()
+            
+            # Encode image
+            embedding_array = encoder.encode(image_path)
+            embedding_list = embedding_array.tolist()
+            
+            debug_log(f"    ✓ Embedding extracted (dim={len(embedding_list)})")
+            return embedding_list
+            
+        except FileNotFoundError:
+            debug_log(f"    ✗ Image file not found: {image_path}")
+            raise ValueError(f"Image file not found: {image_path}")
+        except Exception as e:
+            debug_log(f"    ✗ Error extracting embedding: {e}")
+            import traceback
+            debug_log(traceback.format_exc())
+            raise ValueError(f"Error extracting image embedding: {str(e)}")
     
     def _run_cv_analysis(self, image_path: str) -> Dict[str, Any]:
         """
