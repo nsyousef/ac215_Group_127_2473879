@@ -29,3 +29,6 @@ out/
 python/case_*
 python/demographics.json
 python/diseases.json
+
+# make sure lib folder is tracked
+!src/lib/
