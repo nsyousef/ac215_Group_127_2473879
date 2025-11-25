@@ -11,6 +11,7 @@ export function ProfileProvider({ children }) {
     dateOfBirth: '',
     sex: '',
     raceEthnicity: '',
+    country: '',
     hasCompletedOnboarding: false,
   });
   const [loading, setLoading] = useState(true);
@@ -27,6 +28,7 @@ export function ProfileProvider({ children }) {
               dateOfBirth: data.DOB || '',
               sex: data.Sex || '',
               raceEthnicity: data.Race || '',
+              country: data.Country || '',
               hasCompletedOnboarding: data.hasCompletedOnboarding || false,
             };
             setProfile(normalized);
@@ -44,7 +46,7 @@ export function ProfileProvider({ children }) {
   const updateProfile = async (newProfile) => {
     const updated = { ...profile, ...newProfile };
     setProfile(updated);
-    
+
     // Attempt to persist
     if (isElectron() && window.electronAPI?.saveDemographics) {
       try {
@@ -53,6 +55,7 @@ export function ProfileProvider({ children }) {
           DOB: updated.dateOfBirth || '',
           Sex: updated.sex || '',
           Race: updated.raceEthnicity || '',
+          Country: updated.country || '',
           hasCompletedOnboarding: updated.hasCompletedOnboarding || false,
         };
         await window.electronAPI.saveDemographics(demographics);

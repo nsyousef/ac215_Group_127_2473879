@@ -20,7 +20,7 @@ export default function OnboardingFlow({ onComplete }) {
   const { updateProfile, profile } = useProfile();
   const [step, setStep] = useState('splash'); // 'splash' | 'profile' | 'add'
   const [showAddFlow, setShowAddFlow] = useState(false);
-  const [formData, setFormData] = useState({ dateOfBirth: '', sex: '', raceEthnicity: '' });
+  const [formData, setFormData] = useState({ dateOfBirth: '', sex: '', raceEthnicity: '', country: '' });
 
   useEffect(() => {
     if (profile) {
@@ -28,6 +28,7 @@ export default function OnboardingFlow({ onComplete }) {
         dateOfBirth: profile.dateOfBirth || '',
         sex: profile.sex || '',
         raceEthnicity: profile.raceEthnicity || '',
+        country: profile.country || '',
       });
     }
   }, [profile]);
