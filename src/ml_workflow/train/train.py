@@ -45,6 +45,14 @@ class Trainer:
         self.training_config = config['training']
         self.output_config = config['output']
         self.checkpoint_config = config['checkpoint']
+        self.masking_config = config.get('masking', {})
+        
+        # Initialize masking settings
+        self.mask_complete = self.masking_config.get('mask_complete', None)
+        self.random_mask_config = self.masking_config.get('random_mask', {})
+        self.random_mask_enabled = self.random_mask_config.get('enabled', False) and self.mask_complete is None
+        self.image_mask_prob = self.random_mask_config.get('image_prob', 0.0) if self.random_mask_enabled else 0.0
+        self.text_mask_prob = self.random_mask_config.get('text_prob', 0.0) if self.random_mask_enabled else 0.0
         
         self.optimizer_vision, self.optimizer_multimodal = self._initialize_optimizers()
         self.scheduler_vision, self.scheduler_multimodal = self._initialize_schedulers()
@@ -222,6 +230,83 @@ class Trainer:
                 
             logger.info("Training completed!")
     
+    def _apply_masking(self, images: torch.Tensor, text_embeddings: torch.Tensor):
+        """
+        Apply modality masking to images and/or text embeddings (zero masking)
+        
+        Args:
+            images: Image tensor (batch_size, channels, height, width)
+            text_embeddings: Text embedding tensor (batch_size, text_embedding_dim)
+            
+        Returns:
+            Tuple of (masked_images, masked_text_embeddings, modality_mask_info)
+        """
+        batch_size = images.size(0)
+        vision_valid = torch.ones(batch_size, dtype=torch.bool, device=images.device)
+        text_valid = torch.ones(batch_size, dtype=torch.bool, device=text_embeddings.device)
+        mask_applied = False
+        
+        # Complete masking: mask entire modality for whole run
+        if self.mask_complete == "image":
+            # Mask all images with zeros
+            images = torch.zeros_like(images)
+            vision_valid.zero_()
+            mask_applied = True
+        
+        elif self.mask_complete == "text":
+            # Mask all text embeddings with zeros
+            text_embeddings = torch.zeros_like(text_embeddings)
+            text_valid.zero_()
+            mask_applied = True
+        
+        # Random masking (only if complete masking is not enabled)
+        elif self.random_mask_enabled:
+            images = images.clone()
+            text_embeddings = text_embeddings.clone()
+
+            image_mask = (
+                torch.rand(batch_size, device=images.device) < self.image_mask_prob
+                if self.image_mask_prob > 0.0 else torch.zeros(batch_size, dtype=torch.bool, device=images.device)
+            )
+
+            text_mask = (
+                torch.rand(batch_size, device=text_embeddings.device) < self.text_mask_prob
+                if self.text_mask_prob > 0.0 else torch.zeros(batch_size, dtype=torch.bool, device=text_embeddings.device)
+            )
+
+            both_masked = image_mask & text_mask
+
+            if both_masked.any():
+                # probability based on complement masking rates
+                p_keep_image = (1 - self.image_mask_prob)
+                p_keep_text = (1 - self.text_mask_prob)
+                p_keep_image = p_keep_image / (p_keep_image + p_keep_text)
+                keep_image = torch.rand(both_masked.sum().item(), device=images.device) < p_keep_image
+
+                image_mask[both_masked] = ~keep_image
+                text_mask[both_masked] = keep_image
+
+            # APPLY MASKS
+            if image_mask.any():
+                images[image_mask] = 0.0
+            vision_valid = ~image_mask
+
+            if text_mask.any():
+                text_embeddings[text_mask] = 0.0
+            text_valid = ~text_mask
+            
+            mask_applied = True
+
+        mask_info = None
+        if mask_applied:
+            mask_info = {
+                'vision_valid_mask': vision_valid,
+                'text_valid_mask': text_valid
+            }
+
+        return images, text_embeddings, mask_info
+
+    
     def _train_epoch(self):
         """Train for one epoch"""
         self.vision_model.train()
@@ -243,6 +328,9 @@ class Trainer:
                 text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
             text_embeddings = text_embeddings.to(self.device, non_blocking=True)
             
+            # Apply masking (if enabled)
+            images, text_embeddings, modality_mask_info = self._apply_masking(images, text_embeddings)
+            
             # Zero gradients (set_to_none=True for better memory efficiency)
             if not self.vision_frozen:
                 self.optimizer_vision.zero_grad(set_to_none=True)
@@ -256,7 +344,7 @@ class Trainer:
             logits = outputs['logits']
             
             # Compute loss (includes auxiliary losses if enabled)
-            loss = self.multimodal_classifier.compute_loss(outputs, targets)
+            loss = self.multimodal_classifier.compute_loss(outputs, targets, modality_mask_info)
             
             # Clear references to intermediate outputs to free memory
             del vision_embeddings
@@ -343,6 +431,11 @@ class Trainer:
                     text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
                 text_embeddings = text_embeddings.to(self.device, non_blocking=True)
                 
+                modality_mask_info = None
+                # Apply complete masking (if enabled) - no random masking in validation
+                if self.mask_complete is not None:
+                    images, text_embeddings, modality_mask_info = self._apply_masking(images, text_embeddings)
+                
                 # Forward pass through vision model
                 vision_embeddings = self.vision_model(images)
                 
@@ -351,7 +444,7 @@ class Trainer:
                 logits = outputs['logits']
                 
                 # Compute loss
-                loss = self.multimodal_classifier.compute_loss(outputs, targets)
+                loss = self.multimodal_classifier.compute_loss(outputs, targets, modality_mask_info)
                 
                 # Statistics
                 total_loss += loss.item()
@@ -509,6 +602,11 @@ class Trainer:
                     text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
                 text_embeddings = text_embeddings.to(self.device, non_blocking=True)
                 
+                modality_mask_info = None
+                # Apply complete masking (if enabled) - no random masking in validation
+                if self.mask_complete is not None:
+                    images, text_embeddings, modality_mask_info = self._apply_masking(images, text_embeddings)
+                
                 # Forward pass through vision model
                 vision_embeddings = self.vision_model(images)
                 
@@ -517,7 +615,7 @@ class Trainer:
                 logits = outputs['logits']
                 
                 # Compute loss
-                loss = self.multimodal_classifier.compute_loss(outputs, targets)
+                loss = self.multimodal_classifier.compute_loss(outputs, targets, modality_mask_info)
                 
                 # Statistics
                 total_loss += loss.item()

@@ -1,5 +1,6 @@
 # Model Training Configuration for Modal
-# DenseNet-121 Vision Model Experiment
+# Experiment 016: EfficientNet-B0 + SapBERT 256 with Text Masking, Auxiliary Loss, and Wider Projection without Dropout
+# Hypothesis: Removing pre-fusion dropout and widening the projection MLP preserves text/image signal under aggressive text masking.
 
 # Data source configuration  
 data:
@@ -41,7 +42,7 @@ training:
   num_epochs: 10
   patience: 5
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
-  n_warmup_epochs: 3  # Number of epochs to freeze backbone (0 = no freezing)
+  n_warmup_epochs: 1  # Number of epochs to freeze backbone (0 = no freezing)
   
   # Statistics and sampling
   compute_stats: False
@@ -69,41 +70,41 @@ augmentation:
 
 # Vision model configuration
 vision_model:
-  name: "densenet121"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
+  name: "efficientnet_b0"  # resnet50, resnet101, densenet121, efficientnet_b0, efficientnet_b1, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
   pretrained: true
   pooling_type: "avg"  # For ImageNet models: avg, max, concat
-  unfreeze_layers: 10  # Number of layers to unfreeze from end
+  unfreeze_layers: 10  # Same as experiment 015
 
 # Multimodal classifier configuration
 multimodal_classifier:
   # Projection configuration
-  projection_dim: 256  # Common projection dimension for both modalities
-  use_l2_normalization: false  # Normalize embeddings before fusion
+  projection_dim: 512  # Wider projection to avoid feature bottleneck
+  use_l2_normalization: true  # Normalize embeddings before fusion
 
   # Vision projection layers (empty list = just linear layer)
   image_projection_hidden: [512]  # Hidden layers for vision projection
   projection_activation: "relu"  # Activation for projection layers
-  projection_dropout: 0.3  # Dropout for projection layers
+  projection_dropout: 0.0  # Remove dropout before fusion
   
   # Text projection layers (empty list = just linear layer)  
   text_projection_hidden: [512]  # Hidden layers for text projection
   
   # Final classifier configuration
-  final_hidden_sizes: [256, 128]  # Hidden layers after fusion
+  final_hidden_sizes: [512, 256, 128]  # Slightly widened to match larger projection_dim
   final_activation: "relu"  # Activation for final classifier
-  final_dropout: 0.3  # Dropout for final classifier
+  final_dropout: 0.3  # Dropout for final classifier remains
   
   # Fusion strategy
   fusion_strategy: "concat_mlp"  # "weighted_sum" or "concat_mlp"
   
   # Auxiliary losses (optional)
-  use_auxiliary_loss: False  # Enable auxiliary losses on individual modalities
-  auxiliary_loss_weight: 0.0  # Weight for auxiliary losses (0.0-1.0)
+  use_auxiliary_loss: True  # Same as experiment 015
+  auxiliary_loss_weight: 0.3  # Weight for auxiliary losses (0.0-1.0)
   
   # Loss function configuration
   loss_fn: "cross_entropy"  # "cross_entropy" or "focal"
   label_smoothing: 0.1  # For cross_entropy loss
-  use_class_weights_from_data: false  # Automatically inject class weights from dataloader
+  use_class_weights_from_data: true  # Automatically inject class weights from dataloader
   
   # Focal loss parameters (only used if loss_fn is "focal")
   # alpha: 1.0  # Weighting factor for rare class (or sample_weights will be used)
@@ -119,16 +120,17 @@ masking:
   
   # Random masking during training (modality dropout)
   # Only applies if mask_complete is null
+  # ASYMMETRIC: Mask text more frequently to force image learning
   random_mask:
-    enabled: false  # Enable random masking
-    image_prob: 0.0  # Probability of masking each image (0.0-1.0)
-    text_prob: 0.0  # Probability of masking each text embedding (0.0-1.0)
+    enabled: true  # Enable random masking
+    image_prob: 0.1  # Probability of masking each image (0.0-1.0) - Low masking for images
+    text_prob: 0.5  # Probability of masking each text embedding (0.0-1.0) - High masking for text to force image reliance
 
 # Encoder configuration
 encoder:
-  pre_existing_path: "/data/dataset_v1/embeddings/pubmedbert_512_cls.parquet" # From Modal Volume (local SSD)
-  model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
-  max_length: 512 # Maximum sequence length
+  pre_existing_path: "/data/dataset_v1/embeddings/sapbert_256_cls.parquet" # From Modal Volume (local SSD)
+  model_name: "sapbert" # or biosyn, sapbert, qwen, or path to a model
+  max_length: 256 # Maximum sequence length
   pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
   batch_size: 32 # The batch size to use when creating embeddings
   qwen_instr: "Represent the patient's description and characteristics (including clinical details, age, sex, and symptoms) as a semantic embedding suitable for clinical classification. Return an embedding." # The instructions for the QWEN embedding to use (allows us to experiment with different instructions; ignored if model is not QWEN)
@@ -153,7 +155,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_arch_003_densenet121"
+  experiment_name: "exp_arch_016_efficientnet_b0_sapbert256_text_mask_no_proj_dropout"
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration
@@ -161,4 +163,3 @@ checkpoint:
   save_frequency: 10  # Save checkpoint every N epochs (it saves the best model anyway)
   keep_last: 1  # Keep last N checkpoints
   load_from: null  # Path to checkpoint to load from (null for no loading)
-

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from typing import Dict, Any, Optional
 try:
     from ..utils import MLP, FocalLoss
@@ -52,12 +53,15 @@ class MultimodalClassifier(nn.Module):
         self.num_classes = config['num_classes']
         self.projection_dim = config['projection_dim']
         self.fusion_strategy = config['fusion_strategy']
+        self.use_l2_normalization = config.get('use_l2_normalization', False)
         
         # Projection layer configuration
         self.image_projection_hidden = config.get('image_projection_hidden', [])
         self.text_projection_hidden = config.get('text_projection_hidden', [])
         self.projection_activation = config.get('projection_activation', 'relu')
         self.projection_dropout = config.get('projection_dropout', 0.2)
+        # Allow separate dropout for text projection (falls back to projection_dropout if not specified)
+        self.text_projection_dropout = config.get('text_projection_dropout', self.projection_dropout)
         
         # Final classifier configuration
         self.final_hidden_sizes = config.get('final_hidden_sizes', [])
@@ -86,7 +90,7 @@ class MultimodalClassifier(nn.Module):
             hidden_sizes=self.text_projection_hidden,
             output_dim=self.projection_dim,
             activation=self.projection_activation,
-            dropout_rate=self.projection_dropout
+            dropout_rate=self.text_projection_dropout
         )
         
         # Build fusion mechanism
@@ -122,7 +126,16 @@ class MultimodalClassifier(nn.Module):
         self.loss_fn_name = config['loss_fn']
         if self.loss_fn_name == 'cross_entropy':
             self.label_smoothing = config.get('label_smoothing', 0.0)
-            self.criterion = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
+            class_weights = config.get('class_weights')
+            if class_weights is not None:
+                weight_tensor = torch.tensor(class_weights, dtype=torch.float32)
+                self.register_buffer('class_weights_tensor', weight_tensor)
+            else:
+                self.class_weights_tensor = None
+            self.criterion = nn.CrossEntropyLoss(
+                weight=self.class_weights_tensor,
+                label_smoothing=self.label_smoothing
+            )
         elif self.loss_fn_name == 'focal':
             if 'alpha' in config:
                 self.alpha = config['alpha']
@@ -164,9 +177,14 @@ class MultimodalClassifier(nn.Module):
                 - 'aux_vision_logits': Auxiliary vision logits (if use_auxiliary_loss=True)
                 - 'aux_text_logits': Auxiliary text logits (if use_auxiliary_loss=True)
         """
+
         # Project embeddings to common dimension
         projected_vision = self.vision_projection(vision_embeddings)
         projected_text = self.text_projection(text_embeddings)
+
+        if self.use_l2_normalization:
+            projected_vision = F.normalize(projected_vision, p=2, dim=1)
+            projected_text = F.normalize(projected_text, p=2, dim=1)
         
         # Fuse embeddings based on strategy
         if self.fusion_strategy == 'weighted_sum':
@@ -189,7 +207,8 @@ class MultimodalClassifier(nn.Module):
         
         return outputs
     
-    def compute_loss(self, outputs: Dict[str, torch.Tensor], targets: torch.Tensor) -> torch.Tensor:
+    def compute_loss(self, outputs: Dict[str, torch.Tensor], targets: torch.Tensor,
+                     modality_mask_info: Optional[Dict[str, torch.Tensor]] = None) -> torch.Tensor:
         """
         Compute loss with optional auxiliary losses
         
@@ -205,15 +224,52 @@ class MultimodalClassifier(nn.Module):
         
         # Auxiliary losses (optional)
         if self.use_auxiliary_loss and 'aux_vision_logits' in outputs:
-            aux_vision_loss = self.criterion(outputs['aux_vision_logits'], targets)
-            aux_text_loss = self.criterion(outputs['aux_text_logits'], targets)
+            # Build per-modality masks (1 = valid sample for that modality)
+            vision_mask = None
+            text_mask = None
             
-            # Combine losses with weights
-            total_loss = (main_loss + self.auxiliary_loss_weight * aux_vision_loss + self.auxiliary_loss_weight * aux_text_loss)
+            if modality_mask_info is not None:
+                vision_mask = modality_mask_info.get('vision_valid_mask')
+                text_mask = modality_mask_info.get('text_valid_mask')
+
+            aux_losses = []
+            aux_total = None
+
+            # Vision auxiliary loss only if modality is valid
+            if vision_mask is None:
+                loss_term = self.criterion(outputs['aux_vision_logits'], targets)
+                aux_total = loss_term if aux_total is None else aux_total + loss_term
+            elif vision_mask.any():
+                loss_term = self._compute_masked_loss(outputs['aux_vision_logits'], targets, vision_mask)
+                aux_total = loss_term if aux_total is None else aux_total + loss_term
+
+            # Text auxiliary loss only if modality is valid
+            if text_mask is None:
+                loss_term = self.criterion(outputs['aux_text_logits'], targets)
+                aux_total = loss_term if aux_total is None else aux_total + loss_term
+            elif text_mask.any():
+                loss_term = self._compute_masked_loss(outputs['aux_text_logits'], targets, text_mask)
+                aux_total = loss_term if aux_total is None else aux_total + loss_term
+
+            if aux_total is not None:
+                total_loss = main_loss + self.auxiliary_loss_weight * aux_total
+            else:
+                # Both modalities fully masked, use only main loss
+                total_loss = main_loss
         else:
             total_loss = main_loss
         
         return total_loss
+
+    def _compute_masked_loss(self, logits: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        """Compute loss only on samples where mask==1"""
+        if mask.dtype != torch.bool:
+            mask = mask.to(dtype=torch.bool)
+        if mask.any():
+            masked_logits = logits[mask]
+            masked_targets = targets[mask]
+            return self.criterion(masked_logits, masked_targets)
+        return torch.tensor(0.0, device=logits.device, dtype=logits.dtype)
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get model information including parameter counts"""

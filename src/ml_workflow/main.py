@@ -136,8 +136,9 @@ def initialize_model(config_path):
     # Create multimodal classifier
     multimodal_config = config['multimodal_classifier'].copy()
     multimodal_config['num_classes'] = info['num_classes']
-    # class_weights can be used for focal loss if needed
-    multimodal_config['class_weights'] = info.get('class_weights', None)
+    use_auto_class_weights = multimodal_config.get('use_class_weights_from_data', False)
+    if use_auto_class_weights and 'class_weights' not in multimodal_config:
+        multimodal_config['class_weights'] = info.get('class_weights', None)
     multimodal_config['vision_embedding_dim'] = embedding_dim
     multimodal_config['text_embedding_dim'] = text_embedding_dim
     multimodal_classifier = MultimodalClassifier(multimodal_config)

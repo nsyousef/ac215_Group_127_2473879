@@ -1,10 +1,11 @@
 # Model Training Configuration for Modal
+# EfficientNet-B1 Vision Model Experiment
 
 # Data source configuration  
 data:
   use_local: True  # Use Modal Volume for fast local SSD access
-  metadata_path: "/data/final/metadata_all_harmonized.csv"  # From Modal Volume
-  img_prefix: "/data/final/imgs"  # From Modal Volume
+  metadata_path: "/data/dataset_v1/metadata_all_harmonized.csv"  # From Modal Volume
+  img_prefix: "/data/dataset_v1/imgs"  # From Modal Volume
   min_samples_per_label: 100
   datasets:
     - fitzpatrick17k
@@ -68,7 +69,7 @@ augmentation:
 
 # Vision model configuration
 vision_model:
-  name: "resnet50"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
+  name: "efficientnet_b1"  # resnet50, resnet101, densenet121, efficientnet_b0, efficientnet_b1, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
   pretrained: true
   pooling_type: "avg"  # For ImageNet models: avg, max, concat
   unfreeze_layers: 10  # Number of layers to unfreeze from end
@@ -77,6 +78,7 @@ vision_model:
 multimodal_classifier:
   # Projection configuration
   projection_dim: 256  # Common projection dimension for both modalities
+  use_l2_normalization: false  # Normalize embeddings before fusion
 
   # Vision projection layers (empty list = just linear layer)
   image_projection_hidden: [512]  # Hidden layers for vision projection
@@ -101,19 +103,30 @@ multimodal_classifier:
   # Loss function configuration
   loss_fn: "cross_entropy"  # "cross_entropy" or "focal"
   label_smoothing: 0.1  # For cross_entropy loss
+  use_class_weights_from_data: false  # Automatically inject class weights from dataloader
   
   # Focal loss parameters (only used if loss_fn is "focal")
   # alpha: 1.0  # Weighting factor for rare class (or sample_weights will be used)
   # gamma: 2.0  # Focusing parameter
   # reduction: "mean"  # Reduction method
 
+# Modality masking configuration
+# Used to train models that can handle missing modalities (modality dropout)
+masking:
+  # Complete masking: mask entire modality for the whole run
+  # Options: null (no complete masking), "image" (mask all images), "text" (mask all text)
+  mask_complete: null  # null, "image", or "text"
+  
+  # Random masking during training (modality dropout)
+  # Only applies if mask_complete is null
+  random_mask:
+    enabled: false  # Enable random masking
+    image_prob: 0.0  # Probability of masking each image (0.0-1.0)
+    text_prob: 0.0  # Probability of masking each text embedding (0.0-1.0)
+
 # Encoder configuration
-# IMPORTANT: If you change the model_name, max_length, pooling_type, etc. you must also change the 
-# pre_existing_path. Otherwise, the dataloader will just load the existing embeddings (computed with the previous model), 
-# instead of re-computing them with the new model. To make the configuration recompute the embeddings each time, set
-# pre_existing_path to null. This will not save the embeddings and will force a recompute from scratch.
 encoder:
-  pre_existing_path: "/data/final/embeddings/pubmedbert_512_cls.parquet" # From Modal Volume (local SSD)
+  pre_existing_path: "/data/dataset_v1/embeddings/pubmedbert_512_cls.parquet" # From Modal Volume (local SSD)
   model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
   max_length: 512 # Maximum sequence length
   pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
@@ -140,7 +153,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_001_baseline"
+  experiment_name: "exp_arch_004_efficientnet_b1"
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration
@@ -148,3 +161,4 @@ checkpoint:
   save_frequency: 10  # Save checkpoint every N epochs (it saves the best model anyway)
   keep_last: 1  # Keep last N checkpoints
   load_from: null  # Path to checkpoint to load from (null for no loading)
+

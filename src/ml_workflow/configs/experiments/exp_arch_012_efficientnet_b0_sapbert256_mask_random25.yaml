@@ -1,5 +1,5 @@
 # Model Training Configuration for Modal
-# DenseNet-121 Vision Model Experiment
+# EfficientNet-B0 + SapBERT 256 with Random 25% Masking Experiment
 
 # Data source configuration  
 data:
@@ -69,7 +69,7 @@ augmentation:
 
 # Vision model configuration
 vision_model:
-  name: "densenet121"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
+  name: "efficientnet_b0"  # resnet50, resnet101, densenet121, efficientnet_b0, efficientnet_b1, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
   pretrained: true
   pooling_type: "avg"  # For ImageNet models: avg, max, concat
   unfreeze_layers: 10  # Number of layers to unfreeze from end
@@ -120,15 +120,15 @@ masking:
   # Random masking during training (modality dropout)
   # Only applies if mask_complete is null
   random_mask:
-    enabled: false  # Enable random masking
-    image_prob: 0.0  # Probability of masking each image (0.0-1.0)
-    text_prob: 0.0  # Probability of masking each text embedding (0.0-1.0)
+    enabled: true  # Enable random masking
+    image_prob: 0.25  # Probability of masking each image (0.0-1.0) - 25% masking
+    text_prob: 0.25  # Probability of masking each text embedding (0.0-1.0) - 25% masking
 
 # Encoder configuration
 encoder:
-  pre_existing_path: "/data/dataset_v1/embeddings/pubmedbert_512_cls.parquet" # From Modal Volume (local SSD)
-  model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
-  max_length: 512 # Maximum sequence length
+  pre_existing_path: "/data/dataset_v1/embeddings/sapbert_256_cls.parquet" # From Modal Volume (local SSD)
+  model_name: "sapbert" # or biosyn, sapbert, qwen, or path to a model
+  max_length: 256 # Maximum sequence length
   pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
   batch_size: 32 # The batch size to use when creating embeddings
   qwen_instr: "Represent the patient's description and characteristics (including clinical details, age, sex, and symptoms) as a semantic embedding suitable for clinical classification. Return an embedding." # The instructions for the QWEN embedding to use (allows us to experiment with different instructions; ignored if model is not QWEN)
@@ -153,7 +153,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_arch_003_densenet121"
+  experiment_name: "exp_arch_012_efficientnet_b0_sapbert256_mask_random25"
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration

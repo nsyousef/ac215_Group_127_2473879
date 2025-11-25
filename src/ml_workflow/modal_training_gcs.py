@@ -59,7 +59,7 @@ app = modal.App("skin-disease-training", image=image)
     volumes={
         "/checkpoints": modal.Volume.from_name("training-checkpoints", create_if_missing=True),
         "/gcs-data": modal.CloudBucketMount(
-            "derma-datasets-2",
+            "apcomp215-datasets",
             bucket_endpoint_url="https://storage.googleapis.com",
             secret=modal.Secret.from_name("gcp-hmac-secret"),
             read_only=True,

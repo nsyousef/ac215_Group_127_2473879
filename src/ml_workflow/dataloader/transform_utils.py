@@ -24,17 +24,17 @@ def get_train_transform(mean: List[float], std: List[float], img_size: Tuple[int
         img_size: Target image size
         augmentation_config: Dictionary with augmentation parameters
     """
-    # Extract augmentation parameters from config
-    brightness_jitter = augmentation_config['brightness_jitter']
-    contrast_jitter = augmentation_config['contrast_jitter']
-    saturation_jitter = augmentation_config['saturation_jitter']
-    hue_jitter = augmentation_config['hue_jitter']
-    rotation_degrees = augmentation_config['rotation_degrees']
-    translate = augmentation_config['translate']
-    scale = augmentation_config['scale']
-    grayscale_prob = augmentation_config['grayscale_prob']
-    horizontal_flip_prob = augmentation_config['horizontal_flip_prob']
-    vertical_flip_prob = augmentation_config['vertical_flip_prob']
+    # Extract augmentation parameters from config (use .get() with None default for optional params)
+    brightness_jitter = augmentation_config.get('brightness_jitter')
+    contrast_jitter = augmentation_config.get('contrast_jitter')
+    saturation_jitter = augmentation_config.get('saturation_jitter')
+    hue_jitter = augmentation_config.get('hue_jitter')
+    rotation_degrees = augmentation_config.get('rotation_degrees')
+    translate = augmentation_config.get('translate')
+    scale = augmentation_config.get('scale')
+    grayscale_prob = augmentation_config.get('grayscale_prob')
+    horizontal_flip_prob = augmentation_config.get('horizontal_flip_prob')
+    vertical_flip_prob = augmentation_config.get('vertical_flip_prob')  # Optional: defaults to None if missing
     
     # Build transform list dynamically based on non-zero parameters
     transform_list = []

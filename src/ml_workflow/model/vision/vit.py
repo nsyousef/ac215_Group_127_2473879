@@ -37,6 +37,8 @@ class VisionTransformer(nn.Module):
         self.pretrained = vision_config['pretrained']
         self.img_size = tuple(vision_config.get('img_size', (224, 224)))
         self.unfreeze_layers = vision_config.get('unfreeze_layers', 0)
+        # Store pooling_type for consistency with CNN models (ViT doesn't use it, but needed for checkpoint compatibility)
+        self.pooling_type = vision_config.get('pooling_type', 'avg')
         
         # Note: ViT models expect (224, 224)
         if self.img_size!=(224, 224):
@@ -179,6 +181,7 @@ class VisionTransformer(nn.Module):
         info = {
             'model_name': self.model_name,
             'pretrained': self.pretrained,
+            'pooling_type': self.pooling_type,  # Included for consistency with CNN models (not used by ViT)
             'embedding_dim': self.embedding_dim,
             'unfreeze_layers': self.unfreeze_layers,
             'total_parameters': total_params,

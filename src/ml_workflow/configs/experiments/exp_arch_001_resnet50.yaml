@@ -1,5 +1,4 @@
 # Model Training Configuration for Modal
-# DenseNet-121 Vision Model Experiment
 
 # Data source configuration  
 data:
@@ -69,7 +68,7 @@ augmentation:
 
 # Vision model configuration
 vision_model:
-  name: "densenet121"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
+  name: "resnet50"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
   pretrained: true
   pooling_type: "avg"  # For ImageNet models: avg, max, concat
   unfreeze_layers: 10  # Number of layers to unfreeze from end
@@ -153,7 +152,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_arch_003_densenet121"
+  experiment_name: "exp_arch_001_resnet50"
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration
@@ -161,4 +160,3 @@ checkpoint:
   save_frequency: 10  # Save checkpoint every N epochs (it saves the best model anyway)
   keep_last: 1  # Keep last N checkpoints
   load_from: null  # Path to checkpoint to load from (null for no loading)
-

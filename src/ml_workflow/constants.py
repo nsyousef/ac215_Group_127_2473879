@@ -1,9 +1,9 @@
 """True constants for the dataloader pipeline"""
 
 # GCS Configuration (fixed for this project)
-GCS_BUCKET_NAME = "derma-datasets-2"
-GCS_METADATA_PATH = f"gs://derma-datasets-2/final/metadata_all_harmonized.csv"
-GCS_IMAGE_PREFIX = f"gs://derma-datasets-2/final/imgs"
+GCS_BUCKET_NAME = "apcomp215-datasets"
+GCS_METADATA_PATH = f"gs://apcomp215-datasets/dataset_v1/metadata_all_harmonized.csv"
+GCS_IMAGE_PREFIX = f"gs://apcomp215-datasets/dataset_v1/imgs"
 
 # Local Storage Configuration (for testing/development)
 LOCAL_DATA_DIR = '../../data'
