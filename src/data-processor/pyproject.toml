@@ -7,5 +7,6 @@ requires-python = ">=3.11"
 dependencies = [
     "google-cloud-storage>=3.4.1",
     "pandas>=2.3.3",
+    "pytest>=9.0.1",
     "tqdm>=4.67.1",
 ]
