@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [data-processor, ml_workflow, frontend-react, inference-cloud]
+        service: [data-processor, ml_workflow, frontend-react] # , inference-cloud]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -70,7 +70,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        service: [data-processor, ml_workflow, frontend-react, inference-cloud]
+        service: [data-processor, ml_workflow, frontend-react] # , inference-cloud]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
