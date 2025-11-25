@@ -81,7 +81,7 @@ export default function ConditionPopover({ condition, onViewResults, onDismiss }
                         {condition.name}
                     </Typography>
                     <Typography variant="caption" sx={{ color: '#666', display: 'block', mb: 2 }}>
-                        {condition.description}
+                        {condition.description || `Tap or located on ${condition.bodyPart || 'body'}`}
                     </Typography>
                     <Button
                         variant="contained"

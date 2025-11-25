@@ -11,6 +11,7 @@ export function ProfileProvider({ children }) {
     dateOfBirth: '',
     sex: '',
     raceEthnicity: '',
+    country: '',
     hasCompletedOnboarding: false,
   });
   const [loading, setLoading] = useState(true);
@@ -19,29 +20,18 @@ export function ProfileProvider({ children }) {
   useEffect(() => {
     async function load() {
       try {
-        if (isElectron()) {
-          const data = await FileAdapter.loadProfile();
-          if (data) {
-            if (typeof data.age !== 'undefined' && !data.dateOfBirth) {
-              // Legacy profile detected. Clear all app data (test-only) per request.
-              try {
-                await FileAdapter.resetAppData();
-              } catch {}
-              setProfile({
-                dateOfBirth: '',
-                sex: '',
-                raceEthnicity: '',
-                hasCompletedOnboarding: false,
-              });
-            } else {
-              const normalized = {
-                dateOfBirth: data.dateOfBirth || '',
-                sex: data.sex || '',
-                raceEthnicity: data.raceEthnicity || '',
-                hasCompletedOnboarding: false,
-              };
-              setProfile(normalized);
-            }
+        if (isElectron() && window.electronAPI?.loadDemographics) {
+          const data = await window.electronAPI.loadDemographics();
+          if (data && Object.keys(data).length > 0) {
+            // Map demographics.json schema to profile
+            const normalized = {
+              dateOfBirth: data.DOB || '',
+              sex: data.Sex || '',
+              raceEthnicity: data.Race || '',
+              country: data.Country || '',
+              hasCompletedOnboarding: data.hasCompletedOnboarding || false,
+            };
+            setProfile(normalized);
           }
         }
       } catch (e) {
@@ -54,21 +44,23 @@ export function ProfileProvider({ children }) {
   }, []);
 
   const updateProfile = async (newProfile) => {
-    setProfile((prev) => ({ ...prev, ...newProfile }));
+    const updated = { ...profile, ...newProfile };
+    setProfile(updated);
+
     // Attempt to persist
-    if (isElectron()) {
+    if (isElectron() && window.electronAPI?.saveDemographics) {
       try {
-        // Persist only known fields (exclude legacy 'age')
-        const toSave = {
-          dateOfBirth: (newProfile.dateOfBirth ?? profile.dateOfBirth) || '',
-          sex: (newProfile.sex ?? profile.sex) || '',
-          raceEthnicity: (newProfile.raceEthnicity ?? profile.raceEthnicity) || '',
-          hasCompletedOnboarding:
-            newProfile.hasCompletedOnboarding ?? profile.hasCompletedOnboarding ?? false,
+        // Map profile fields to demographics.json schema
+        const demographics = {
+          DOB: updated.dateOfBirth || '',
+          Sex: updated.sex || '',
+          Race: updated.raceEthnicity || '',
+          Country: updated.country || '',
+          hasCompletedOnboarding: updated.hasCompletedOnboarding || false,
         };
-        await FileAdapter.saveProfile(toSave);
+        await window.electronAPI.saveDemographics(demographics);
       } catch (e) {
-        console.error('Failed to save profile:', e);
+        console.error('Failed to save demographics:', e);
       }
     }
   };

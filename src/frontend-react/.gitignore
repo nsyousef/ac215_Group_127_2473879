@@ -21,6 +21,17 @@ python/.python-bin-path.json
 python/history/
 python/conversations/
 
+# Local inference model
+python/inference_local/*.pth
+
 # Electron build artifacts
 dist/
 out/
+
+# User Data
+python/case_*
+python/demographics.json
+python/diseases.json
+
+# make sure lib folder is tracked
+!src/lib/

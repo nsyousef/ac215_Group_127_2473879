@@ -22,24 +22,36 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import FileAdapter from '@/services/adapters/fileAdapter';
-import { BODY_MAP_SPOTS } from '@/lib/constants';
-import BodyMapPicker from '@/components/BodyMapPicker';
-import { inferBodyPartFromCoords } from '@/lib/bodyMapUtils';
+import { BODY_PART_DEFAULTS } from '@/lib/constants';
+import BodyMapPicker, { getBodyPartFromCoordinates } from '@/components/BodyMapPicker';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import mlClient from '@/services/mlClient';
 
+// All valid body parts in order
 const BODY_PARTS = [
-  'Head',
-  'Face',
-  'Neck',
-  'Torso',
-  'Left Upper Arm',
-  'Left Lower Arm',
-  'Right Upper Arm',
-  'Right Lower Arm',
-  'Left Leg',
-  'Right Leg',
+  'head',
+  'torso',
+  'left upper arm',
+  'left lower arm',
+  'right upper arm',
+  'right lower arm',
+  'left hand',
+  'right hand',
+  'left upper leg',
+  'right upper leg',
+  'left lower leg',
+  'right lower leg',
+  'left foot',
+  'right foot',
 ];
+
+// Format body part name for display (capitalize properly)
+function formatBodyPartLabel(bodyPart) {
+  return bodyPart
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = true, onboardingBack }) {
   const theme = useTheme();
@@ -49,6 +61,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   const [step, setStep] = useState(0);
   const [bodyPart, setBodyPart] = useState('');
   const [mapPos, setMapPos] = useState(null); // { leftPct, topPct }
+  const [mapError, setMapError] = useState(null); // Error message if invalid selection
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [note, setNote] = useState('');
@@ -89,12 +102,16 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   const handleMapChange = (coords) => {
     // coords: { leftPct, topPct }
     setMapPos(coords);
-    // infer a categorical body part name from anchors
-    try {
-      const inferred = inferBodyPartFromCoords(coords, Object.values(BODY_MAP_SPOTS).map((s) => ({ name: s.label, leftPct: parseFloat(s.left), topPct: parseFloat(s.top) })));
-      if (inferred) setBodyPart(inferred);
-    } catch (e) {
-      // ignore
+    
+    // Use bounding box detection to infer body part from coordinates
+    const detectedPart = getBodyPartFromCoordinates(coords.leftPct, coords.topPct);
+    
+    if (detectedPart === 'invalid') {
+      setMapError('Please select a valid body area');
+      setBodyPart('');
+    } else {
+      setMapError(null);
+      setBodyPart(detectedPart);
     }
   };
 
@@ -105,25 +122,44 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
       // Ensure we have map coordinates: if user picked from list only, set default based on label
       let finalMapPos = mapPos;
       if (!finalMapPos && bodyPart) {
-        try {
-          const match = Object.values(BODY_MAP_SPOTS).find((s) => s.label === bodyPart);
-          if (match) {
-            finalMapPos = {
-              leftPct: parseFloat(match.left),
-              topPct: parseFloat(match.top),
-            };
-            setMapPos(finalMapPos);
-          }
-        } catch (e) {
-          // ignore
+        if (BODY_PART_DEFAULTS[bodyPart]) {
+          const defaults = BODY_PART_DEFAULTS[bodyPart];
+          finalMapPos = {
+            leftPct: defaults.leftPct,
+            topPct: defaults.topPct,
+          };
+          setMapPos(finalMapPos);
         }
       }
+      
       // Generate case ID for this analysis
-      const caseId = `case_${Date.now()}`;
+      const timestamp = Date.now();
+      const diseaseId = `${timestamp}`;  // Disease ID (no prefix, just timestamp)
+      const caseId = `case_${timestamp}`;  // Folder name for Python storage
 
-      // Call ML client to get predictions (matches api_manager.py workflow)
+      // Save uploaded file to temp location for Python to access via IPC
+      let imagePath;
+      if (window.electronAPI && window.electronAPI.saveUploadedImage) {
+        // Use IPC to save file in main process
+        const buffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(buffer);
+        imagePath = await window.electronAPI.saveUploadedImage(caseId, file.name, uint8Array);
+      } else {
+        throw new Error('Image upload is only available in Electron runtime.');
+      }
+
+      // Build body location object with coordinates and NLP label
+      const bodyLocation = {
+        coordinates: finalMapPos ? [finalMapPos.leftPct, finalMapPos.topPct] : null,
+        nlp: bodyPart || 'Unknown',
+      };
+
+      // Step 1: Save body location FIRST (before APIManager instantiation)
+      await mlClient.saveBodyLocation(caseId, bodyLocation);
+
+      // Step 2: Call ML client to get predictions (matches api_manager.py workflow)
       const results = await mlClient.getInitialPrediction(
-        preview, // base64 image
+        imagePath, // file path
         note || '', // text description
         caseId
       );
@@ -145,65 +181,34 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
 
-      // Create brief description from first 50 chars of LLM response
-      const briefDesc = results.llm_response
-        ? results.llm_response.substring(0, 50) + '...'
-        : 'AI-analyzed condition';
-
-      // Create disease object with all ML results
+      // Get the enriched disease object from Python response (includes all UI fields)
+      // Python's _build_enriched_disease() returns: id, name, description, bodyPart, 
+      // mapPosition, image, confidenceLevel, llmResponse, timelineData, conversationHistory
+      const enrichedDisease = results.enriched_disease || {};
+      
+      // Build complete disease object with both minimal data (for diseases.json) 
+      // and enriched data (for immediate UI display)
       const newDisease = {
-        id: Date.now(),
+        // Minimal fields (saved to diseases.json)
+        id: diseaseId,  // Use timestamp without "case_" prefix
         name: formattedName,
-        description: briefDesc,
-        bodyPart,
-        mapPosition: finalMapPos || null,
-        image: preview, // User's uploaded image
-        createdAt: new Date().toISOString(),
-        // Store ML results for later use
-        caseId,
-        predictions: results.predictions,
-        cvAnalysis: results.cv_analysis,
-        llmResponse: results.llm_response,
-        textDescription: note || '',
+        image: preview,
+        // Enriched fields (from case_history.json, already loaded by Python)
+        description: enrichedDisease.description || '',
+        bodyPart: enrichedDisease.bodyPart || bodyPart || 'Unknown',
+        mapPosition: enrichedDisease.mapPosition || null,
+        confidenceLevel: enrichedDisease.confidenceLevel || 0,
+        date: enrichedDisease.date || '',
+        llmResponse: enrichedDisease.llmResponse || '',
+        timelineData: enrichedDisease.timelineData || [],
+        conversationHistory: enrichedDisease.conversationHistory || []
       };
 
-      // Add to context (and persist if possible)
+      // Add to context (saves minimal fields to diseases.json)
       await addDisease(newDisease);
 
-      // Save initial time-tracking entry with the uploaded image
-      try {
-        const entry = {
-          id: Date.now(),
-          conditionId: newDisease.id,
-          date: new Date().toISOString(),
-          image: preview,
-          note: note || 'Initial upload',
-        };
-        if (FileAdapter && FileAdapter.saveTimeEntry) {
-          await FileAdapter.saveTimeEntry(newDisease.id, entry);
-        }
-      } catch (e) {
-        console.warn('Failed to save time entry:', e);
-      }
-
-      // Save initial conversation entry (assistant initial LLM response)
-      try {
-        const conversationEntry = {
-          id: `conv_${Date.now()}`,
-          role: 'assistant',
-          text: results.llm_response,
-          time: new Date().toISOString(),
-          conditionId: newDisease.id,
-          isInitial: true,
-        };
-        if (FileAdapter && FileAdapter.saveChat) {
-          await FileAdapter.saveChat(newDisease.id, conversationEntry);
-        }
-      } catch (e) {
-        console.warn('Failed to save conversation:', e);
-      }
-
       setAnalyzing(false);
+      // Pass complete enriched object to parent so it can be immediately used
       if (onSaved) onSaved(newDisease);
     } catch (e) {
       console.error('Analysis failed:', e);
@@ -251,13 +256,31 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             <Box sx={{ mb: 2 }}>
               <BodyMapPicker value={mapPos} onChange={(coords) => handleMapChange(coords)} />
             </Box>
+            {mapError && (
+              <Typography variant="body2" sx={{ color: 'error.main', mb: 2, textAlign: 'center' }}>
+                {mapError}
+              </Typography>
+            )}
 
             <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>Or pick from the list</Typography>
             <List>
               {BODY_PARTS.map((p) => (
                 <ListItem key={p} disablePadding>
-                  <ListItemButton selected={bodyPart === p} onClick={() => { setBodyPart(p); setMapPos(null); }}>
-                    <ListItemText primary={p} />
+                  <ListItemButton
+                    selected={bodyPart === p}
+                    onClick={() => {
+                      setBodyPart(p);
+                      setMapError(null);
+                      // Use default coordinates for this body part if available
+                      if (BODY_PART_DEFAULTS[p]) {
+                        const defaults = BODY_PART_DEFAULTS[p];
+                        setMapPos({ leftPct: defaults.leftPct, topPct: defaults.topPct });
+                      } else {
+                        setMapPos(null);
+                      }
+                    }}
+                  >
+                    <ListItemText primary={formatBodyPartLabel(p)} />
                   </ListItemButton>
                 </ListItem>
               ))}
@@ -273,8 +296,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
               To enable tracking of size and color, place a coin (or a similarly sized object) near the skin condition in the photo.
             </Typography>
             <Box sx={{ my: 2, display: 'flex', justifyContent: 'center' }}>
-              {/* Simplified body map placeholder */}
-              <Box sx={{ width: 160, height: 260, bgcolor: '#f0f0f0', borderRadius: 1 }} />
+              <img src="/assets/instructions.png" alt="Coin placement instructions" style={{ maxWidth: 320, width: '100%', borderRadius: 8, boxShadow: '0 2px 8px #0001' }} />
             </Box>
           </Box>
         )}

@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { Box, useTheme } from '@mui/material';
-import { BODY_MAP_SPOTS } from '@/lib/constants';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import ConditionPopover from './ConditionPopover';
 
@@ -70,23 +69,17 @@ export default function BodyMapView({
                     alt="Body Map"
                     fill
                     style={{ objectFit: 'contain' }}
+                    priority
                 />
 
-                {/* Interactive spots overlay: prefer saved mapPosition, fall back to static anchors */}
+                {/* Interactive spots overlay: use saved mapPosition */}
                 {conditions.map((condition) => {
-                    // Determine position: use condition.mapPosition (normalized percents) if available,
-                    // otherwise fall back to predefined BODY_MAP_SPOTS mapped by id.
+                    // Use condition.mapPosition (normalized percents) for spot position
                     let top = null;
                     let left = null;
                     if (condition.mapPosition && typeof condition.mapPosition.leftPct === 'number' && typeof condition.mapPosition.topPct === 'number') {
                         left = `${condition.mapPosition.leftPct}%`;
                         top = `${condition.mapPosition.topPct}%`;
-                    } else {
-                        const spot = BODY_MAP_SPOTS[condition.id];
-                        if (spot) {
-                            left = spot.left;
-                            top = spot.top;
-                        }
                     }
 
                     if (left == null || top == null) return null; // no known position

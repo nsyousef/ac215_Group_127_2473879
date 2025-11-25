@@ -2,3 +2,4 @@
 __pycache__/
 # OS
 .DS_Store
+inference/test_best.pth

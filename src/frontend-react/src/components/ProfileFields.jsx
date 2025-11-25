@@ -20,6 +20,24 @@ const RACE_ETHNICITY_OPTIONS = [
   { value: 'prefer-not-to-say', label: 'Prefer not to say' },
 ];
 
+const COUNTRY_OPTIONS = [
+  { value: 'us', label: 'United States' },
+  { value: 'ca', label: 'Canada' },
+  { value: 'mx', label: 'Mexico' },
+  { value: 'uk', label: 'United Kingdom' },
+  { value: 'de', label: 'Germany' },
+  { value: 'fr', label: 'France' },
+  { value: 'it', label: 'Italy' },
+  { value: 'es', label: 'Spain' },
+  { value: 'jp', label: 'Japan' },
+  { value: 'cn', label: 'China' },
+  { value: 'in', label: 'India' },
+  { value: 'br', label: 'Brazil' },
+  { value: 'au', label: 'Australia' },
+  { value: 'other', label: 'Other' },
+  { value: 'prefer-not-to-say', label: 'Prefer not to say' },
+];
+
 export default function ProfileFields({ value, onChange }) {
   const handleChange = (field) => (event) => {
     onChange({ ...value, [field]: event.target.value });
@@ -60,6 +78,21 @@ export default function ProfileFields({ value, onChange }) {
         helperText="Select your race/ethnicity"
       >
         {RACE_ETHNICITY_OPTIONS.map((option) => (
+          <MenuItem key={option.value} value={option.value}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </TextField>
+
+      <TextField
+        label="Country of Origin"
+        select
+        value={value.country || ''}
+        onChange={handleChange('country')}
+        fullWidth
+        helperText="Select your country of origin"
+      >
+        {COUNTRY_OPTIONS.map((option) => (
           <MenuItem key={option.value} value={option.value}>
             {option.label}
           </MenuItem>

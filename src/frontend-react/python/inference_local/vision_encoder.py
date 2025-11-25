@@ -7,9 +7,9 @@ from PIL import Image
 from typing import Union, List
 import numpy as np
 
-from ..dataloader.transform_utils import get_test_valid_transform
-from ..model.vision.cnn import CNNModel
-from ..utils import logger
+from .dataloader.transform_utils import get_test_valid_transform
+from .model.cnn import CNNModel
+from .logger import logger
 
 
 class VisionEncoder:
@@ -19,36 +19,8 @@ class VisionEncoder:
         self,
         checkpoint_path: str = None,
         device: str = "cuda",
-        img_size: tuple = (224, 224),
-        model_name: str = "resnet50",
-        pretrained: bool = True,
-        pooling_type: str = "avg"
     ):
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
-        self.img_size = img_size
-        
-        # Random/Pretrained initialization mode (no checkpoint)
-        if checkpoint_path is None:
-            logger.info(f"Initializing {model_name} (pretrained={pretrained})")
-            
-            vision_config = {
-                'name': model_name,
-                'pretrained': pretrained,
-                'img_size': img_size,
-                'pooling_type': pooling_type
-            }
-            
-            self.model = CNNModel(vision_config)
-            self.model.to(self.device)
-            self.model.eval()
-            
-            # Use ImageNet defaults for normalization
-            mean = [0.485, 0.456, 0.406]
-            std = [0.229, 0.224, 0.225]
-            self.transform = get_test_valid_transform(mean, std, img_size)
-            
-            logger.info(f"Vision encoder ready on {self.device}")
-            return
         
         # Checkpoint loading mode
         logger.info(f"Loading vision model from {checkpoint_path}")

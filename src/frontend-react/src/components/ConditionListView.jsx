@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, List, Button, Avatar, Typography, ListItemButton, ListItemText, useTheme } from '@mui/material';
+import { Box, List, Button, Avatar, Typography, ListItemButton, ListItemText, useTheme, Card, CardContent } from '@mui/material';
 import { AddOutlined } from '@mui/icons-material';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 
@@ -21,10 +21,10 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
     const primary = theme.palette.primary.main;
 
     return (
-        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Scrollable list area */}
-            <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                <List sx={{ bgcolor: 'background.paper', borderRadius: 1 }} disablePadding>
+            <CardContent sx={{ flex: 1, overflow: 'auto', p: 0 }}>
+                <List sx={{ bgcolor: 'background.paper' }} disablePadding>
                     {conditions.map((condition) => (
                         <div key={condition.id}>
                             <ListItemButton
@@ -74,11 +74,11 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
                         </div>
                     ))}
                 </List>
-            </Box>
+            </CardContent>
 
             {/* Persistent Add Disease button at bottom */}
             {showAddButton && onAddDisease && (
-                <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 2, backgroundColor: 'background.paper' }}>
+                <Box sx={{ borderTop: '1px solid', borderColor: 'divider', p: 2, backgroundColor: 'background.paper' }}>
                     <Button
                         variant="contained"
                         color="primary"
@@ -95,6 +95,6 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
                     </Button>
                 </Box>
             )}
-        </Box>
+        </Card>
     );
 }

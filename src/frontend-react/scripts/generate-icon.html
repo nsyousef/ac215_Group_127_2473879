@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Generate macOS App Icon</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        canvas {
+            border: 1px solid #ddd;
+            margin: 20px 0;
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            background: #007aff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0051d5;
+        }
+        .info {
+            color: #666;
+            margin: 10px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>macOS App Icon Generator</h1>
+    <p class="info">Generating icon with macOS squircle shape</p>
+    <canvas id="canvas" width="1024" height="1024"></canvas>
+    <div>
+        <button onclick="downloadIcon(512)">Download 512x512</button>
+        <button onclick="downloadIcon(256)">Download 256x256</button>
+        <button onclick="downloadIcon(128)">Download 128x128</button>
+        <button onclick="downloadIcon(1024)">Download 1024x1024</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const size = 1024;
+
+        // macOS squircle path (approximation using bezier curves)
+        function drawSquircle(ctx, size) {
+            const radius = size * 0.225; // ~22.5% of size for macOS-like curve
+            ctx.beginPath();
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.bezierCurveTo(size - radius * 0.3, 0, size, radius * 0.3, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.bezierCurveTo(size, size - radius * 0.3, size - radius * 0.3, size, size - radius, size);
+            ctx.lineTo(radius, size);
+            ctx.bezierCurveTo(radius * 0.3, size, 0, size - radius * 0.3, 0, size - radius);
+            ctx.lineTo(0, radius);
+            ctx.bezierCurveTo(0, radius * 0.3, radius * 0.3, 0, radius, 0);
+            ctx.closePath();
+        }
+
+        function generateIcon() {
+            // Load and draw the logo
+            const logo = new Image();
+            logo.onload = function() {
+                // Clear canvas and fill with transparent background
+                ctx.clearRect(0, 0, size, size);
+
+                // Create a temporary canvas to hold the squircle mask
+                const maskCanvas = document.createElement('canvas');
+                maskCanvas.width = size;
+                maskCanvas.height = size;
+                const maskCtx = maskCanvas.getContext('2d');
+                
+                // Draw squircle mask
+                drawSquircle(maskCtx, size);
+                maskCtx.fillStyle = '#000';
+                maskCtx.fill();
+
+                // Draw the logo onto main canvas
+                ctx.drawImage(logo, 0, 0, size, size);
+
+                // Apply the mask using compositing
+                ctx.globalCompositeOperation = 'destination-in';
+                ctx.drawImage(maskCanvas, 0, 0);
+                ctx.globalCompositeOperation = 'source-over';
+            };
+            // Load the SVG - correct path from scripts/ folder
+            fetch('../public/assets/pibu_logo.svg')
+                .then(r => r.text())
+                .then(svgText => {
+                    const blob = new Blob([svgText], { type: 'image/svg+xml' });
+                    const url = URL.createObjectURL(blob);
+                    logo.src = url;
+                })
+                .catch(err => {
+                    console.error('Failed to load SVG:', err);
+                    alert('Failed to load logo. Make sure pibu_logo.svg exists in public/assets/');
+                });
+        }
+
+        function downloadIcon(targetSize) {
+            // Create a temporary canvas at target size
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = targetSize;
+            tempCanvas.height = targetSize;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Scale down the main canvas
+            tempCtx.drawImage(canvas, 0, 0, targetSize, targetSize);
+
+            // Download
+            tempCanvas.toBlob(function(blob) {
+                if (!blob) {
+                    alert('Failed to generate image. Please try again.');
+                    return;
+                }
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `icon_${targetSize}x${targetSize}.png`;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 100);
+            }, 'image/png');
+        }
+
+        // Generate on load
+        window.onload = generateIcon;
+    </script>
+</body>
+</html>

@@ -27,7 +27,7 @@ export default function Header() {
                     <div className="header-content">
                         <Link href="/" className="header-logo">
                             <Image
-                                src="/assets/logo.svg"
+                                src="/assets/logo_square.png"
                                 alt="App Logo"
                                 width={32}
                                 height={32}

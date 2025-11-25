@@ -26,6 +26,7 @@ import ProfilePage from '@/components/ProfilePage';
 import OnboardingFlow from '@/components/OnboardingFlow';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import { useProfile } from '@/contexts/ProfileContext';
+import DiseaseService from '@/services/diseaseService';
 
 export default function Home() {
     const theme = useTheme();
@@ -40,7 +41,7 @@ export default function Home() {
     const [mobileView, setMobileView] = useState(viewParam);
     const [previousMobileView, setPreviousMobileView] = useState('home'); // Track previous view for back navigation
 
-    const { diseases } = useDiseaseContext();
+    const { diseases, reload: reloadDiseases } = useDiseaseContext();
     const { profile, loading: profileLoading, updateProfile } = useProfile();
 
     // Sync mobileView with URL query param and track previous view
@@ -132,10 +133,17 @@ export default function Home() {
     // Add disease modal state
     const [showAddFlow, setShowAddFlow] = useState(false);
 
-    const handleAddSaved = (newDisease) => {
-        // Close modal and select condition, navigate to results/detail
+    const handleAddSaved = async (newDisease) => {
+        // Close modal
         setShowAddFlow(false);
+        
+        // newDisease already contains all enriched fields from Python
+        // (description, bodyPart, mapPosition, llmResponse, timelineData, conversationHistory)
+        // AND it's already been added to the diseases array by AddDiseaseFlow's addDisease() call
+        // So just set it as selected and navigate!
         setSelectedCondition(newDisease);
+        
+        // Navigate to results view
         router.push('/?view=results');
     };
 
@@ -143,14 +151,13 @@ export default function Home() {
     if (!profileLoading && !profile?.hasCompletedOnboarding) {
         return (
             <OnboardingFlow
-                onComplete={(newDisease) => {
-                    // Set selected condition and navigate appropriately
+                onComplete={async (newDisease) => {
+                    // newDisease already contains all enriched fields from Python
+                    // AND it's already in the diseases array (added by OnboardingFlow's addDisease call)
                     setSelectedCondition(newDisease);
-                    if (isMobile) {
-                        router.push('/?view=results');
-                    } else {
-                        router.push('/?view=results');
-                    }
+                    
+                    // Navigate to results view
+                    router.push('/?view=results');
                 }}
             />
         );
@@ -254,8 +261,8 @@ export default function Home() {
     // If the desktop view param is 'home' show the home/list+map layout.
     if (viewParam === 'home') {
         return (
-            <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5', py: 3 }}>
-                <Container maxWidth="xl" sx={{ mb: 3 }}>
+            <Box sx={{ height: '100vh', bgcolor: '#f5f5f5', py: 3, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <Container maxWidth="xl" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                         <Typography variant="h5" sx={{ fontWeight: 600 }}>
                             Home
@@ -265,9 +272,9 @@ export default function Home() {
                         </IconButton>
                     </Box>
 
-                    <Grid container spacing={3} sx={{ height: 'calc(100vh - 160px)' }}>
+                    <Grid container spacing={3} sx={{ flex: 1, minHeight: 0 }}>
                         {/* Left: Conditions list */}
-                        <Grid item xs={12} md={4} sx={{ height: '100%' }}>
+                        <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
                             <ConditionListView
                                 selectedConditionId={selectedCondition?.id}
                                 onChange={handleSelectCondition}
@@ -277,7 +284,7 @@ export default function Home() {
                         </Grid>
 
                         {/* Center: Body map */}
-                        <Grid item xs={12} md={4}>
+                        <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
                             <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
                                 <Card sx={{ flex: 1, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
                                     <BodyMapView
@@ -293,7 +300,7 @@ export default function Home() {
                         </Grid>
 
                         {/* Right: Results */}
-                        <Grid item xs={12} md={4} sx={{ height: '100%', overflow: 'auto' }}>
+                        <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0, overflow: 'auto' }}>
                             <ResultsPanel
                                 selectedCondition={selectedCondition}
                                 showActions={true}
@@ -326,8 +333,8 @@ export default function Home() {
 
     // Otherwise show the combined results/time/chat page and include a home/back button
     return (
-        <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5', py: 3 }}>
-            <Container maxWidth="xl" sx={{ mb: 3 }}>
+        <Box sx={{ height: '100vh', bgcolor: '#f5f5f5', py: 3, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Container maxWidth="xl" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                     <Button startIcon={<ArrowBackOutlined />} variant="text" onClick={() => router.push('/?view=home')}>Back</Button>
                     <Typography variant="h5" sx={{ fontWeight: 600 }}>
@@ -335,9 +342,9 @@ export default function Home() {
                     </Typography>
                 </Box>
 
-                <Grid container spacing={3}>
+                <Grid container spacing={3} sx={{ flex: 1, minHeight: 0 }}>
                     {/* Left Column: Recommendation (Results) - showActions=false so no bottom buttons */}
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
                         <ResultsPanel
                             selectedCondition={selectedCondition}
                             showActions={false}
@@ -345,12 +352,12 @@ export default function Home() {
                     </Grid>
 
                     {/* Center Column: Time Tracking */}
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
                         <TimeTrackingPanel conditionId={selectedCondition?.id} onAddImage={handleOpenAddTime} refreshKey={timeEntriesVersion} />
                     </Grid>
 
                     {/* Right Column: Chat */}
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
                         <ChatPanel conditionId={selectedCondition?.id} />
                     </Grid>
                 </Grid>
