@@ -1,7 +1,11 @@
 import torch
 import torch.nn as nn
 from torchvision import models
-from torchvision.models import ResNet50_Weights, ResNet101_Weights, DenseNet121_Weights, EfficientNet_B0_Weights, EfficientNet_B4_Weights, VGG16_Weights
+from torchvision.models import (
+    ResNet50_Weights, ResNet101_Weights, DenseNet121_Weights, 
+    EfficientNet_B0_Weights, EfficientNet_B1_Weights, EfficientNet_B2_Weights, 
+    EfficientNet_B3_Weights, EfficientNet_B4_Weights, VGG16_Weights
+)
 from typing import Dict, Any
 
 try:
@@ -24,7 +28,9 @@ class CNNModel(nn.Module):
         Args:
             vision_config: Dictionary containing vision model configuration parameters
                 Required keys:
-                    - name: Model variant ('resnet50', 'resnet101', 'densenet121', 'efficientnet_b0', 'efficientnet_b4', 'vgg16')
+                    - name: Model variant ('resnet50', 'resnet101', 'densenet121', 
+                            'efficientnet_b0', 'efficientnet_b1', 'efficientnet_b2', 
+                            'efficientnet_b3', 'efficientnet_b4', 'vgg16')
                     - pretrained: Whether to use pretrained weights
                 Optional keys:
                     - img_size: Input image size as tuple (default: (224, 224))
@@ -69,6 +75,21 @@ class CNNModel(nn.Module):
         elif model_name == "efficientnet_b0":
             weights = EfficientNet_B0_Weights.DEFAULT if pretrained else None
             model = models.efficientnet_b0(weights=weights)
+            # Remove classifier and pooling
+            model = model.features
+        elif model_name == "efficientnet_b1":
+            weights = EfficientNet_B1_Weights.DEFAULT if pretrained else None
+            model = models.efficientnet_b1(weights=weights)
+            # Remove classifier and pooling
+            model = model.features
+        elif model_name == "efficientnet_b2":
+            weights = EfficientNet_B2_Weights.DEFAULT if pretrained else None
+            model = models.efficientnet_b2(weights=weights)
+            # Remove classifier and pooling
+            model = model.features
+        elif model_name == "efficientnet_b3":
+            weights = EfficientNet_B3_Weights.DEFAULT if pretrained else None
+            model = models.efficientnet_b3(weights=weights)
             # Remove classifier and pooling
             model = model.features
         elif model_name == "efficientnet_b4":

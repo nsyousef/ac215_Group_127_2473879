@@ -56,8 +56,8 @@ app = modal.App("skin-disease-training-volume", image=image)
 # ============================================================================
 
 @app.function(
-    cpu=4.0,  # Request more CPU for faster parallel downloads
-    timeout=3600,
+    cpu=16.0,  # Increased CPU for faster parallel downloads
+    timeout=7200,
     secrets=[
         modal.Secret.from_name("gcs-secret"),
         modal.Secret.from_name("gcp-project-secret"),
@@ -70,7 +70,7 @@ def sync_data_from_gcs():
     """
     One-time sync of data from GCS to Modal Volume
     
-    This copies the dataset from gs://derma-datasets-2/final/ to a persistent Modal Volume for fast local access during training.
+    This copies the dataset from gs://apcomp215-datasets/dataset_v1/ to a persistent Modal Volume for fast local access during training.
     
     Usage:
         modal run modal_training_volume.py::sync_data_from_gcs
@@ -95,14 +95,14 @@ def sync_data_from_gcs():
             raise
     
     # Setup paths
-    bucket_name = "derma-datasets-2"
-    gcs_prefix = "final/"
-    data_dir = "/data/final"
+    bucket_name = "apcomp215-datasets"
+    gcs_prefix = "dataset_v1/"
+    data_dir = "/data/dataset_v1"
     os.makedirs(data_dir, exist_ok=True)
     
     logger.info(f"Source: gs://{bucket_name}/{gcs_prefix}")
     logger.info(f"Target: {data_dir}")
-    logger.info("Starting parallel transfer (32 workers)...")
+    logger.info("Starting parallel transfer (128 workers)...")
     
     try:
         # Initialize GCS client
@@ -122,12 +122,17 @@ def sync_data_from_gcs():
             
             local_path = os.path.join(data_dir, relative_path)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            
+            # Skip if file already exists and size matches
+            if os.path.exists(local_path) and os.path.getsize(local_path) == blob.size:
+                return 0
+            
             blob.download_to_filename(local_path)
             return blob.size
         
         # Parallel download with progress bar
         total_bytes = 0
-        with ThreadPoolExecutor(max_workers=32) as executor:
+        with ThreadPoolExecutor(max_workers=128) as executor:
             futures = {executor.submit(download_blob, blob): blob for blob in blobs}
             with tqdm(total=len(blobs), desc="Downloading", unit="file") as pbar:
                 for future in as_completed(futures):
@@ -223,7 +228,7 @@ def train_with_volume(config_path: str = "configs/modal_template.yaml"):
         logger.warning("Cannot write to %s: %s", checkpoint_dir, e)
     
     # Verify data volume is mounted and populated
-    data_dir = "/data/final"
+    data_dir = "/data/dataset_v1"
     if os.path.exists(data_dir):
         file_count = len([f for f in Path(data_dir).rglob('*') if f.is_file()])
         logger.info("=" * 70)

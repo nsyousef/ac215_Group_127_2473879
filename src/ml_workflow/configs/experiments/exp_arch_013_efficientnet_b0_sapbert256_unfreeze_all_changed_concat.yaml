@@ -1,5 +1,6 @@
 # Model Training Configuration for Modal
-# DenseNet-121 Vision Model Experiment
+# Experiment 013: EfficientNet-B0 + SapBERT 256 with Higher Vision Learning Rate
+# Strategy: Increase vision model LR from 0.0001 to 0.0002 to improve vision learning
 
 # Data source configuration  
 data:
@@ -38,10 +39,10 @@ training:
   batch_size: 256
   num_workers: 16
   prefetch_factor: 8
-  num_epochs: 10
+  num_epochs: 20
   patience: 5
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
-  n_warmup_epochs: 3  # Number of epochs to freeze backbone (0 = no freezing)
+  n_warmup_epochs: 1 # CHANGED FROM 3 TO 1 - START TRAINING VISION EARLY
   
   # Statistics and sampling
   compute_stats: False
@@ -69,16 +70,16 @@ augmentation:
 
 # Vision model configuration
 vision_model:
-  name: "densenet121"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
+  name: "efficientnet_b0"  # resnet50, resnet101, densenet121, efficientnet_b0, efficientnet_b1, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
   pretrained: true
   pooling_type: "avg"  # For ImageNet models: avg, max, concat
-  unfreeze_layers: 10  # Number of layers to unfreeze from end
+  unfreeze_layers: -1  # CHANGED FROM 10 TO -1 - UNFREEZE ALL LAYERS
 
 # Multimodal classifier configuration
 multimodal_classifier:
   # Projection configuration
   projection_dim: 256  # Common projection dimension for both modalities
-  use_l2_normalization: false  # Normalize embeddings before fusion
+  use_l2_normalization: true  # CHANGED FROM FALSE TO TRUE - NORMALIZE EMBEDDINGS BEFORE FUSION
 
   # Vision projection layers (empty list = just linear layer)
   image_projection_hidden: [512]  # Hidden layers for vision projection
@@ -103,7 +104,7 @@ multimodal_classifier:
   # Loss function configuration
   loss_fn: "cross_entropy"  # "cross_entropy" or "focal"
   label_smoothing: 0.1  # For cross_entropy loss
-  use_class_weights_from_data: false  # Automatically inject class weights from dataloader
+  use_class_weights_from_data: true  # Automatically inject class weights from dataloader
   
   # Focal loss parameters (only used if loss_fn is "focal")
   # alpha: 1.0  # Weighting factor for rare class (or sample_weights will be used)
@@ -126,9 +127,9 @@ masking:
 
 # Encoder configuration
 encoder:
-  pre_existing_path: "/data/dataset_v1/embeddings/pubmedbert_512_cls.parquet" # From Modal Volume (local SSD)
-  model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
-  max_length: 512 # Maximum sequence length
+  pre_existing_path: "/data/dataset_v1/embeddings/sapbert_256_cls.parquet" # From Modal Volume (local SSD)
+  model_name: "sapbert" # or biosyn, sapbert, qwen, or path to a model
+  max_length: 256 # Maximum sequence length
   pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
   batch_size: 32 # The batch size to use when creating embeddings
   qwen_instr: "Represent the patient's description and characteristics (including clinical details, age, sex, and symptoms) as a semantic embedding suitable for clinical classification. Return an embedding." # The instructions for the QWEN embedding to use (allows us to experiment with different instructions; ignored if model is not QWEN)
@@ -137,7 +138,7 @@ encoder:
 optimizer:
   vision_model:
     name: "adamw"
-    learning_rate: 0.0001
+    learning_rate: 0.0005  # INCREASED from 0.0001 to 0.0002 - stronger training signal for vision
     weight_decay: 0.001
     betas: [0.9, 0.999]
     eps: 0.00000001
@@ -153,7 +154,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_arch_003_densenet121"
+  experiment_name: "exp_arch_013_efficientnet_b0_sapbert256_unfreeze_all_changed_concat"
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration
@@ -161,4 +162,3 @@ checkpoint:
   save_frequency: 10  # Save checkpoint every N epochs (it saves the best model anyway)
   keep_last: 1  # Keep last N checkpoints
   load_from: null  # Path to checkpoint to load from (null for no loading)
-
