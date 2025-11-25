@@ -2,12 +2,7 @@ import pytest
 import pandas as pd
 from unittest.mock import MagicMock, patch
 from google.api_core.exceptions import NotFound
-import sys
-import os
 from processor import DatasetProcessor
-
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 
 # Concrete implementation of abstract class for testing
