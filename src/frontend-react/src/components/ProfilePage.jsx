@@ -25,6 +25,7 @@ export default function ProfilePage({ onBack, showActions = true }) {
     dateOfBirth: '',
     sex: '',
     raceEthnicity: '',
+    country: '',
   });
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -35,6 +36,7 @@ export default function ProfilePage({ onBack, showActions = true }) {
         dateOfBirth: profile.dateOfBirth || '',
         sex: profile.sex || '',
         raceEthnicity: profile.raceEthnicity || '',
+        country: profile.country || '',
       });
     }
   }, [profile, loading]);
@@ -70,9 +72,9 @@ export default function ProfilePage({ onBack, showActions = true }) {
     }
 
     // Reset local profile to defaults and mark onboarding incomplete
-    await updateProfile({ dateOfBirth: '', sex: '', raceEthnicity: '', hasCompletedOnboarding: false });
+    await updateProfile({ dateOfBirth: '', sex: '', raceEthnicity: '', country: '', hasCompletedOnboarding: false });
     setConfirmOpen(false);
-    
+
     // Reload to ensure all contexts pick up cleared state
     if (typeof window !== 'undefined') {
       window.location.href = '/';
