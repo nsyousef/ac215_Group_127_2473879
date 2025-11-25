@@ -4,8 +4,7 @@
 # Data source configuration
 data:
   use_local: True  # Use Modal Volume for fast local SSD access
-  metadata_path: "/data/dataset_v1/metadata_all_harmonized.csv"  # From Modal Volume
-  img_prefix: "/data/dataset_v1/imgs"  # From Modal Volume
+  dataset: dataset_v1  # Dataset name (auto-constructs metadata_path and img_prefix)
   min_samples_per_label: 100
   datasets:
     - fitzpatrick17k
@@ -126,7 +125,7 @@ masking:
 
 # Encoder configuration
 encoder:
-  pre_existing_path: "/data/dataset_v1/embeddings/pubmedbert_256_cls.parquet" # From Modal Volume (local SSD)
+  embedding_filename: "pubmedbert_256_cls.parquet" # Filename only (directory auto-constructed from dataset)
   model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
   max_length: 256 # Maximum sequence length
   pooling_type: "cls" # One of 'mean', 'cls', 'last_token'

@@ -4,8 +4,7 @@
 # Data source configuration
 data:
   use_local: True  # Use Modal Volume for fast local SSD access
-  metadata_path: "/data/final/metadata_all_harmonized.csv"  # From Modal Volume
-  img_prefix: "/data/final/imgs"  # From Modal Volume
+  dataset: final  # Dataset name (auto-constructs metadata_path and img_prefix)
   min_samples_per_label: 100
   datasets:
     - fitzpatrick17k
@@ -121,7 +120,7 @@ multimodal_classifier:
 # instead of re-computing them with the new model. To make the configuration recompute the embeddings each time, set
 # pre_existing_path to null. This will not save the embeddings and will force a recompute from scratch.
 encoder:
-  pre_existing_path: "/data/final/embeddings/pubmedbert_512_cls.parquet" # From Modal Volume (local SSD)
+  embedding_filename: "pubmedbert_512_cls.parquet" # Filename only (directory auto-constructed from dataset)
   model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
   max_length: 512 # Maximum sequence length
   pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
