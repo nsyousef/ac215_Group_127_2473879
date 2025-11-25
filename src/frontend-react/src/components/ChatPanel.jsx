@@ -46,7 +46,7 @@ export default function ChatPanel({ conditionId }) {
           // Not in Electron - use in-memory conversation history
           conversationData = condition.conversationHistory;
         }
-        
+
         // Convert Python conversation format to UI message format
         // Python format: [{ user: { message, timestamp }, llm: { message, timestamp } }, ...]
         const messages = [];
@@ -100,7 +100,7 @@ export default function ChatPanel({ conditionId }) {
   const send = async () => {
     if (!text.trim()) return;
     if (!conditionId) return; // don't send when no condition selected
-    
+
     // Add user message immediately
     const userMsg = {
       id: `u${Date.now()}`,

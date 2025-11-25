@@ -3,6 +3,7 @@ import pandas as pd
 import os
 from google.api_core.exceptions import NotFound
 
+
 class DatasetProcessorSkinCAP(DatasetProcessor):
     def filter_metadata(self, metadata: pd.DataFrame, raw_image_path: str) -> pd.DataFrame:
         """
@@ -15,7 +16,7 @@ class DatasetProcessorSkinCAP(DatasetProcessor):
         @returns: A pandas DataFrame with the metadata filtered to only include rows for images you want to do machine learning on.
         """
         pass
-    
+
     def format_metadata_csv(self, metadata: pd.DataFrame, dataset: str, raw_image_path: str) -> pd.DataFrame:
         """
         Formats a filtered metadata file into a table with the following columns:
@@ -37,7 +38,7 @@ class DatasetProcessorSkinCAP(DatasetProcessor):
 
     def update_data(self, metadata: pd.DataFrame, metadata_name: str):
         """
-        This function updates the metadata in the `final` folder in the bucket by adding captions to corresponding Fitzpatrick17k and DDI images 
+        This function updates the metadata in the `final` folder in the bucket by adding captions to corresponding Fitzpatrick17k and DDI images
         and it writes the SkinCAP metadata to the `final` folder.
 
         @param metadata: A dataframe containing the final metadata to add metadata_all.csv.
@@ -64,17 +65,18 @@ class DatasetProcessorSkinCAP(DatasetProcessor):
 
             metadata = metadata.rename(columns={"ori_file_path": "orig_filename"})
             metadata = metadata[["orig_filename", "caption_zh_polish_en"]]
-            new_meta = pd.merge(old_meta, metadata, on='orig_filename', how='left')
+            new_meta = pd.merge(old_meta, metadata, on="orig_filename", how="left")
             # Add new caption to existing text_desc
-            new_meta['text_desc'] = new_meta['text_desc'].fillna('') + ' ' + new_meta['caption_zh_polish_en'].fillna('')
+            new_meta["text_desc"] = new_meta["text_desc"].fillna("") + " " + new_meta["caption_zh_polish_en"].fillna("")
             # Clean up any leading/trailing whitespace
-            new_meta['text_desc'] = new_meta['text_desc'].str.strip()
-            new_meta = new_meta.drop(columns=['caption_zh_polish_en'])
+            new_meta["text_desc"] = new_meta["text_desc"].str.strip()
+            new_meta = new_meta.drop(columns=["caption_zh_polish_en"])
         except NotFound as e:
             raise FileNotFoundError(f"File {final_metadata_path} not found in GCS") from e
-        
+
         # Replace old file in Google Cloud with new one (or create new)
         self._write_table_to_gcs(new_meta, final_metadata_path)
+
 
 if __name__ == "__main__":
     dp = DatasetProcessorSkinCAP()

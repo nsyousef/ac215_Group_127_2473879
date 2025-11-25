@@ -154,4 +154,3 @@ Only needed for creating mocked objects:
 - Mocking is done using `pytest-mock` and Python's built-in `unittest.mock`
 - All tests use pytest's built-in assertions for clarity
 - Unit tests focus on testing the logic of prompt building, text filtering, and conversation history management
-

@@ -102,9 +102,7 @@ def handle_message(msg):
             if not image_path:
                 raise ValueError("Missing image_path")
             result = manager.get_initial_prediction(
-                image_path=image_path,
-                text_description=text,
-                user_timestamp=user_timestamp
+                image_path=image_path, text_description=text, user_timestamp=user_timestamp
             )
             send({"id": req_id, "ok": True, "result": result})
         elif cmd == "chat":

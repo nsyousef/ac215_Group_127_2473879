@@ -28,7 +28,7 @@ ac215_Group_127_2473879/
     ├── data-processor/            # Data processing and harmonization
     │   ├── data-processor.log     # Data processing logs
     │   ├── data-processor.sh      # Runs the whole data processing pipeline
-    │   └── processor_derm1m.py    # Derm1M processing   
+    │   └── processor_derm1m.py    # Derm1M processing
     └── ml_workflow/               # Machine learning training pipeline
         ├── dataloader/            # Data loading utilities
         │   ├── dataloader.py      # Main dataloader implementation

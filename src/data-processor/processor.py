@@ -7,6 +7,7 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.api_core.exceptions import NotFound
 
+
 class DatasetProcessor(ABC):
     """
     Abstract base class for formatting diverse skin image datasets into a consistent format.
@@ -17,11 +18,14 @@ class DatasetProcessor(ABC):
     @param final_metadata_file: The name of the file containing the combined metadata from all datasets.
     @param final_image_dir: The path to the folder where the final images are to be stored.
     """
-    def __init__(self,
-                 bucket_name = "derma-datasets-2", 
-                 final_metadata_dir = "final/",
-                 final_metadata_file = "metadata_all.csv",
-                 final_image_path: str = "final/imgs/"):
+
+    def __init__(
+        self,
+        bucket_name="derma-datasets-2",
+        final_metadata_dir="final/",
+        final_metadata_file="metadata_all.csv",
+        final_image_path: str = "final/imgs/",
+    ):
         self.bucket_name = bucket_name
         self.final_metadata_dir = final_metadata_dir
         self.final_metadata_file = final_metadata_file
@@ -74,12 +78,14 @@ class DatasetProcessor(ABC):
         """
         pass
 
-    def update_data(self, final_metadata: pd.DataFrame, filt_meta: pd.DataFrame, filt_meta_name: str, raw_image_dir: str):
+    def update_data(
+        self, final_metadata: pd.DataFrame, filt_meta: pd.DataFrame, filt_meta_name: str, raw_image_dir: str
+    ):
         """
         This function updates the data and metadata in the `final` folder in the bucket. It upserts the `final_metadata` into the metadata file. It also
         copies all the images in the `final_metadata` file into the `final/imgs` folder. And it writes the dataset-specific filtered metadata to the `final` folder.
 
-        Notes: 
+        Notes:
         * This function in its current implementation assumes the images are named <image_id>.<extension>. If the images are named in a different format,
         please override this function and change the implementation based on your image naming convention.
         * This function also assumes every entry in the `datasets` column of `final_metadata` is the same.
@@ -95,7 +101,7 @@ class DatasetProcessor(ABC):
 
         # update images
         print("Copying images")
-        image_names = final_metadata['orig_filename'].to_list()
+        image_names = final_metadata["orig_filename"].to_list()
         print("Image names:")
         print(image_names[0:5])
         dataset = final_metadata["dataset"].iloc[0]
@@ -129,12 +135,12 @@ class DatasetProcessor(ABC):
             old_meta = self._load_table_from_gcs(final_metadata_path)
 
             # Set indices to identifiers
-            old_meta = old_meta.set_index(['dataset', 'image_id'], drop=False)
-            final_metadata = final_metadata.set_index(['dataset', 'image_id'], drop=False)
+            old_meta = old_meta.set_index(["dataset", "image_id"], drop=False)
+            final_metadata = final_metadata.set_index(["dataset", "image_id"], drop=False)
 
             # Concatenate and drop duplicates
             upserted = pd.concat([old_meta, final_metadata])
-            upserted = upserted[~upserted.index.duplicated(keep='last')]
+            upserted = upserted[~upserted.index.duplicated(keep="last")]
 
             # Reset the index
             upserted = upserted.reset_index(drop=True)
@@ -178,11 +184,11 @@ class DatasetProcessor(ABC):
 
         # Infer file type from extension for appropriate pandas function
         _, ext = os.path.splitext(blob_path.lower())
-        if ext in ['.csv', '.txt']:
+        if ext in [".csv", ".txt"]:
             read_func = pd.read_csv
-        elif ext in ['.parquet']:
+        elif ext in [".parquet"]:
             read_func = pd.read_parquet
-        elif ext in ['.xls', '.xlsx']:
+        elif ext in [".xls", ".xlsx"]:
             read_func = pd.read_excel
         else:
             raise ValueError(f"Unsupported file extension: {ext}")
@@ -195,7 +201,7 @@ class DatasetProcessor(ABC):
             return read_func(file_like, **kwargs)
         elif read_func is pd.read_excel:
             return read_func(file_like, **kwargs)
-        
+
     def _write_table_to_gcs(self, df: pd.DataFrame, blob_path: str, **kwargs) -> None:
         """
         Writes a Pandas DataFrame as a CSV file to Google Cloud Storage.
@@ -216,13 +222,10 @@ class DatasetProcessor(ABC):
         blob = bucket.blob(blob_path)
 
         # Upload to GCS
-        blob.upload_from_file(csv_buffer, content_type='text/csv')
+        blob.upload_from_file(csv_buffer, content_type="text/csv")
 
     def _list_files_in_folder(
-        self,
-        folder_path: str,
-        exclude_dir: bool = False,
-        include_prefixes: bool = True
+        self, folder_path: str, exclude_dir: bool = False, include_prefixes: bool = True
     ) -> list[str]:
         """
         Lists all file names in a folder in Google Cloud Storage.
@@ -234,14 +237,14 @@ class DatasetProcessor(ABC):
         @returns: List of file names (full path or base name, according to include_prefixes).
         """
         # Ensure folder_path ends with '/' for correct prefix matching
-        if not folder_path.endswith('/'):
-            folder_path += '/'
+        if not folder_path.endswith("/"):
+            folder_path += "/"
 
         bucket = self.storage_client.bucket(self.bucket_name)
         # Use the prefix to search
         blobs = self.storage_client.list_blobs(self.bucket_name, prefix=folder_path)
         if exclude_dir:
-            files = [blob.name for blob in blobs if not blob.name.endswith('/')]
+            files = [blob.name for blob in blobs if not blob.name.endswith("/")]
         else:
             files = [blob.name for blob in blobs]
 
@@ -252,13 +255,8 @@ class DatasetProcessor(ABC):
             files = [f[cut_len:] if f.startswith(folder_path) else f for f in files]
 
         return files
-    
-    def _bulk_copy_blobs(
-        self, 
-        source_blobs: list[str], 
-        destination_blobs: list[str], 
-        max_workers: int = 20
-    ):
+
+    def _bulk_copy_blobs(self, source_blobs: list[str], destination_blobs: list[str], max_workers: int = 20):
         """
         Bulk copies blobs from source_blobs to destination_blobs within a Google Cloud Storage bucket.
 
@@ -278,15 +276,13 @@ class DatasetProcessor(ABC):
             return dst_blob_path
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(do_copy, src, dst)
-                for src, dst in zip(source_blobs, destination_blobs)
-            ]
+            futures = [executor.submit(do_copy, src, dst) for src, dst in zip(source_blobs, destination_blobs)]
             for _ in tqdm(as_completed(futures), total=len(futures), desc="Copying blobs", unit="file"):
                 pass  # Progress bar tick
 
-
-    def _bulk_copy_files(self, file_list: list[str], src_dir: str, dst_dir: str, dest_names: list[str]=None, max_workers: int=20):
+    def _bulk_copy_files(
+        self, file_list: list[str], src_dir: str, dst_dir: str, dest_names: list[str] = None, max_workers: int = 20
+    ):
         """
         Bulk copies files from one directory to another within a Google Cloud Storage bucket,
         optionally renaming them, and prints a progress bar.
@@ -303,8 +299,10 @@ class DatasetProcessor(ABC):
             raise ValueError("dest_names must be the same length as file_list.")
 
         bucket = self.storage_client.bucket(self.bucket_name)
-        if not src_dir.endswith('/'): src_dir += '/'
-        if not dst_dir.endswith('/'): dst_dir += '/'
+        if not src_dir.endswith("/"):
+            src_dir += "/"
+        if not dst_dir.endswith("/"):
+            dst_dir += "/"
         print("Source dir:")
         print(src_dir)
         print("Dest dir:")
@@ -338,7 +336,8 @@ class DatasetProcessor(ABC):
         @param include_prefixes: If True, include the full path of folders (e.g. raw/images/img.png). If False, just return the image names (e.g. img.png).
         @returns: Two lists: the first containing the image file names and the second containing the image IDs.
         """
-        if not raw_image_path.endswith('/'): raw_image_path += '/'
+        if not raw_image_path.endswith("/"):
+            raw_image_path += "/"
         print("Raw image path:")
         print(raw_image_path)
         img_files = self._list_files_in_folder(raw_image_path, exclude_dir=True, include_prefixes=include_prefixes)

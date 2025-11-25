@@ -4,10 +4,11 @@ import os
 import json
 from google.cloud import storage
 
+
 class DatasetProcessorDerm1M(DatasetProcessor):
     def filter_metadata(self, metadata: pd.DataFrame):
         """
-        Filter the Derm1M metadata to only include: 
+        Filter the Derm1M metadata to only include:
         * rows where the labels match terms in ontology.json
         * rows where the image type is in ('clinical: close-up', 'TBP tile: close-up', 'clinical: overview')
 
@@ -15,8 +16,8 @@ class DatasetProcessorDerm1M(DatasetProcessor):
         @returns: The filtered metadata.
         """
         client = storage.Client()
-        bucket = client.bucket('derma-datasets-2')
-        blob = bucket.blob('raw/Derm1M/ontology.json')
+        bucket = client.bucket("derma-datasets-2")
+        blob = bucket.blob("raw/Derm1M/ontology.json")
         json_str = blob.download_as_text()
         ontology = json.loads(json_str)
 
@@ -27,13 +28,15 @@ class DatasetProcessorDerm1M(DatasetProcessor):
                 ontology_terms.append(value.lower())
         ontology_terms_set = set(ontology_terms)
 
-        df_filtered = metadata[~metadata.select_dtypes(include=['object']).apply(
-            lambda x: x.astype(str).str.contains(r'\bdermosc\w*', case=False, na=False, regex=True)
-        ).any(axis=1)]
+        df_filtered = metadata[
+            ~metadata.select_dtypes(include=["object"])
+            .apply(lambda x: x.astype(str).str.contains(r"\bdermosc\w*", case=False, na=False, regex=True))
+            .any(axis=1)
+        ]
         labels = (
-            df_filtered['hierarchical_disease_label']
+            df_filtered["hierarchical_disease_label"]
             .dropna()
-            .apply(lambda x: x.split(',')[-1].strip().lower() if isinstance(x, str) else '')
+            .apply(lambda x: x.split(",")[-1].strip().lower() if isinstance(x, str) else "")
         )
         mask = labels.isin(ontology_terms_set)
         df_filtered = metadata.loc[labels.index[mask]]
@@ -59,56 +62,56 @@ class DatasetProcessorDerm1M(DatasetProcessor):
         """
         # construct formatted metadata
         form_met = pd.DataFrame()
-        form_met['image_id'] = metadata['filename'].apply(lambda x: os.path.splitext(x)[0]).str.replace('/', '_')
+        form_met["image_id"] = metadata["filename"].apply(lambda x: os.path.splitext(x)[0]).str.replace("/", "_")
         form_met["dataset"] = [dataset] * form_met.shape[0]
-        form_met["orig_filename"] = metadata['filename']
+        form_met["orig_filename"] = metadata["filename"]
         form_met["filename"] = form_met.apply(
             lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x['orig_filename'])[1]}", axis=1
         )
 
         # Add labels and ontology data
-        form_met['label'] = metadata['hierarchical_disease_label'].apply(lambda x: x.split(',')[-1].strip())
+        form_met["label"] = metadata["hierarchical_disease_label"].apply(lambda x: x.split(",")[-1].strip())
 
-        split_cols = metadata['hierarchical_disease_label'].str.split(',', expand=True)
-        split_cols.columns = [f'level_{i+1}' for i in range(len(split_cols.columns))]
+        split_cols = metadata["hierarchical_disease_label"].str.split(",", expand=True)
+        split_cols.columns = [f"level_{i+1}" for i in range(len(split_cols.columns))]
         form_met = pd.concat([form_met, split_cols], axis=1)
 
         # Include metadata in text descriptions
-        gender_list = metadata['gender'].tolist()
-        age_list = metadata['age'].tolist()
-        location_list = metadata['body_location'].tolist()
-        symptoms_list = metadata['symptoms'].tolist()
+        gender_list = metadata["gender"].tolist()
+        age_list = metadata["age"].tolist()
+        location_list = metadata["body_location"].tolist()
+        symptoms_list = metadata["symptoms"].tolist()
 
         for i in range(len(metadata)):
-            new_caption = str(metadata.iloc[i]['caption'])
+            new_caption = str(metadata.iloc[i]["caption"])
 
-            if gender_list[i] != 'No gender information' and gender_list[i] != 'male, female':
-                gender_sentence = f' The gender is {gender_list[i]}.'
+            if gender_list[i] != "No gender information" and gender_list[i] != "male, female":
+                gender_sentence = f" The gender is {gender_list[i]}."
                 new_caption += gender_sentence
 
-            if age_list[i] != 'No age information':
-                age_sentence = f' The age is {age_list[i]}.'
+            if age_list[i] != "No age information":
+                age_sentence = f" The age is {age_list[i]}."
                 new_caption += age_sentence
 
-            if location_list[i] != 'No body location information':
-                location_sentence = f' The body location is {location_list[i]}.'
+            if location_list[i] != "No body location information":
+                location_sentence = f" The body location is {location_list[i]}."
                 new_caption += location_sentence
 
-            if symptoms_list[i] != 'No symptom information':
-                symptom_sentence = f' The symptoms are {symptoms_list[i]}.'
+            if symptoms_list[i] != "No symptom information":
+                symptom_sentence = f" The symptoms are {symptoms_list[i]}."
                 new_caption += symptom_sentence
 
-            metadata.loc[metadata.index[i], 'caption'] = new_caption
+            metadata.loc[metadata.index[i], "caption"] = new_caption
 
-        form_met["text_desc"] = metadata['caption']
+        form_met["text_desc"] = metadata["caption"]
 
         # order columns
-        level_cols = [col for col in form_met.columns if col.startswith('level_')]
+        level_cols = [col for col in form_met.columns if col.startswith("level_")]
         base_cols = ["image_id", "dataset", "filename", "orig_filename", "label", "text_desc"]
         form_met = form_met[base_cols + level_cols]
 
         return form_met
-    
+
     def _update_images(self, image_names: list[str], raw_image_dir: str, dataset: str):
         """
         This function copies the images whose filenames are in `image_names` from the `raw_image_dir` to the directory stored in `final_image_path` of this object.
@@ -121,7 +124,7 @@ class DatasetProcessorDerm1M(DatasetProcessor):
         @param raw_image_dir: The path to the directory containing the raw images.
         @param dataset: The name of the dataset (e.g. scin, fitzpatrick17k, etc).
         """
-        clean_image_names = [name.replace('/', '_') for name in image_names]
+        clean_image_names = [name.replace("/", "_") for name in image_names]
         dest_names = [f"{dataset}_{filename}" for filename in clean_image_names]
         self._bulk_copy_files(image_names, raw_image_dir, self.final_image_path, dest_names)
 

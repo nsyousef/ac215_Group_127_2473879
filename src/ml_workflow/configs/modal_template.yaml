@@ -1,6 +1,6 @@
 # Model Training Configuration for Modal
 
-# Data source configuration  
+# Data source configuration
 data:
   use_local: True  # Use Modal CloudBucketMount for fast local access
   metadata_path: "/gcs-data/final/metadata_all_harmonized.csv"  # Mounted from GCS bucket
@@ -12,11 +12,11 @@ data:
     - isic
     - derm1m
   derm1m_sources: # Only applicable if derm1m is being used under "datasets"
-    - IIYI 
+    - IIYI
     - edu
     - note
     - public
-    - pubmed 
+    - pubmed
     - reddit
     - twitter
     - youtube
@@ -25,10 +25,10 @@ data:
   # Data splits
   test_size: 0.2
   val_size: 0.1  # Set to 0.15 for train/val/test split
-  
+
   # Image configuration
   img_size: [224, 224]  # [height, width]
-  
+
   # Random seed for reproducibility
   seed: 42
 
@@ -41,11 +41,11 @@ training:
   patience: 100
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
   n_warmup_epochs: 5  # Number of epochs to freeze backbone (0 = no freezing)
-  
+
   # Statistics and sampling
   compute_stats: False
   weighted_sampling: False
-  
+
   # Scheduler configuration
   scheduler:
     use_cosine_annealing: true  # Enable cosine annealing learning rate scheduler
@@ -80,42 +80,42 @@ multimodal_classifier:
   sample_weights: null  # Will be inferred from data
   vision_embedding_dim: null  # Will be inferred from vision model
   text_embedding_dim: null  # Will be inferred from text embeddings
-  
+
   # Projection configuration
   projection_dim: 256  # Common projection dimension for both modalities
-  
+
   # Vision projection layers (empty list = just linear layer)
   image_projection_hidden: [512]  # Hidden layers for vision projection
   projection_activation: "relu"  # Activation for projection layers
   projection_dropout: 0.3  # Dropout for projection layers
-  
-  # Text projection layers (empty list = just linear layer)  
+
+  # Text projection layers (empty list = just linear layer)
   text_projection_hidden: [384]  # Hidden layers for text projection
-  
+
   # Final classifier configuration
   final_hidden_sizes: [128, 64]  # Hidden layers after fusion
   final_activation: "relu"  # Activation for final classifier
   final_dropout: 0.4  # Dropout for final classifier
-  
+
   # Fusion strategy
   fusion_strategy: "weighted_sum"  # "weighted_sum" or "concat_mlp"
-  
+
   # Auxiliary losses (optional)
   use_auxiliary_loss: true  # Enable auxiliary losses on individual modalities
   auxiliary_loss_weight: 0.2  # Weight for auxiliary losses (0.0-1.0)
-  
+
   # Loss function configuration
   loss_fn: "cross_entropy"  # "cross_entropy" or "focal"
   label_smoothing: 0.1  # For cross_entropy loss
-  
+
   # Focal loss parameters (only used if loss_fn is "focal")
   # alpha: 1.0  # Weighting factor for rare class (or sample_weights will be used)
   # gamma: 2.0  # Focusing parameter
   # reduction: "mean"  # Reduction method
 
 # Encoder configuration
-# IMPORTANT: If you change the model_name, max_length, pooling_type, etc. you must also change the 
-# pre_existing_path. Otherwise, the dataloader will just load the existing embeddings (computed with the previous model), 
+# IMPORTANT: If you change the model_name, max_length, pooling_type, etc. you must also change the
+# pre_existing_path. Otherwise, the dataloader will just load the existing embeddings (computed with the previous model),
 # instead of re-computing them with the new model. To make the configuration recompute the embeddings each time, set
 # pre_existing_path to null. This will not save the embeddings and will force a recompute from scratch.
 encoder:
@@ -135,7 +135,7 @@ optimizer:
     momentum: 0.9
     betas: [0.9, 0.999]
     eps: 0.00000001
-  
+
   multimodal_classifier:
     name: "adamw"
     learning_rate: 0.0007

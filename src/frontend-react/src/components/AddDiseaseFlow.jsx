@@ -102,10 +102,10 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   const handleMapChange = (coords) => {
     // coords: { leftPct, topPct }
     setMapPos(coords);
-    
+
     // Use bounding box detection to infer body part from coordinates
     const detectedPart = getBodyPartFromCoordinates(coords.leftPct, coords.topPct);
-    
+
     if (detectedPart === 'invalid') {
       setMapError('Please select a valid body area');
       setBodyPart('');
@@ -131,7 +131,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
           setMapPos(finalMapPos);
         }
       }
-      
+
       // Generate case ID for this analysis
       const timestamp = Date.now();
       const diseaseId = `${timestamp}`;  // Disease ID (no prefix, just timestamp)
@@ -182,11 +182,11 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         .join(' ');
 
       // Get the enriched disease object from Python response (includes all UI fields)
-      // Python's _build_enriched_disease() returns: id, name, description, bodyPart, 
+      // Python's _build_enriched_disease() returns: id, name, description, bodyPart,
       // mapPosition, image, confidenceLevel, llmResponse, timelineData, conversationHistory
       const enrichedDisease = results.enriched_disease || {};
-      
-      // Build complete disease object with both minimal data (for diseases.json) 
+
+      // Build complete disease object with both minimal data (for diseases.json)
       // and enriched data (for immediate UI display)
       const newDisease = {
         // Minimal fields (saved to diseases.json)

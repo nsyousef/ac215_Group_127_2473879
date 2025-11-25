@@ -17,7 +17,7 @@ print("Testing load_diseases()...")
 diseases = APIManager.load_diseases()
 
 print(f"\nFound {len(diseases)} diseases")
-print("\n" + "="*80)
+print("\n" + "=" * 80)
 
 for disease in diseases:
     print(f"\nDisease ID: {disease.get('id')}")
@@ -30,6 +30,6 @@ for disease in diseases:
     print(f"Timeline entries: {len(disease.get('timelineData', []))}")
     print(f"Has image: {bool(disease.get('image'))}")
 
-print("\n" + "="*80)
+print("\n" + "=" * 80)
 print("\nFull JSON output:")
 print(json.dumps(diseases, indent=2)[:2000] + "...")

@@ -2,6 +2,7 @@ from processor import DatasetProcessor
 import pandas as pd
 import os
 
+
 class DatasetProcessorDDI(DatasetProcessor):
     def filter_metadata(self, metadata: pd.DataFrame, raw_image_path: str) -> pd.DataFrame:
         """
@@ -14,7 +15,7 @@ class DatasetProcessorDDI(DatasetProcessor):
         @returns: A pandas DataFrame with the metadata filtered to only include rows for images you want to do machine learning on.
         """
         pass
-    
+
     def format_metadata_csv(self, metadata: pd.DataFrame, dataset: str, raw_image_path: str) -> pd.DataFrame:
         """
         Formats a filtered metadata file into a table with the following columns:
@@ -41,7 +42,7 @@ class DatasetProcessorDDI(DatasetProcessor):
         final_metadata_drft = pd.DataFrame()
         final_metadata_drft["image_id"] = id_name_map.index
         final_metadata_drft["dataset"] = [dataset] * final_metadata_drft.shape[0]
-        final_metadata_drft["orig_filename"] = metadata['DDI_file']
+        final_metadata_drft["orig_filename"] = metadata["DDI_file"]
         final_metadata_drft["filename"] = final_metadata_drft.apply(
             lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x['orig_filename'])[1]}", axis=1
         )
@@ -49,26 +50,23 @@ class DatasetProcessorDDI(DatasetProcessor):
 
         # Add malignant metadata as text description
         final_metadata_drft["text_desc"] = [None] * final_metadata_drft.shape[0]
-        malignant_list = metadata['malignant'].tolist()
+        malignant_list = metadata["malignant"].tolist()
         assert len(malignant_list) == len(final_metadata_drft)
 
         for i, malig_bool in enumerate(malignant_list):
             if malig_bool:
-                malig_sentence = 'This lesion is malignant.'
+                malig_sentence = "This lesion is malignant."
             else:
-                malig_sentence = 'This lesion is benign.'
-            final_metadata_drft.loc[final_metadata_drft.index[i], 'text_desc'] = malig_sentence
+                malig_sentence = "This lesion is benign."
+            final_metadata_drft.loc[final_metadata_drft.index[i], "text_desc"] = malig_sentence
 
         # order columns
         final_metadata = final_metadata_drft[["image_id", "dataset", "filename", "orig_filename", "label", "text_desc"]]
 
         return final_metadata
-    
+
     def _list_files_in_folder(
-        self,
-        folder_path: str,
-        exclude_dir: bool = False,
-        include_prefixes: bool = True
+        self, folder_path: str, exclude_dir: bool = False, include_prefixes: bool = True
     ) -> list[str]:
         """
         Lists all file names in a folder in Google Cloud Storage.
@@ -80,16 +78,16 @@ class DatasetProcessorDDI(DatasetProcessor):
         @returns: List of file names (full path or base name, according to include_prefixes).
         """
         # Ensure folder_path ends with '/' for correct prefix matching
-        if not folder_path.endswith('/'):
-            folder_path += '/'
+        if not folder_path.endswith("/"):
+            folder_path += "/"
 
         bucket = self.storage_client.bucket(self.bucket_name)
         # Use the prefix to search
         blobs = self.storage_client.list_blobs(self.bucket_name, prefix=folder_path)
         if exclude_dir:
-            files = [blob.name for blob in blobs if not blob.name.endswith('/') and not blob.name.endswith('.csv')]
+            files = [blob.name for blob in blobs if not blob.name.endswith("/") and not blob.name.endswith(".csv")]
         else:
-            files = [blob.name for blob in blobs if not blob.name.endswith('.csv')]
+            files = [blob.name for blob in blobs if not blob.name.endswith(".csv")]
 
         if not include_prefixes:
             # Only return the base file names (strip folder_path prefix)
@@ -98,6 +96,7 @@ class DatasetProcessorDDI(DatasetProcessor):
             files = [f[cut_len:] if f.startswith(folder_path) else f for f in files]
 
         return files
+
 
 if __name__ == "__main__":
     dp = DatasetProcessorDDI()

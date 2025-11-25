@@ -11,14 +11,14 @@ data:
     # - ddi
     # - isic
   has_text: null # True to filter for only datasets with text descriptions; False to filter for datasets without text descriptions. null to not filter.
-  
+
   # Data splits
   test_size: 0.2
   val_size: 0.1  # Set to 0.15 for train/val/test split
-  
+
   # Image configuration
   img_size: [224, 224]  # [height, width]
-  
+
   # Random seed for reproducibility
   seed: 42
 
@@ -31,11 +31,11 @@ training:
   patience: 100
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
   n_warmup_epochs: 5  # Number of epochs to freeze backbone (0 = no freezing)
-  
+
   # Statistics and sampling
   compute_stats: False
   weighted_sampling: False
-  
+
   # Scheduler configuration
   scheduler:
     use_cosine_annealing: true  # Enable cosine annealing learning rate scheduler
@@ -71,19 +71,19 @@ multimodal_classifier:
   text_projection_hidden: [512]   # Hidden layers for text projection MLP (empty list for linear projection)
   projection_activation: "relu"  # relu, gelu, swish, leaky_relu
   projection_dropout: 0.2
-  
+
   # Fusion configuration
   fusion_strategy: "weighted_sum"  # "weighted_sum" or "concat_mlp"
-  
+
   # Final classifier configuration (applied after fusion)
   final_hidden_sizes: [128]  # Hidden layers after fusion (empty list for linear classifier)
   final_activation: "relu"
   final_dropout: 0.3
-  
+
   # Loss configuration
   loss_fn: "cross_entropy"  # cross_entropy or focal
   label_smoothing: 0.1  # Label smoothing factor for cross entropy loss (0.0 = no smoothing)
-  
+
   # Auxiliary loss configuration (optional)
   use_auxiliary_loss: false  # Enable auxiliary losses on individual modalities before fusion
   auxiliary_loss_weight: 0.3  # Weight for auxiliary losses (only used if use_auxiliary_loss=true)
@@ -106,7 +106,7 @@ optimizer:
     momentum: 0.9
     betas: [0.9, 0.999]
     eps: 0.00000001
-  
+
   multimodal_classifier:
     name: "adamw"
     learning_rate: 0.0007

@@ -4,8 +4,11 @@ import os
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
 class DatasetProcessorFitz(DatasetProcessor):
-    def expand_raw_fitz_from_skincap(self, scap_meta: pd.DataFrame, fitz_raw_imgs_dir: str, scap_raw_imgs_dirs: list[str]):
+    def expand_raw_fitz_from_skincap(
+        self, scap_meta: pd.DataFrame, fitz_raw_imgs_dir: str, scap_raw_imgs_dirs: list[str]
+    ):
         """
         This function expands the raw Fitzpatrick data with the images in the SkinCAP dataset.
 
@@ -48,7 +51,9 @@ class DatasetProcessorFitz(DatasetProcessor):
         scap_meta["md5hash"] = scap_meta["ori_file_path"].apply(lambda x: os.path.splitext(x)[0])
 
         # merge filepaths with SkinCAP metadata
-        scap_meta = scap_meta.merge(scap_name_path_map, left_on="id", right_on="scap_img_id", validate="1:1").drop("id", axis=1)
+        scap_meta = scap_meta.merge(scap_name_path_map, left_on="id", right_on="scap_img_id", validate="1:1").drop(
+            "id", axis=1
+        )
 
         # filter to only include SkinCAP images from Fitzpatrick
         scap_in_fitz_flg = scap_meta["source"] == "fitzpatrick17k"
@@ -58,10 +63,14 @@ class DatasetProcessorFitz(DatasetProcessor):
         # get list of Fitzpatrick images we have
         fitz_filepaths, fitz_img_ids = self._get_img_ids_names(fitz_raw_imgs_dir, include_prefixes=True)
         fitz_name_path_map = pd.DataFrame({"fitz_image_id": fitz_img_ids, "fitz_image_filepath": fitz_filepaths})
-        print(f"We have {fitz_name_path_map.shape[0]} images in our Fitzpatrick raw data folder before adding SkinCAP images.")
+        print(
+            f"We have {fitz_name_path_map.shape[0]} images in our Fitzpatrick raw data folder before adding SkinCAP images."
+        )
 
         # merge Fitzpatrick images with SkinCAP mapping
-        full_mapping = scap_meta.merge(fitz_name_path_map, how="outer", left_on="md5hash", right_on="fitz_image_id", suffixes=["scap_", "fitz_"])
+        full_mapping = scap_meta.merge(
+            fitz_name_path_map, how="outer", left_on="md5hash", right_on="fitz_image_id", suffixes=["scap_", "fitz_"]
+        )
 
         # filter for images for which we don't already have Fitzpatrick raw data (we only need to copy these)
         no_fitz_raw_flg = full_mapping["fitz_image_id"].isna()
@@ -76,15 +85,19 @@ class DatasetProcessorFitz(DatasetProcessor):
 
             # construct final path for image to go
             full_mapping["dest_dir"] = [fitz_raw_imgs_dir] * full_mapping.shape[0]
-            full_mapping["dest_path"] = full_mapping.apply(lambda x: os.path.join(x['dest_dir'], f"{x['md5hash']}{x['extension']}"), axis=1)
+            full_mapping["dest_path"] = full_mapping.apply(
+                lambda x: os.path.join(x["dest_dir"], f"{x['md5hash']}{x['extension']}"), axis=1
+            )
 
             # simplify full_mapping
-            full_mapping = full_mapping[['scap_img_path', 'dest_path']]
+            full_mapping = full_mapping[["scap_img_path", "dest_path"]]
 
             # sanity checks (remove if it turns out SkinCAP dataset does not have all PNGs)
             # NOTE: the purpose of these is to abort the copy if there is a bug in this code
-            assert full_mapping['scap_img_path'].str.endswith(".png").all(), "There are non-PNG images in the SkinCAP dataset"
-            assert full_mapping['dest_path'].str.endswith(".png").all(), "File extensions were changed incorrectly"
+            assert (
+                full_mapping["scap_img_path"].str.endswith(".png").all()
+            ), "There are non-PNG images in the SkinCAP dataset"
+            assert full_mapping["dest_path"].str.endswith(".png").all(), "File extensions were changed incorrectly"
 
             full_mapping.to_csv("tmp_full_mapping.csv")
 
@@ -114,7 +127,7 @@ class DatasetProcessorFitz(DatasetProcessor):
         metadata_filt = metadata[keep_flg]
         print(f"Final shape: {metadata_filt.shape}")
         return metadata_filt
-    
+
     def format_metadata_csv(self, metadata: pd.DataFrame, dataset: str, raw_image_path: str) -> pd.DataFrame:
         """
         Formats a filtered metadata file into a table with the following columns:
@@ -143,19 +156,21 @@ class DatasetProcessorFitz(DatasetProcessor):
         # add original filename column
         final_metadata = final_metadata.merge(id_name_map, how="left", left_on="image_id", right_index=True)
         final_metadata["dataset"] = [dataset] * final_metadata.shape[0]
-        final_metadata["filename"] = final_metadata.apply(lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x['orig_filename'])[1]}", axis=1)
+        final_metadata["filename"] = final_metadata.apply(
+            lambda x: f"{x['dataset']}_{x['image_id']}{os.path.splitext(x['orig_filename'])[1]}", axis=1
+        )
         # NOTE: I am choosing this category since our goal is to have an ML app that identifies the disease and gives advice on it.
         # I think the collapsed categories are too broad for the model to be able to identify the disease and give good advice about it.
         final_metadata["label"] = metadata["label"]
         final_metadata["text_desc"] = [None] * final_metadata.shape[0]
-        
+
         print(final_metadata.head())
 
         # order columns
         final_metadata = final_metadata[["image_id", "dataset", "filename", "orig_filename", "label", "text_desc"]]
 
         return final_metadata
-    
+
     def _compute_md5_for_blob(self, blob):
         md5 = hashlib.md5()
         with blob.open("rb") as f:
@@ -166,7 +181,7 @@ class DatasetProcessorFitz(DatasetProcessor):
                 md5.update(data)
         return blob.name, md5.hexdigest()
 
-    def _compute_md5_gcs_list_parallel(self, bucket_name: str, file_list: list[str], max_workers: int=16):
+    def _compute_md5_gcs_list_parallel(self, bucket_name: str, file_list: list[str], max_workers: int = 16):
         """
         Compute the MD5 hashes of a list of files (i.e. Google Cloud Storage blobs) in parallel using file streaming to save RAM.
 
@@ -187,6 +202,7 @@ class DatasetProcessorFitz(DatasetProcessor):
                 hashes[name] = md5sum
 
         return hashes
+
 
 if __name__ == "__main__":
     dp = DatasetProcessorFitz()

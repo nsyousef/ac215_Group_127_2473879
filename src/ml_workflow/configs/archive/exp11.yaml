@@ -21,7 +21,7 @@ training:
   patience: 100
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
   n_warmup_epochs: 5  # Number of epochs to freeze backbone (0 = no freezing)
-  
+
   # Scheduler configuration
   scheduler:
     use_cosine_annealing: true  # Enable cosine annealing learning rate scheduler

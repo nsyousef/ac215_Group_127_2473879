@@ -2,10 +2,11 @@ from processor import DatasetProcessor
 import pandas as pd
 import os
 
+
 class DatasetProcessorIsic(DatasetProcessor):
     def filter_metadata(self, metadata: pd.DataFrame):
         """
-        Filter the ISIC metadata to only include: 
+        Filter the ISIC metadata to only include:
         * rows where diagnosis_3 is not null
         * rows where the image type is in ('clinical: close-up', 'TBP tile: close-up', 'clinical: overview')
 
@@ -13,7 +14,7 @@ class DatasetProcessorIsic(DatasetProcessor):
         @returns: The filtered metadata.
         """
         # drop columns not needed
-        columns_to_drop = ['attribution', "copyright_license", "acquisition_day"]
+        columns_to_drop = ["attribution", "copyright_license", "acquisition_day"]
         metadata_filt = metadata.drop(columns=columns_to_drop)
 
         # filter rows
@@ -23,7 +24,9 @@ class DatasetProcessorIsic(DatasetProcessor):
             "clinical: overview",
         ]
 
-        keep_flgs = metadata_filt["diagnosis_3"].notna() & metadata_filt['image_type'].astype(str).str.strip().isin(valid_types)
+        keep_flgs = metadata_filt["diagnosis_3"].notna() & metadata_filt["image_type"].astype(str).str.strip().isin(
+            valid_types
+        )
         metadata_filt = metadata_filt[keep_flgs]
 
         print("Filtered metadata shape:")
@@ -54,46 +57,47 @@ class DatasetProcessorIsic(DatasetProcessor):
 
         # construct formatted metadata
         form_met = pd.DataFrame()
-        form_met["image_id"] = metadata['isic_id']
+        form_met["image_id"] = metadata["isic_id"]
         form_met["dataset"] = [dataset] * form_met.shape[0]
-        form_met["label"] = metadata['diagnosis_3']
+        form_met["label"] = metadata["diagnosis_3"]
 
         # Include metadata in text descriptions
         form_met["text_desc"] = [None] * form_met.shape[0]
-        sex_list = metadata['sex'].tolist()
-        age_list = metadata['age_approx'].tolist()
-        anatom_general_list = metadata['anatom_site_general'].tolist()
-        anatom_special_list = metadata['anatom_site_special'].tolist()
+        sex_list = metadata["sex"].tolist()
+        age_list = metadata["age_approx"].tolist()
+        anatom_general_list = metadata["anatom_site_general"].tolist()
+        anatom_special_list = metadata["anatom_site_special"].tolist()
 
         for i in range(len(metadata)):
-            new_caption = ''
-            
-            if str(sex_list[i]) != 'nan':
-                gender_sentence = f' The sex is {sex_list[i]}.'
+            new_caption = ""
+
+            if str(sex_list[i]) != "nan":
+                gender_sentence = f" The sex is {sex_list[i]}."
                 new_caption += gender_sentence
-            
-            if str(age_list[i]) != 'nan':
-                age_sentence = f' The approximate age is {int(age_list[i])}.'
+
+            if str(age_list[i]) != "nan":
+                age_sentence = f" The approximate age is {int(age_list[i])}."
                 new_caption += age_sentence
-            
-            if str(anatom_general_list[i]) != 'nan':
-                location_sentence = f' The body location is {anatom_general_list[i]}.'
+
+            if str(anatom_general_list[i]) != "nan":
+                location_sentence = f" The body location is {anatom_general_list[i]}."
                 new_caption += location_sentence
-            elif str(anatom_special_list[i]) != 'nan':
-                location_sentence = f' The body location is {anatom_special_list[i]}.'
+            elif str(anatom_special_list[i]) != "nan":
+                location_sentence = f" The body location is {anatom_special_list[i]}."
                 new_caption += location_sentence
-            
-            form_met.loc[form_met.index[i], 'text_desc'] = new_caption.strip()
+
+            form_met.loc[form_met.index[i], "text_desc"] = new_caption.strip()
 
         # add original and final filenames
-        form_met = form_met.merge(img_id_name_map, how='left', left_on='image_id', right_index=True)
-        form_met["extension"] = form_met['orig_filename'].apply(lambda x: os.path.splitext(x)[1])
+        form_met = form_met.merge(img_id_name_map, how="left", left_on="image_id", right_index=True)
+        form_met["extension"] = form_met["orig_filename"].apply(lambda x: os.path.splitext(x)[1])
         form_met["filename"] = form_met.apply(lambda x: f"{x['dataset']}_{x['image_id']}{x['extension']}", axis=1)
 
         # order columns
         form_met = form_met[["image_id", "dataset", "filename", "orig_filename", "label", "text_desc"]]
 
         return form_met
+
 
 if __name__ == "__main__":
     dp = DatasetProcessorIsic()

@@ -27,12 +27,12 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
             // Get case ID from condition
             const condition = (diseases || []).find((d) => d.id === conditionId);
             const caseId = condition?.caseId || `case_${conditionId}`;
-            
+
             // Always try to load fresh timeline data from Python (source of truth)
             if (window.electronAPI?.loadCaseHistoryFromPython) {
               try {
                 const caseHistory = await window.electronAPI.loadCaseHistoryFromPython(caseId);
-                
+
                 // Convert dates object to array format for timeline display
                 // dates structure can be:
                 // - Simple date: "2025-11-21" (initial ML prediction entry)
@@ -51,7 +51,7 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
                       displayDate = dateKey;
                       sortTimestamp = new Date(dateKey).getTime();
                     }
-                    
+
                     return {
                       id: dateKey, // Use full key as unique ID
                       conditionId: conditionId,
@@ -63,7 +63,7 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
                       cv_analysis: entry.cv_analysis || {}
                     };
                   });
-                
+
                 // Convert file paths to data URLs for display in renderer
                 data = await Promise.all(
                   entries.map(async (entry) => {

@@ -61,15 +61,15 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
   const analyze = async () => {
     if (!conditionId) return setError('No condition selected');
     if (!file) return setError('No image selected');
-    
+
     setAnalyzing(true);
     setError(null);
-    
+
     try {
       // Find the case ID from the condition
       const condition = diseases.find(d => d.id === conditionId);
       const caseId = condition?.caseId || `case_${conditionId}`;
-      
+
       // Step 1: Save the image file to disk via IPC
       let imagePath;
       if (window.electronAPI?.saveUploadedImage) {
@@ -80,18 +80,18 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
       } else {
         throw new Error('Image upload is only available in Electron runtime.');
       }
-      
+
       // Step 2: Add timeline entry to case_history.json via Python
       // Use date + timestamp to ensure uniqueness if multiple uploads on same day
       const now = new Date();
       const dateKey = `${now.toISOString().split('T')[0]}_${Date.now()}`; // "2025-11-21_1763762693117"
-      
+
       if (window.electronAPI?.addTimelineEntry) {
         await window.electronAPI.addTimelineEntry(caseId, imagePath, note || '', dateKey);
       } else {
         throw new Error('Timeline entry save is only available in Electron runtime.');
       }
-      
+
       // Create entry object for callback
       const entry = {
         id: dateKey,

@@ -186,27 +186,27 @@ Page
         flexDirection: 'column',
         alignItems: 'center',
         gap: 2,
-        
+
         // Spacing
         p: 2,  // padding
         mb: 1.5,  // margin-bottom
-        
+
         // Colors
         bgcolor: '#f5f5f5',
         color: '#000',
-        
+
         // Borders & Shadows
         border: '1px solid #e0e0e0',
         borderRadius: 1,
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        
+
         // Interactive
         cursor: 'pointer',
         transition: 'all 0.2s',
-        
+
         // Responsive
         fontSize: { xs: '12px', sm: '14px', md: '16px' },
-        
+
         // Pseudo-classes
         '&:hover': {
             bgcolor: '#e3f2fd'

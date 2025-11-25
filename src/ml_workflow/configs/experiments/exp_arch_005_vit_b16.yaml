@@ -1,7 +1,7 @@
 # Model Training Configuration for Modal
 # ViT-B/16 Vision Model Experiment
 
-# Data source configuration  
+# Data source configuration
 data:
   use_local: True  # Use Modal Volume for fast local SSD access
   metadata_path: "/data/dataset_v1/metadata_all_harmonized.csv"  # From Modal Volume
@@ -13,11 +13,11 @@ data:
     - isic
     - derm1m
   derm1m_sources: # Only applicable if derm1m is being used under "datasets"
-    - IIYI 
+    - IIYI
     - edu
     - note
     - public
-    - pubmed 
+    - pubmed
     - reddit
     - twitter
     - youtube
@@ -26,10 +26,10 @@ data:
   # Data splits
   test_size: 0.1
   val_size: 0.1
-  
+
   # Image configuration
   img_size: [224, 224]  # [height, width]
-  
+
   # Random seed for reproducibility
   seed: 42
 
@@ -42,11 +42,11 @@ training:
   patience: 5
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
   n_warmup_epochs: 3  # Number of epochs to freeze backbone (0 = no freezing)
-  
+
   # Statistics and sampling
   compute_stats: False
   weighted_sampling: False
-  
+
   # Scheduler configuration
   scheduler:
     use_cosine_annealing: False  # Enable cosine annealing learning rate scheduler
@@ -84,27 +84,27 @@ multimodal_classifier:
   image_projection_hidden: [512]  # Hidden layers for vision projection
   projection_activation: "relu"  # Activation for projection layers
   projection_dropout: 0.3  # Dropout for projection layers
-  
-  # Text projection layers (empty list = just linear layer)  
+
+  # Text projection layers (empty list = just linear layer)
   text_projection_hidden: [512]  # Hidden layers for text projection
-  
+
   # Final classifier configuration
   final_hidden_sizes: [256, 128]  # Hidden layers after fusion
   final_activation: "relu"  # Activation for final classifier
   final_dropout: 0.3  # Dropout for final classifier
-  
+
   # Fusion strategy
   fusion_strategy: "concat_mlp"  # "weighted_sum" or "concat_mlp"
-  
+
   # Auxiliary losses (optional)
   use_auxiliary_loss: False  # Enable auxiliary losses on individual modalities
   auxiliary_loss_weight: 0.0  # Weight for auxiliary losses (0.0-1.0)
-  
+
   # Loss function configuration
   loss_fn: "cross_entropy"  # "cross_entropy" or "focal"
   label_smoothing: 0.1  # For cross_entropy loss
   use_class_weights_from_data: false  # Automatically inject class weights from dataloader
-  
+
   # Focal loss parameters (only used if loss_fn is "focal")
   # alpha: 1.0  # Weighting factor for rare class (or sample_weights will be used)
   # gamma: 2.0  # Focusing parameter
@@ -116,7 +116,7 @@ masking:
   # Complete masking: mask entire modality for the whole run
   # Options: null (no complete masking), "image" (mask all images), "text" (mask all text)
   mask_complete: null  # null, "image", or "text"
-  
+
   # Random masking during training (modality dropout)
   # Only applies if mask_complete is null
   random_mask:
@@ -141,7 +141,7 @@ optimizer:
     weight_decay: 0.001
     betas: [0.9, 0.999]
     eps: 0.00000001
-  
+
   multimodal_classifier:
     name: "adamw"
     learning_rate: 0.0005
@@ -161,4 +161,3 @@ checkpoint:
   save_frequency: 10  # Save checkpoint every N epochs (it saves the best model anyway)
   keep_last: 1  # Keep last N checkpoints
   load_from: null  # Path to checkpoint to load from (null for no loading)
-

@@ -128,7 +128,7 @@ frontend-react/python/
    - One entry with image thumbnail
    - Disease name and brief description
    - Dot on body map at selected position
-10. **User asks follow-up question in chat** → 
+10. **User asks follow-up question in chat** →
     - Message sent to ML client
     - LLM response appears after ~1.5 seconds
     - Conversation saved locally
@@ -148,7 +148,7 @@ frontend-react/python/
   },
   image: "data:image/jpeg;base64,...", // User's uploaded image
   createdAt: "2025-11-16T...",
-  
+
   // ML Results
   caseId: "case_123456789",         // Links to backend storage
   predictions: {                     // Disease confidence scores

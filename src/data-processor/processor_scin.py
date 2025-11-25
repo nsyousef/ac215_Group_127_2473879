@@ -4,32 +4,34 @@ import os
 from google.api_core.exceptions import NotFound
 import ast
 
+
 def filter_highest_confidence_labels(row):
     """
     Keep only labels with the highest confidence score.
     Returns tuple of (comma-separated string of labels, max confidence as int).
     """
-    labels = row['dermatologist_skin_condition_on_label_name']
-    confidences = row['dermatologist_skin_condition_confidence']
-    
+    labels = row["dermatologist_skin_condition_on_label_name"]
+    confidences = row["dermatologist_skin_condition_confidence"]
+
     # Parse if they're strings
     if isinstance(labels, str):
         labels = ast.literal_eval(labels)
     if isinstance(confidences, str):
         confidences = ast.literal_eval(confidences)
-    
+
     # Handle empty cases
     if not labels or not confidences:
-        return '', 0
-    
+        return "", 0
+
     # Get the maximum confidence
     max_confidence = max(confidences)
-    
+
     # Keep only labels with max confidence
     highest_labels = [label for label, conf in zip(labels, confidences) if conf == max_confidence]
-    
+
     # Return as tuple: (labels string, max confidence as int)
-    return ', '.join(highest_labels), int(max_confidence)
+    return ", ".join(highest_labels), int(max_confidence)
+
 
 class DatasetProcessorScin(DatasetProcessor):
     def filter_metadata(self, metadata: pd.DataFrame, text_metadata: pd.DataFrame, raw_image_path: str) -> pd.DataFrame:
@@ -42,11 +44,13 @@ class DatasetProcessorScin(DatasetProcessor):
         @param raw_image_path: The path to the folder containing the raw images.
         @returns: A pandas DataFrame with the metadata filtered to only include rows for images you want to do machine learning on.
         """
-        metadata = metadata[~(metadata['dermatologist_skin_condition_on_label_name'] == '[]')]
-        metadata.set_index('case_id', inplace=True)
-        metadata[['labels', 'max_confidence']] = metadata.apply(filter_highest_confidence_labels, axis=1, result_type='expand')
+        metadata = metadata[~(metadata["dermatologist_skin_condition_on_label_name"] == "[]")]
+        metadata.set_index("case_id", inplace=True)
+        metadata[["labels", "max_confidence"]] = metadata.apply(
+            filter_highest_confidence_labels, axis=1, result_type="expand"
+        )
 
-        text_metadata.set_index('case_id', inplace=True)
+        text_metadata.set_index("case_id", inplace=True)
         text_metadata = text_metadata.loc[metadata.index]
 
         combined_df = metadata.merge(text_metadata, left_index=True, right_index=True)
@@ -55,41 +59,41 @@ class DatasetProcessorScin(DatasetProcessor):
 
         for idx, row in combined_df.iterrows():
             # Process each image path column
-            for img_col in ['image_1_path', 'image_2_path', 'image_3_path']:
-                if img_col in row and pd.notna(row[img_col]) and row[img_col] != '':
+            for img_col in ["image_1_path", "image_2_path", "image_3_path"]:
+                if img_col in row and pd.notna(row[img_col]) and row[img_col] != "":
                     # Extract image_id: part between 'images/' and '.png'
                     path = row[img_col]
-                    if 'images/' in path:
-                        image_id = path.split('images/')[-1].replace('.png', '')
+                    if "images/" in path:
+                        image_id = path.split("images/")[-1].replace(".png", "")
 
-                        if image_id == '-2243186711511406658': #Image for this is missing
+                        if image_id == "-2243186711511406658":  # Image for this is missing
                             continue
-                        
+
                         # Copy all columns from original row
                         new_row = row.to_dict()
-                        
+
                         # Add/update image-specific columns
-                        new_row['image_id'] = image_id
-                        new_row['dataset'] = 'SCIN'
-                        new_row['label'] = row['labels']
-                        new_row['filename'] = 'SCIN' + '_' + image_id + '.png'
-                        new_row['orig_filename'] = image_id + '.png'
-                        new_row['confidence'] = row['max_confidence']
-                        
+                        new_row["image_id"] = image_id
+                        new_row["dataset"] = "SCIN"
+                        new_row["label"] = row["labels"]
+                        new_row["filename"] = "SCIN" + "_" + image_id + ".png"
+                        new_row["orig_filename"] = image_id + ".png"
+                        new_row["confidence"] = row["max_confidence"]
+
                         rows.append(new_row)
 
         # Create new dataframe
         combined_image_df_full = pd.DataFrame(rows)
-        combined_image_df_full.set_index('image_id', inplace=True)
+        combined_image_df_full.set_index("image_id", inplace=True)
         old_len = len(combined_image_df_full)
-        combined_image_df_full = combined_image_df_full[combined_image_df_full['confidence'] > 2]
+        combined_image_df_full = combined_image_df_full[combined_image_df_full["confidence"] > 2]
         new_len = len(combined_image_df_full)
         print(f"Filtered out {old_len - new_len} images due to low confidence")
-        
-        combined_image_df = combined_image_df_full[['dataset', 'label', 'filename', 'orig_filename', 'confidence']]
+
+        combined_image_df = combined_image_df_full[["dataset", "label", "filename", "orig_filename", "confidence"]]
 
         return combined_image_df_full, combined_image_df
-    
+
     def format_metadata_csv(self, metadata: pd.DataFrame, dataset: str, raw_image_path: str) -> pd.DataFrame:
         """
         Formats a filtered metadata file into a table with the following columns:
@@ -111,7 +115,7 @@ class DatasetProcessorScin(DatasetProcessor):
 
     def update_data(self, metadata: pd.DataFrame, text_metadata: pd.DataFrame, metadata_name: str):
         """
-        This function updates the metadata in the `final` folder in the bucket by adding captions to corresponding Fitzpatrick17k and DDI images 
+        This function updates the metadata in the `final` folder in the bucket by adding captions to corresponding Fitzpatrick17k and DDI images
         and it writes the SkinCAP metadata to the `final` folder.
 
         @param metadata: A dataframe containing the final metadata to add metadata_all.csv.
@@ -137,11 +141,12 @@ class DatasetProcessorScin(DatasetProcessor):
         # Replace old file in Google Cloud with new one (or create new)
         self._write_table_to_gcs(new_meta, final_metadata_path)
 
+
 if __name__ == "__main__":
-    SKIN_BASE_PATH = 'raw/scin/dx-scin-public-data/dataset'
-    SKIN_META_PATH = os.path.join(SKIN_BASE_PATH, 'scin_labels.csv')
-    SCIN_TEXT_META_PATH = os.path.join(SKIN_BASE_PATH, 'scin_cases.csv')
-    SCIN_IMG_PATH = os.path.join(SKIN_BASE_PATH, 'images')
+    SKIN_BASE_PATH = "raw/scin/dx-scin-public-data/dataset"
+    SKIN_META_PATH = os.path.join(SKIN_BASE_PATH, "scin_labels.csv")
+    SCIN_TEXT_META_PATH = os.path.join(SKIN_BASE_PATH, "scin_cases.csv")
+    SCIN_IMG_PATH = os.path.join(SKIN_BASE_PATH, "images")
     data_processor = DatasetProcessorScin()
     labels_metadata = data_processor.load_metadata(SKIN_META_PATH)
     text_metadata = data_processor.load_metadata(SCIN_TEXT_META_PATH)

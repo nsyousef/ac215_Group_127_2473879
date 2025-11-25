@@ -136,13 +136,13 @@ export default function Home() {
     const handleAddSaved = async (newDisease) => {
         // Close modal
         setShowAddFlow(false);
-        
+
         // newDisease already contains all enriched fields from Python
         // (description, bodyPart, mapPosition, llmResponse, timelineData, conversationHistory)
         // AND it's already been added to the diseases array by AddDiseaseFlow's addDisease() call
         // So just set it as selected and navigate!
         setSelectedCondition(newDisease);
-        
+
         // Navigate to results view
         router.push('/?view=results');
     };
@@ -155,7 +155,7 @@ export default function Home() {
                     // newDisease already contains all enriched fields from Python
                     // AND it's already in the diseases array (added by OnboardingFlow's addDisease call)
                     setSelectedCondition(newDisease);
-                    
+
                     // Navigate to results view
                     router.push('/?view=results');
                 }}

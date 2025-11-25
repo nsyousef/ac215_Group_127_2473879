@@ -184,19 +184,19 @@ setInterval(() => {
 ipcMain.handle('ml:getInitialPrediction', async (event, { caseId, imagePath, textDescription, userTimestamp }) => {
   if (!caseId) throw new Error('caseId required');
   if (!imagePath) throw new Error('imagePath required');
-  return await pyRequest(caseId, 'predict', { 
-    image_path: imagePath, 
+  return await pyRequest(caseId, 'predict', {
+    image_path: imagePath,
     text_description: textDescription,
-    user_timestamp: userTimestamp 
+    user_timestamp: userTimestamp
   });
 });
 
 ipcMain.handle('ml:chatMessage', async (event, { caseId, question, userTimestamp }) => {
   if (!caseId) throw new Error('caseId required');
   if (!question) throw new Error('question required');
-  return await pyRequest(caseId, 'chat', { 
+  return await pyRequest(caseId, 'chat', {
     question,
-    user_timestamp: userTimestamp 
+    user_timestamp: userTimestamp
   });
 });
 
@@ -204,9 +204,9 @@ ipcMain.handle('ml:saveBodyLocation', async (event, { caseId, bodyLocation }) =>
   if (!caseId) throw new Error('caseId required');
   if (!bodyLocation) throw new Error('bodyLocation required');
   // Static method but needs real case_id - pass case_id in data so pyRequest doesn't override
-  return await pyRequest('static', 'save_body_location', { 
-    case_id: caseId, 
-    body_location: bodyLocation 
+  return await pyRequest('static', 'save_body_location', {
+    case_id: caseId,
+    body_location: bodyLocation
   });
 });
 
@@ -254,11 +254,11 @@ ipcMain.handle('data:addTimelineEntry', async (event, caseId, imagePath, note, d
   if (!caseId) throw new Error('caseId required');
   if (!imagePath) throw new Error('imagePath required');
   if (!date) throw new Error('date required');
-  return await pyRequest('static', 'add_timeline_entry', { 
-    case_id: caseId, 
-    image_path: imagePath, 
-    note: note || '', 
-    date: date 
+  return await pyRequest('static', 'add_timeline_entry', {
+    case_id: caseId,
+    image_path: imagePath,
+    note: note || '',
+    date: date
   });
 });
 
@@ -267,10 +267,10 @@ ipcMain.handle('save-uploaded-image', async (event, caseId, filename, buffer) =>
   try {
     const tempDir = path.join(app.getPath('temp'), 'pibu_uploads');
     await fs.mkdir(tempDir, { recursive: true });
-    
+
     const imagePath = path.join(tempDir, `${caseId}_${filename}`);
     await fs.writeFile(imagePath, Buffer.from(buffer));
-    
+
     return imagePath;
   } catch (e) {
     console.error('Error saving uploaded image:', e);

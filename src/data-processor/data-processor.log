@@ -1,5 +1,5 @@
 Building data-processor Docker container...
-Sending build context to Docker daemon  70.17MB
+Sending build context to Docker daemon  70.17MB
 Step 1/12 : FROM python:3.11-slim-bookworm
  ---> 701ef80839e6
 Step 2/12 : ENV UV_LINK_MODE=copy
@@ -99,7 +99,7 @@ Dest dir:
 final/imgs/
 Copying files:   0%|          | 0/656 [00:00<?, ?file/s]Copying files:  10%|▉         | 65/656 [00:00<00:00, 628.22file/s]Copying files:  20%|█▉        | 128/656 [00:00<00:01, 444.43file/s]Copying files:  27%|██▋       | 176/656 [00:00<00:01, 399.48file/s]Copying files:  33%|███▎      | 218/656 [00:00<00:01, 393.98file/s]Copying files:  39%|███▉      | 259/656 [00:00<00:01, 390.09file/s]Copying files:  46%|████▌     | 299/656 [00:00<00:00, 373.62file/s]Copying files:  51%|█████▏    | 337/656 [00:00<00:00, 370.71file/s]Copying files:  57%|█████▋    | 375/656 [00:00<00:00, 369.21file/s]Copying files:  63%|██████▎   | 415/656 [00:01<00:00, 374.28file/s]Copying files:  70%|██████▉   | 456/656 [00:01<00:00, 379.52file/s]Copying files:  76%|███████▌  | 496/656 [00:01<00:00, 382.98file/s]Copying files:  82%|████████▏ | 535/656 [00:01<00:00, 370.24file/s]Copying files:  88%|████████▊ | 577/656 [00:01<00:00, 383.29file/s]Copying files:  94%|█████████▍| 616/656 [00:01<00:00, 382.10file/s]Copying files: 100%|██████████| 656/656 [00:01<00:00, 389.28file/s]
 Copying dataset specific metadata
-/app/processor_fitz.py:48: SettingWithCopyWarning: 
+/app/processor_fitz.py:48: SettingWithCopyWarning:
 A value is trying to be set on a copy of a slice from a DataFrame.
 Try using .loc[row_indexer,col_indexer] = value instead
 

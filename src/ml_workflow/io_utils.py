@@ -1,10 +1,12 @@
 from pathlib import Path as _Path
 import warnings
+
 try:
     from .utils import logger
 except ImportError:
     from utils import logger
 import pandas as pd
+
 
 def file_exists(path: str) -> bool:
     """
@@ -48,7 +50,8 @@ def file_exists(path: str) -> bool:
             return _Path(path).exists()
     else:
         return False
-    
+
+
 def _parse_gs_path(path: str):
     """
     Parse a GCS path of the form gs://bucket/name and return (bucket, object_path).
@@ -64,6 +67,7 @@ def _parse_gs_path(path: str):
     object_path = parts[1] if len(parts) > 1 else ""
     return bucket_name, object_path
 
+
 def _get_gcs_client():
     """
     Lazy import and return a google.cloud.storage.Client instance.
@@ -75,6 +79,7 @@ def _get_gcs_client():
         warnings.warn("WARNING: Google cloud could not be imported. Please check that it is installed.")
         raise
     return storage.Client()
+
 
 def save_dataframe_to_csv(path: str, df, index: bool = False, **to_csv_kwargs):
     """
@@ -101,6 +106,7 @@ def save_dataframe_to_csv(path: str, df, index: bool = False, **to_csv_kwargs):
         if p.parent:
             p.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(p, index=index, **to_csv_kwargs)
+
 
 def save_dataframe_to_parquet(path: str, df, index: bool = False, **to_parquet_kwargs):
     """
@@ -175,8 +181,10 @@ def load_csv(path: str, **read_csv_kwargs):
             return pd.read_csv(io.BytesIO(data), **read_csv_kwargs)
     else:
         import pandas as pd
+
         return pd.read_csv(path, **read_csv_kwargs)
-    
+
+
 def load_parquet(path: str, **read_parquet_kwargs):
     """
     Load a Parquet file into a pandas DataFrame from a local path or a Google Cloud Storage path (gs://...).
@@ -213,10 +221,11 @@ def load_parquet(path: str, **read_parquet_kwargs):
 
         # Use engine='pyarrow' for better performance if available
         try:
-            return pd.read_parquet(io.BytesIO(data), engine='pyarrow', **read_parquet_kwargs)
+            return pd.read_parquet(io.BytesIO(data), engine="pyarrow", **read_parquet_kwargs)
         except (ImportError, ValueError):
             # Fall back to default engine if pyarrow not available
             return pd.read_parquet(io.BytesIO(data), **read_parquet_kwargs)
     else:
         import pandas as pd
+
         return pd.read_parquet(path, **read_parquet_kwargs)

@@ -7,20 +7,20 @@ import pandas as pd
 def load_table_from_gcs(storage_client, bucket_name, blob_path: str, **kwargs):
     """
     Load a table/DataFrame from Google Cloud Storage.
-    
+
     Supports multiple file formats including CSV, Parquet, and Excel files.
     The function automatically detects the file format based on the file extension
     and uses the appropriate pandas read function.
-    
+
     Args:
         storage_client: Google Cloud Storage client instance
         bucket_name (str): Name of the GCS bucket
         blob_path (str): Path to the file within the bucket
         **kwargs: Additional keyword arguments passed to the pandas read function
-        
+
     Returns:
         pd.DataFrame: The loaded data as a pandas DataFrame
-        
+
     Raises:
         ValueError: If the file extension is not supported
     """
@@ -28,11 +28,11 @@ def load_table_from_gcs(storage_client, bucket_name, blob_path: str, **kwargs):
     blob = bucket.blob(blob_path)
     file_data = blob.download_as_bytes()
     _, ext = os.path.splitext(blob_path.lower())
-    if ext in ['.csv', '.txt']:
+    if ext in [".csv", ".txt"]:
         read_func = pd.read_csv
-    elif ext in ['.parquet']:
+    elif ext in [".parquet"]:
         read_func = pd.read_parquet
-    elif ext in ['.xls', '.xlsx']:
+    elif ext in [".xls", ".xlsx"]:
         read_func = pd.read_excel
     else:
         raise ValueError(f"Unsupported file extension: {ext}")
@@ -50,7 +50,7 @@ def write_table_to_gcs(storage_client, bucket_name, df: pd.DataFrame, blob_path:
         df (pd.DataFrame): The Pandas DataFrame to write.
         blob_path (str): Path to the file within the bucket.
         **kwargs: Keyword arguments forwarded to the pandas to_csv function. E.g. 'sep', 'header', etc.
-        
+
     Returns:
         None
     """
@@ -65,7 +65,7 @@ def write_table_to_gcs(storage_client, bucket_name, df: pd.DataFrame, blob_path:
     blob = bucket.blob(blob_path)
 
     # Upload to GCS
-    blob.upload_from_file(csv_buffer, content_type='text/csv')
+    blob.upload_from_file(csv_buffer, content_type="text/csv")
     print(f"Successfully wrote DataFrame to gs://{bucket_name}/{blob_path}")
 
 
@@ -76,603 +76,511 @@ def harmonize_labels(metadata_all):
 
     Args:
         metadata_all (pd.DataFrame): DataFrame containing a 'label' column with medical condition labels
-        
+
     Returns:
         pd.DataFrame: Copy of the input DataFrame with harmonized labels
     """
     metadata_all_harmonized = metadata_all.copy()
-    
+
     # Define label mappings for harmonization
     label_mappings = {
         # MALIGNANT LESIONS - Keep these separate (critical for patient safety)
-        
         # Melanoma variations (including capitalized versions)
-        'melanoma-in-situ': 'melanoma',
-        'melanoma-acral-lentiginous': 'melanoma',
-        'nodular-melanoma-(nm)': 'melanoma',
-        'Melanoma Invasive': 'melanoma',
-        'Melanoma in situ': 'melanoma',
-        'Melanoma, NOS': 'melanoma',
-        'lentigo maligna': 'melanoma-in-situ',  # Pre-melanoma
-        'malignant melanoma': 'melanoma',
-        'superficial spreading melanoma ssm': 'melanoma',
-        'Melanoma metastasis': 'melanoma-metastatic',
-        
+        "melanoma-in-situ": "melanoma",
+        "melanoma-acral-lentiginous": "melanoma",
+        "nodular-melanoma-(nm)": "melanoma",
+        "Melanoma Invasive": "melanoma",
+        "Melanoma in situ": "melanoma",
+        "Melanoma, NOS": "melanoma",
+        "lentigo maligna": "melanoma-in-situ",  # Pre-melanoma
+        "malignant melanoma": "melanoma",
+        "superficial spreading melanoma ssm": "melanoma",
+        "Melanoma metastasis": "melanoma-metastatic",
         # Basal cell carcinoma variations
-        'basal-cell-carcinoma': 'basal-cell-carcinoma',
-        'basal-cell-carcinoma-superficial': 'basal-cell-carcinoma',
-        'basal-cell-carcinoma-nodular': 'basal-cell-carcinoma',
-        'basal cell carcinoma': 'basal-cell-carcinoma',
-        'Basal cell carcinoma': 'basal-cell-carcinoma',
-        'basal cell carcinoma morpheiform': 'basal-cell-carcinoma',
-        'solid cystic basal cell carcinoma': 'basal-cell-carcinoma',
-        
+        "basal-cell-carcinoma": "basal-cell-carcinoma",
+        "basal-cell-carcinoma-superficial": "basal-cell-carcinoma",
+        "basal-cell-carcinoma-nodular": "basal-cell-carcinoma",
+        "basal cell carcinoma": "basal-cell-carcinoma",
+        "Basal cell carcinoma": "basal-cell-carcinoma",
+        "basal cell carcinoma morpheiform": "basal-cell-carcinoma",
+        "solid cystic basal cell carcinoma": "basal-cell-carcinoma",
         # Squamous cell carcinoma variations
-        'squamous-cell-carcinoma': 'squamous-cell-carcinoma',
-        'squamous-cell-carcinoma-in-situ': 'squamous-cell-carcinoma',
-        'squamous-cell-carcinoma-keratoacanthoma': 'squamous-cell-carcinoma',
-        'squamous cell carcinoma': 'squamous-cell-carcinoma',
-        'Squamous cell carcinoma, NOS': 'squamous-cell-carcinoma',
-        'Squamous cell carcinoma in situ': 'squamous-cell-carcinoma',
-        'Squamous cell carcinoma, Invasive': 'squamous-cell-carcinoma',
-        'Keratoacanthoma': 'squamous-cell-carcinoma',
-        'keratoacanthoma': 'squamous-cell-carcinoma',
-        
+        "squamous-cell-carcinoma": "squamous-cell-carcinoma",
+        "squamous-cell-carcinoma-in-situ": "squamous-cell-carcinoma",
+        "squamous-cell-carcinoma-keratoacanthoma": "squamous-cell-carcinoma",
+        "squamous cell carcinoma": "squamous-cell-carcinoma",
+        "Squamous cell carcinoma, NOS": "squamous-cell-carcinoma",
+        "Squamous cell carcinoma in situ": "squamous-cell-carcinoma",
+        "Squamous cell carcinoma, Invasive": "squamous-cell-carcinoma",
+        "Keratoacanthoma": "squamous-cell-carcinoma",
+        "keratoacanthoma": "squamous-cell-carcinoma",
         # Other malignancies - consolidate by tissue type
-        'sebaceous-carcinoma': 'sebaceous-carcinoma',  # Keep specific - user needs to know
-        'metastatic-carcinoma': 'metastatic-carcinoma',
-        'metastatic carcinoma': 'metastatic-carcinoma',
-        'merkel cell carcinoma': 'merkel-cell-carcinoma',  # Keep specific - aggressive cancer
-        
+        "sebaceous-carcinoma": "sebaceous-carcinoma",  # Keep specific - user needs to know
+        "metastatic-carcinoma": "metastatic-carcinoma",
+        "metastatic carcinoma": "metastatic-carcinoma",
+        "merkel cell carcinoma": "merkel-cell-carcinoma",  # Keep specific - aggressive cancer
         # Hematologic malignancies - consolidate
-        'mycosis-fungoides': 'cutaneous-lymphoma',
-        'mycosis fungoides': 'cutaneous-lymphoma',
-        'subcutaneous-t-cell-lymphoma': 'cutaneous-lymphoma',
-        'leukemia-cutis': 'cutaneous-lymphoma',
-        'blastic-plasmacytoid-dendritic-cell-neoplasm': 'cutaneous-lymphoma',
-        'cutaneous b-cell lymphoma': 'cutaneous-lymphoma',
-        
+        "mycosis-fungoides": "cutaneous-lymphoma",
+        "mycosis fungoides": "cutaneous-lymphoma",
+        "subcutaneous-t-cell-lymphoma": "cutaneous-lymphoma",
+        "leukemia-cutis": "cutaneous-lymphoma",
+        "blastic-plasmacytoid-dendritic-cell-neoplasm": "cutaneous-lymphoma",
+        "cutaneous b-cell lymphoma": "cutaneous-lymphoma",
         # Kaposi sarcoma
-        'kaposi-sarcoma': 'kaposi-sarcoma',
-        'kaposi sarcoma': 'kaposi-sarcoma',
-        "kaposi's sarcoma of skin": 'kaposi-sarcoma',
-        
+        "kaposi-sarcoma": "kaposi-sarcoma",
+        "kaposi sarcoma": "kaposi-sarcoma",
+        "kaposi's sarcoma of skin": "kaposi-sarcoma",
         # PRE-MALIGNANT LESIONS - Keep separate (important for monitoring)
-        
         # Actinic keratosis variations
-        'actinic-keratosis': 'actinic-keratosis',
-        'actinic keratosis': 'actinic-keratosis',
-        'Solar or actinic keratosis': 'actinic-keratosis',
-        
+        "actinic-keratosis": "actinic-keratosis",
+        "actinic keratosis": "actinic-keratosis",
+        "Solar or actinic keratosis": "actinic-keratosis",
         # Atypical/dysplastic nevi (keep separate due to malignant potential)
-        'dysplastic-nevus': 'dysplastic-nevus',
-        'pigmented-spindle-cell-nevus-of-reed': 'dysplastic-nevus',
-        'atypical-spindle-cell-nevus-of-reed': 'dysplastic-nevus',
-        'Atypical melanocytic neoplasm': 'dysplastic-nevus',
-        'Atypical intraepithelial melanocytic proliferation': 'dysplastic-nevus',
-        
+        "dysplastic-nevus": "dysplastic-nevus",
+        "pigmented-spindle-cell-nevus-of-reed": "dysplastic-nevus",
+        "atypical-spindle-cell-nevus-of-reed": "dysplastic-nevus",
+        "Atypical melanocytic neoplasm": "dysplastic-nevus",
+        "Atypical intraepithelial melanocytic proliferation": "dysplastic-nevus",
         # BENIGN NEOPLASMS - Safe to consolidate by tissue type
-        
         # Seborrheic keratosis variations
-        'seborrheic-keratosis': 'seborrheic-keratosis',
-        'seborrheic-keratosis-irritated': 'seborrheic-keratosis',
-        'Seborrheic keratosis': 'seborrheic-keratosis',
-        'seborrheic keratosis': 'seborrheic-keratosis',
-        'seborrheic keratoses': 'seborrheic-keratosis',
-        'irritated seborrheic keratosis (from "sk/isk")': 'seborrheic-keratosis',
-        'Pigmented benign keratosis': 'seborrheic-keratosis',
-        
+        "seborrheic-keratosis": "seborrheic-keratosis",
+        "seborrheic-keratosis-irritated": "seborrheic-keratosis",
+        "Seborrheic keratosis": "seborrheic-keratosis",
+        "seborrheic keratosis": "seborrheic-keratosis",
+        "seborrheic keratoses": "seborrheic-keratosis",
+        'irritated seborrheic keratosis (from "sk/isk")': "seborrheic-keratosis",
+        "Pigmented benign keratosis": "seborrheic-keratosis",
         # Other benign keratoses - consolidate
-        'benign-keratosis': 'benign-keratosis',
-        'inverted-follicular-keratosis': 'benign-keratosis',
-        'lichenoid-keratosis': 'benign-keratosis',
-        'Lichen planus like keratosis': 'benign-keratosis',
-        'focal-acral-hyperkeratosis': 'benign-keratosis',
-        'keratosis pilaris': 'benign-keratosis',
-        
+        "benign-keratosis": "benign-keratosis",
+        "inverted-follicular-keratosis": "benign-keratosis",
+        "lichenoid-keratosis": "benign-keratosis",
+        "Lichen planus like keratosis": "benign-keratosis",
+        "focal-acral-hyperkeratosis": "benign-keratosis",
+        "keratosis pilaris": "benign-keratosis",
         # Porokeratosis variants
-        'porokeratosis': 'porokeratosis',
-        'Porokeratosis': 'porokeratosis',
-        'porokeratosis of mibelli': 'porokeratosis',
-        'porokeratosis actinic': 'porokeratosis',
-        'disseminated actinic porokeratosis': 'porokeratosis',
-        
+        "porokeratosis": "porokeratosis",
+        "Porokeratosis": "porokeratosis",
+        "porokeratosis of mibelli": "porokeratosis",
+        "porokeratosis actinic": "porokeratosis",
+        "disseminated actinic porokeratosis": "porokeratosis",
         # Common benign nevi - consolidate (all have similar management)
-        'melanocytic-nevi': 'benign-nevus',
-        'blue-nevus': 'benign-nevus',
-        'congenital nevus': 'benign-nevus',
-        'epidermal-nevus': 'benign-nevus',
-        'epidermal nevus': 'benign-nevus',
-        'Nevus': 'benign-nevus',
-        'naevus comedonicus': 'benign-nevus',
-        'nevus-lipomatosus-superficialis': 'benign-nevus',
-        'becker nevus': 'benign-nevus',
-        'nevocytic nevus': 'benign-nevus',
-        'halo nevus': 'benign-nevus',
-        'nevus sebaceous of jadassohn': 'benign-nevus',
-        
+        "melanocytic-nevi": "benign-nevus",
+        "blue-nevus": "benign-nevus",
+        "congenital nevus": "benign-nevus",
+        "epidermal-nevus": "benign-nevus",
+        "epidermal nevus": "benign-nevus",
+        "Nevus": "benign-nevus",
+        "naevus comedonicus": "benign-nevus",
+        "nevus-lipomatosus-superficialis": "benign-nevus",
+        "becker nevus": "benign-nevus",
+        "nevocytic nevus": "benign-nevus",
+        "halo nevus": "benign-nevus",
+        "nevus sebaceous of jadassohn": "benign-nevus",
         # Fibrous lesions - consolidate (similar management)
-        'dermatofibroma': 'dermatofibroma',  # Most common - keep specific
-        'Dermatofibroma': 'dermatofibroma',
-        'acquired-digital-fibrokeratoma': 'dermatofibroma',  # Can group with dermatofibroma
-        'fibrous-papule': 'dermatofibroma',
-        'digital fibroma': 'dermatofibroma', 
-        'fibroma molle': 'dermatofibroma',
-        'angiofibroma': 'dermatofibroma',
-        'Angiofibroma': 'dermatofibroma',
-        
+        "dermatofibroma": "dermatofibroma",  # Most common - keep specific
+        "Dermatofibroma": "dermatofibroma",
+        "acquired-digital-fibrokeratoma": "dermatofibroma",  # Can group with dermatofibroma
+        "fibrous-papule": "dermatofibroma",
+        "digital fibroma": "dermatofibroma",
+        "fibroma molle": "dermatofibroma",
+        "angiofibroma": "dermatofibroma",
+        "Angiofibroma": "dermatofibroma",
         # Neural tumors - consolidate
-        'neurofibroma': 'neurofibroma',  # Common, users recognize this
-        'neuroma': 'neurofibroma',  # Can group together
-        'cellular-neurothekeoma': 'neurofibroma',
-        'rheumatoid nodule': 'neurofibroma',  # Actually not neural, but rare
-        
+        "neurofibroma": "neurofibroma",  # Common, users recognize this
+        "neuroma": "neurofibroma",  # Can group together
+        "cellular-neurothekeoma": "neurofibroma",
+        "rheumatoid nodule": "neurofibroma",  # Actually not neural, but rare
         # Adnexal tumors - consolidate (all hair/sweat gland derived)
-        'trichilemmoma': 'hair-follicle-tumor',  # More user-friendly
-        'trichofolliculoma': 'hair-follicle-tumor',
-        'syringocystadenoma-papilliferum': 'sweat-gland-tumor',
-        'eccrine-poroma': 'sweat-gland-tumor',
-        'chondroid-syringoma': 'sweat-gland-tumor',
-        'Hidradenoma': 'sweat-gland-tumor',
-        'Trichoblastoma': 'hair-follicle-tumor',
-        'syringoma': 'sweat-gland-tumor',
-        'pilomatricoma': 'hair-follicle-tumor',
-        'poroma': 'sweat-gland-tumor',
-
-        
+        "trichilemmoma": "hair-follicle-tumor",  # More user-friendly
+        "trichofolliculoma": "hair-follicle-tumor",
+        "syringocystadenoma-papilliferum": "sweat-gland-tumor",
+        "eccrine-poroma": "sweat-gland-tumor",
+        "chondroid-syringoma": "sweat-gland-tumor",
+        "Hidradenoma": "sweat-gland-tumor",
+        "Trichoblastoma": "hair-follicle-tumor",
+        "syringoma": "sweat-gland-tumor",
+        "pilomatricoma": "hair-follicle-tumor",
+        "poroma": "sweat-gland-tumor",
         # Vascular lesions - consolidate benign vascular tumors
-        'arteriovenous-hemangioma': 'vascular-tumor',
-        'Hemangioma': 'vascular-tumor',
-        'angioma': 'vascular-tumor',
-        'glomangioma': 'vascular-tumor',
-        'angioleiomyoma': 'vascular-tumor',
-        'lymphangioma': 'vascular-tumor',
-        'port wine stain': 'vascular-tumor',
-        'Angiokeratoma': 'vascular-tumor',
-        'angiokeratoma': 'vascular-tumor',
-        'venous lake': 'vascular-tumor',
-        'telangiectases': 'vascular-tumor',
-        'spider veins': 'vascular-tumor',
-        'telangiectasia macularis eruptiva perstans': 'vascular-tumor',
-        'campbell de morgan spots': 'vascular-tumor',
-        
+        "arteriovenous-hemangioma": "vascular-tumor",
+        "Hemangioma": "vascular-tumor",
+        "angioma": "vascular-tumor",
+        "glomangioma": "vascular-tumor",
+        "angioleiomyoma": "vascular-tumor",
+        "lymphangioma": "vascular-tumor",
+        "port wine stain": "vascular-tumor",
+        "Angiokeratoma": "vascular-tumor",
+        "angiokeratoma": "vascular-tumor",
+        "venous lake": "vascular-tumor",
+        "telangiectases": "vascular-tumor",
+        "spider veins": "vascular-tumor",
+        "telangiectasia macularis eruptiva perstans": "vascular-tumor",
+        "campbell de morgan spots": "vascular-tumor",
         # Cysts - consolidate by type
-        'epidermal-cyst': 'epidermal-cyst',
-        'epidermoid cyst': 'epidermal-cyst',
-        'Infundibular or epidermal cyst': 'epidermal-cyst',
-        'pilar cyst': 'pilar-cyst',
-        'Trichilemmal or isthmic-catagen or pilar cyst': 'pilar-cyst',
-        'mucous cyst': 'mucous-cyst',
-        'mucocele': 'mucous-cyst',
-        'myxoid cyst': 'mucous-cyst',
-        'steatocystoma multiplex': 'epidermal-cyst',
-        
+        "epidermal-cyst": "epidermal-cyst",
+        "epidermoid cyst": "epidermal-cyst",
+        "Infundibular or epidermal cyst": "epidermal-cyst",
+        "pilar cyst": "pilar-cyst",
+        "Trichilemmal or isthmic-catagen or pilar cyst": "pilar-cyst",
+        "mucous cyst": "mucous-cyst",
+        "mucocele": "mucous-cyst",
+        "myxoid cyst": "mucous-cyst",
+        "steatocystoma multiplex": "epidermal-cyst",
         # Skin tags and similar lesions
-        'acrochordon': 'skin-tag',
-        'Fibroepithelial polyp': 'skin-tag',
-        'skin tag': 'skin-tag',
-        
+        "acrochordon": "skin-tag",
+        "Fibroepithelial polyp": "skin-tag",
+        "skin tag": "skin-tag",
         # Lipomatous lesions
-        'lipoma': 'lipoma',
-        
+        "lipoma": "lipoma",
         # Granulomas - consolidate by type
-        'pyogenic-granuloma': 'pyogenic-granuloma',
-        'pyogenic granuloma': 'pyogenic-granuloma',
-        'granuloma pyogenic': 'pyogenic-granuloma',
-        'Pyogenic granuloma': 'pyogenic-granuloma',
-        'granulation tissue': 'pyogenic-granuloma',
-        
-        'foreign-body-granuloma': 'granuloma-annulare',  # Group common ones
-        'granuloma annulare': 'granuloma-annulare',  # Keep most common one
-        'granuloma faciale': 'granuloma-annulare',
-        'actinic granuloma': 'granuloma-annulare',
-        'majocchi granuloma': 'fungal-infection',  # Actually fungal-related
-        
-        'xanthogranuloma': 'xanthogranuloma',
-        'juvenile xanthogranuloma': 'xanthogranuloma',
-        'Juvenile xanthogranuloma': 'xanthogranuloma',
-        
+        "pyogenic-granuloma": "pyogenic-granuloma",
+        "pyogenic granuloma": "pyogenic-granuloma",
+        "granuloma pyogenic": "pyogenic-granuloma",
+        "Pyogenic granuloma": "pyogenic-granuloma",
+        "granulation tissue": "pyogenic-granuloma",
+        "foreign-body-granuloma": "granuloma-annulare",  # Group common ones
+        "granuloma annulare": "granuloma-annulare",  # Keep most common one
+        "granuloma faciale": "granuloma-annulare",
+        "actinic granuloma": "granuloma-annulare",
+        "majocchi granuloma": "fungal-infection",  # Actually fungal-related
+        "xanthogranuloma": "xanthogranuloma",
+        "juvenile xanthogranuloma": "xanthogranuloma",
+        "Juvenile xanthogranuloma": "xanthogranuloma",
         # INFLAMMATORY CONDITIONS - Consolidate by pathophysiology
-        
         # Eczema/dermatitis - consolidate common types
-        'eczema-spongiotic-dermatitis': 'eczema-dermatitis',
-        'eczema': 'eczema-dermatitis',
-        'atopic dermatitis': 'eczema-dermatitis',
-        'dyshidrotic eczema': 'eczema-dermatitis',
-        'nummular eczema': 'eczema-dermatitis',
-        'discoid eczema': 'eczema-dermatitis',
-        'hand eczema': 'eczema-dermatitis',
-        'xerotic eczema': 'eczema-dermatitis',
-        'infected eczema': 'eczema-dermatitis',
-        'stasis dermatitis': 'eczema-dermatitis',
-        'seborrheic dermatitis': 'eczema-dermatitis',
-        'neurodermatitis': 'eczema-dermatitis',
-        'chronic actinic dermatitis': 'eczema-dermatitis',
-        'acute dermatitis': 'eczema-dermatitis',
-        'autoimmune dermatitis': 'eczema-dermatitis',
-        'exfoliative dermatitis': 'eczema-dermatitis',
-        'exfoliative erythroderma': 'eczema-dermatitis',
-        'inflammatory dermatosis': 'eczema-dermatitis',
-        
+        "eczema-spongiotic-dermatitis": "eczema-dermatitis",
+        "eczema": "eczema-dermatitis",
+        "atopic dermatitis": "eczema-dermatitis",
+        "dyshidrotic eczema": "eczema-dermatitis",
+        "nummular eczema": "eczema-dermatitis",
+        "discoid eczema": "eczema-dermatitis",
+        "hand eczema": "eczema-dermatitis",
+        "xerotic eczema": "eczema-dermatitis",
+        "infected eczema": "eczema-dermatitis",
+        "stasis dermatitis": "eczema-dermatitis",
+        "seborrheic dermatitis": "eczema-dermatitis",
+        "neurodermatitis": "eczema-dermatitis",
+        "chronic actinic dermatitis": "eczema-dermatitis",
+        "acute dermatitis": "eczema-dermatitis",
+        "autoimmune dermatitis": "eczema-dermatitis",
+        "exfoliative dermatitis": "eczema-dermatitis",
+        "exfoliative erythroderma": "eczema-dermatitis",
+        "inflammatory dermatosis": "eczema-dermatitis",
         # Contact dermatitis
-        'allergic contact dermatitis': 'contact-dermatitis',
-        'contact dermatitis': 'contact-dermatitis',
-        'irritant contact dermatitis': 'contact-dermatitis',
-        'contact purpura': 'contact-dermatitis',
-        
+        "allergic contact dermatitis": "contact-dermatitis",
+        "contact dermatitis": "contact-dermatitis",
+        "irritant contact dermatitis": "contact-dermatitis",
+        "contact purpura": "contact-dermatitis",
         # Specialized dermatitis
-        'perioral dermatitis': 'perioral-dermatitis',
-        'factitial dermatitis': 'factitial-dermatitis',
-        'dermatitis herpetiformis': 'dermatitis-herpetiformis',
-        
+        "perioral dermatitis": "perioral-dermatitis",
+        "factitial dermatitis": "factitial-dermatitis",
+        "dermatitis herpetiformis": "dermatitis-herpetiformis",
         # Psoriasis variants
-        'psoriasis': 'psoriasis',
-        'pustular psoriasis': 'psoriasis',
-        'scalp psoriasis': 'psoriasis',
-        'palmoplantar pustulosis': 'psoriasis',
-        
+        "psoriasis": "psoriasis",
+        "pustular psoriasis": "psoriasis",
+        "scalp psoriasis": "psoriasis",
+        "palmoplantar pustulosis": "psoriasis",
         # Acne variants
-        'acne-cystic': 'acne',
-        'acne vulgaris': 'acne',
-        'acne': 'acne',
-        'steroid acne': 'acne',
-        'acne urticata': 'acne',
-        'acne keloidalis nuchae': 'acne',
-        
+        "acne-cystic": "acne",
+        "acne vulgaris": "acne",
+        "acne": "acne",
+        "steroid acne": "acne",
+        "acne urticata": "acne",
+        "acne keloidalis nuchae": "acne",
         # Rosacea spectrum
-        'rosacea': 'rosacea',
-        'rhinophyma': 'rosacea',
-        
+        "rosacea": "rosacea",
+        "rhinophyma": "rosacea",
         # Follicular conditions
-        'folliculitis': 'folliculitis',
-        'kerion': 'folliculitis',
-        'hidradenitis': 'hidradenitis-suppurativa',
-        'hidradenitis suppurativa': 'hidradenitis-suppurativa',
-        'fox-fordyce disease': 'folliculitis',
-        
+        "folliculitis": "folliculitis",
+        "kerion": "folliculitis",
+        "hidradenitis": "hidradenitis-suppurativa",
+        "hidradenitis suppurativa": "hidradenitis-suppurativa",
+        "fox-fordyce disease": "folliculitis",
         # Urticaria variants
-        'urticaria': 'urticaria',
-        'urticaria pigmentosa': 'urticaria',
-        
+        "urticaria": "urticaria",
+        "urticaria pigmentosa": "urticaria",
         # Prurigo conditions
-        'prurigo-nodularis': 'prurigo',
-        'prurigo nodularis': 'prurigo',
-        'prurigo': 'prurigo',
-        'prurigo pigmentosa': 'prurigo',
-        'prurigo of pregnancy': 'prurigo',
-        'pruritus ani': 'prurigo',
-        
+        "prurigo-nodularis": "prurigo",
+        "prurigo nodularis": "prurigo",
+        "prurigo": "prurigo",
+        "prurigo pigmentosa": "prurigo",
+        "prurigo of pregnancy": "prurigo",
+        "pruritus ani": "prurigo",
         # Lichen conditions
-        'lichen planus': 'lichen-planus',
-        'lichen simplex': 'lichen-planus',
-        'lichen amyloidosis': 'lichen-planus',
-        'lichen striatus': 'lichen-planus',
-        'lichen spinulosus': 'lichen-planus',
-        
-        # Pityriasis conditions  
-        'pityriasis rosea': 'pityriasis',
-        'pityriasis rubra pilaris': 'pityriasis',
-        'pityriasis lichenoides chronica': 'pityriasis',
-        'pityriasis lichenoides et varioliformis acuta': 'pityriasis',
-        'pityriasis lichenoides': 'pityriasis',
-        
+        "lichen planus": "lichen-planus",
+        "lichen simplex": "lichen-planus",
+        "lichen amyloidosis": "lichen-planus",
+        "lichen striatus": "lichen-planus",
+        "lichen spinulosus": "lichen-planus",
+        # Pityriasis conditions
+        "pityriasis rosea": "pityriasis",
+        "pityriasis rubra pilaris": "pityriasis",
+        "pityriasis lichenoides chronica": "pityriasis",
+        "pityriasis lichenoides et varioliformis acuta": "pityriasis",
+        "pityriasis lichenoides": "pityriasis",
         # Erythema conditions
-        'erythema multiforme': 'erythema-reactive',
-        'erythema nodosum': 'erythema-reactive',
-        'erythema annulare centrifigum': 'erythema-reactive',
-        'erythema annulare centrifugum': 'erythema-reactive',
-        'erythema elevatum diutinum': 'erythema-reactive',
-        'erythema dyschromicum perstans': 'erythema-reactive',
-        'erythema craquele': 'erythema-reactive',
-        'erythema gyratum repens': 'erythema-reactive',
-        'annular erythema': 'erythema-reactive',
-        'superficial gyrate erythema': 'erythema-reactive',
-        
+        "erythema multiforme": "erythema-reactive",
+        "erythema nodosum": "erythema-reactive",
+        "erythema annulare centrifigum": "erythema-reactive",
+        "erythema annulare centrifugum": "erythema-reactive",
+        "erythema elevatum diutinum": "erythema-reactive",
+        "erythema dyschromicum perstans": "erythema-reactive",
+        "erythema craquele": "erythema-reactive",
+        "erythema gyratum repens": "erythema-reactive",
+        "annular erythema": "erythema-reactive",
+        "superficial gyrate erythema": "erythema-reactive",
         # AUTOIMMUNE/CONNECTIVE TISSUE - Consolidate related conditions
-        
         # Lupus spectrum
-        'lupus erythematosus': 'lupus-erythematosus',
-        'lupus subacute': 'lupus-erythematosus',
-        'cutaneous lupus': 'lupus-erythematosus',
-        
+        "lupus erythematosus": "lupus-erythematosus",
+        "lupus subacute": "lupus-erythematosus",
+        "cutaneous lupus": "lupus-erythematosus",
         # Scleroderma spectrum
-        'scleroderma': 'scleroderma-morphea',
-        'morphea': 'scleroderma-morphea',
-        'scleromyxedema': 'scleroderma-morphea',
-        
+        "scleroderma": "scleroderma-morphea",
+        "morphea": "scleroderma-morphea",
+        "scleromyxedema": "scleroderma-morphea",
         # Other autoimmune
-        'dermatomyositis': 'dermatomyositis',  # Keep - muscle involvement
-        'graft-vs-host-disease': 'graft-vs-host-disease',  # Keep - transplant complication
-        'sarcoidosis': 'sarcoidosis',  # Keep - systemic disease
-        'cutaneous sarcoidosis': 'sarcoidosis',  # Merge with sarcoidosis
-        
+        "dermatomyositis": "dermatomyositis",  # Keep - muscle involvement
+        "graft-vs-host-disease": "graft-vs-host-disease",  # Keep - transplant complication
+        "sarcoidosis": "sarcoidosis",  # Keep - systemic disease
+        "cutaneous sarcoidosis": "sarcoidosis",  # Merge with sarcoidosis
         # INFECTIONS - Consolidate by organism type
-        
         # Fungal infections
-        'onychomycosis': 'fungal-infection',
-        'tinea-pedis': 'fungal-infection',
-        'tinea pedis': 'fungal-infection',
-        'tinea corporis': 'fungal-infection',
-        'tinea cruris': 'fungal-infection',
-        'tinea': 'fungal-infection',
-        'tinea versicolor': 'fungal-infection',
-        'tinea manus': 'fungal-infection',
-        'candidiasis': 'fungal-infection',
-        'coccidioidomycosis': 'fungal-infection',
-        'fungal dermatitis': 'fungal-infection',
-        
+        "onychomycosis": "fungal-infection",
+        "tinea-pedis": "fungal-infection",
+        "tinea pedis": "fungal-infection",
+        "tinea corporis": "fungal-infection",
+        "tinea cruris": "fungal-infection",
+        "tinea": "fungal-infection",
+        "tinea versicolor": "fungal-infection",
+        "tinea manus": "fungal-infection",
+        "candidiasis": "fungal-infection",
+        "coccidioidomycosis": "fungal-infection",
+        "fungal dermatitis": "fungal-infection",
         # Bacterial infections
-        'paronychia': 'bacterial-infection',
-        'abscess': 'bacterial-infection',
-        'cellulitis': 'bacterial-infection',
-        'impetigo': 'bacterial-infection',
-        'furuncle': 'bacterial-infection',
-        'staphylococcal scalded skin syndrome': 'bacterial-infection',
-        'local infection of wound': 'bacterial-infection',
-        'pyoderma': 'bacterial-infection',
-        'pyoderma gangrenosum': 'bacterial-infection',
-        'erosive pustular dermatosis of the scalp': 'bacterial-infection',
-        'pitted keratolysis': 'bacterial-infection',
-        'bacterial': 'bacterial-infection',
-        
+        "paronychia": "bacterial-infection",
+        "abscess": "bacterial-infection",
+        "cellulitis": "bacterial-infection",
+        "impetigo": "bacterial-infection",
+        "furuncle": "bacterial-infection",
+        "staphylococcal scalded skin syndrome": "bacterial-infection",
+        "local infection of wound": "bacterial-infection",
+        "pyoderma": "bacterial-infection",
+        "pyoderma gangrenosum": "bacterial-infection",
+        "erosive pustular dermatosis of the scalp": "bacterial-infection",
+        "pitted keratolysis": "bacterial-infection",
+        "bacterial": "bacterial-infection",
         # Viral infections
-        'molluscum-contagiosum': 'viral-infection',
-        'Molluscum': 'viral-infection',
-        'molluscum contagiosum': 'viral-infection',
-        'herpes zoster': 'viral-infection',
-        'herpes simplex virus': 'viral-infection',
-        'viral exanthem': 'viral-infection',
-        'varicella': 'viral-infection',
-        'hand foot and mouth disease': 'viral-infection',
-        'parvovirus b19 infection': 'viral-infection',
-        
+        "molluscum-contagiosum": "viral-infection",
+        "Molluscum": "viral-infection",
+        "molluscum contagiosum": "viral-infection",
+        "herpes zoster": "viral-infection",
+        "herpes simplex virus": "viral-infection",
+        "viral exanthem": "viral-infection",
+        "varicella": "viral-infection",
+        "hand foot and mouth disease": "viral-infection",
+        "parvovirus b19 infection": "viral-infection",
         # Wart/HPV infections
-        'verruca-vulgaris': 'wart-hpv',
-        'wart': 'wart-hpv',
-        'Verruca': 'wart-hpv',
-        'verruca vulgaris': 'wart-hpv',
-        'condyloma-accuminatum': 'wart-hpv',
-        'condyloma acuminatum': 'wart-hpv',
-        'flat wart': 'wart-hpv',
-        'skin diseases caused by warts': 'wart-hpv',
-        
+        "verruca-vulgaris": "wart-hpv",
+        "wart": "wart-hpv",
+        "Verruca": "wart-hpv",
+        "verruca vulgaris": "wart-hpv",
+        "condyloma-accuminatum": "wart-hpv",
+        "condyloma acuminatum": "wart-hpv",
+        "flat wart": "wart-hpv",
+        "skin diseases caused by warts": "wart-hpv",
         # Parasitic infections
-        'scabies': 'parasitic-infection',
-        'myiasis': 'parasitic-infection',
-        'tungiasis': 'parasitic-infection',
-        'pediculosis lids': 'parasitic-infection',
-        'nematode infection': 'parasitic-infection',
-        'cutaneous larva migrans': 'parasitic-infection',
-        'sand-worm eruption': 'parasitic-infection',
-        'cutaneous leishmaniasis': 'parasitic-infection',
-        
+        "scabies": "parasitic-infection",
+        "myiasis": "parasitic-infection",
+        "tungiasis": "parasitic-infection",
+        "pediculosis lids": "parasitic-infection",
+        "nematode infection": "parasitic-infection",
+        "cutaneous larva migrans": "parasitic-infection",
+        "sand-worm eruption": "parasitic-infection",
+        "cutaneous leishmaniasis": "parasitic-infection",
         # Other infections
-        'syphilis': 'syphilis',  # Keep specific - STD implications
-        'lyme disease': 'lyme-disease',  # Keep specific - systemic disease
-        'skin and soft tissue atypical mycobacterial infection': 'atypical-mycobacterial-infection',
-
-        
+        "syphilis": "syphilis",  # Keep specific - STD implications
+        "lyme disease": "lyme-disease",  # Keep specific - systemic disease
+        "skin and soft tissue atypical mycobacterial infection": "atypical-mycobacterial-infection",
         # TRAUMA/INJURY - Consolidate
-        'abrasions-ulcerations-and-physical-injuries': 'trauma',
-        'hematoma': 'trauma',
-        'wound/abrasion': 'trauma',
-        'animal bite - wound': 'trauma',
-        'burn of forearm': 'trauma',
-        'ulcer': 'trauma',
-        'insect bite': 'trauma',
-        'tick bite': 'trauma',
-        'poisoning by nematocyst': 'trauma',
-        
+        "abrasions-ulcerations-and-physical-injuries": "trauma",
+        "hematoma": "trauma",
+        "wound/abrasion": "trauma",
+        "animal bite - wound": "trauma",
+        "burn of forearm": "trauma",
+        "ulcer": "trauma",
+        "insect bite": "trauma",
+        "tick bite": "trauma",
+        "poisoning by nematocyst": "trauma",
         # Scars and fibrosis
-        'scar': 'scar-fibrosis',
-        'Scar': 'scar-fibrosis',
-        'keloid': 'scar-fibrosis',
-        'striae': 'scar-fibrosis',
-        'red stretch marks': 'scar-fibrosis',
-        
+        "scar": "scar-fibrosis",
+        "Scar": "scar-fibrosis",
+        "keloid": "scar-fibrosis",
+        "striae": "scar-fibrosis",
+        "red stretch marks": "scar-fibrosis",
         # PIGMENTARY DISORDERS - Consolidate
-        
         # Hyperpigmentation
-        'hyperpigmentation': 'hyperpigmentation',
-        'drug induced pigmentary changes': 'hyperpigmentation',
-        'drug-induced pigmentary changes': 'hyperpigmentation',
-        'medication-induced cutaneous pigmentation': 'hyperpigmentation',
-        'melanin pigmentation due to exogenous substance': 'hyperpigmentation',
-        'riehl melanosis': 'hyperpigmentation',
-        'dermatosis papulosa nigra': 'hyperpigmentation',
-        
+        "hyperpigmentation": "hyperpigmentation",
+        "drug induced pigmentary changes": "hyperpigmentation",
+        "drug-induced pigmentary changes": "hyperpigmentation",
+        "medication-induced cutaneous pigmentation": "hyperpigmentation",
+        "melanin pigmentation due to exogenous substance": "hyperpigmentation",
+        "riehl melanosis": "hyperpigmentation",
+        "dermatosis papulosa nigra": "hyperpigmentation",
         # Hypopigmentation
-        'vitiligo': 'hypopigmentation',
-        'post-inflammatory hypopigmentation': 'hypopigmentation',
-        'idiopathic guttate hypomelanosis': 'hypopigmentation',
-        
+        "vitiligo": "hypopigmentation",
+        "post-inflammatory hypopigmentation": "hypopigmentation",
+        "idiopathic guttate hypomelanosis": "hypopigmentation",
         # Lentigo/melanotic macules - consolidate
-        'solar-lentigo': 'lentigo-solar',
-        'Solar lentigo': 'lentigo-solar',
-        'sun spots': 'lentigo-solar',
-        'acral-melanotic-macule': 'melanotic-macule',
-        'Lentigo NOS': 'melanotic-macule',
-        'Ink-spot lentigo': 'melanotic-macule',
-        'Mucosal melanotic macule': 'melanotic-macule',
-        'mucosal melanotic macule': 'melanotic-macule',
-        'acral melanotic macule': 'melanotic-macule',
-        'café au lait macule': 'melanotic-macule',
-        
+        "solar-lentigo": "lentigo-solar",
+        "Solar lentigo": "lentigo-solar",
+        "sun spots": "lentigo-solar",
+        "acral-melanotic-macule": "melanotic-macule",
+        "Lentigo NOS": "melanotic-macule",
+        "Ink-spot lentigo": "melanotic-macule",
+        "Mucosal melanotic macule": "melanotic-macule",
+        "mucosal melanotic macule": "melanotic-macule",
+        "acral melanotic macule": "melanotic-macule",
+        "café au lait macule": "melanotic-macule",
         # HYPERPLASIA/HAMARTOMAS
-        'Sebaceous hyperplasia': 'benign-hyperplasia',
-        'reactive-lymphoid-hyperplasia': 'benign-hyperplasia',
-        'Supernumerary nipple': 'benign-hyperplasia',
-        
+        "Sebaceous hyperplasia": "benign-hyperplasia",
+        "reactive-lymphoid-hyperplasia": "benign-hyperplasia",
+        "Supernumerary nipple": "benign-hyperplasia",
         # Clear cell lesions
-        'clear-cell-acanthoma': 'clear-cell-acanthoma',
-        'Clear cell acanthoma': 'clear-cell-acanthoma',
-        
+        "clear-cell-acanthoma": "clear-cell-acanthoma",
+        "Clear cell acanthoma": "clear-cell-acanthoma",
         # Xanthomatous lesions
-        'verruciform-xanthoma': 'xanthoma',
-        'xanthomas': 'xanthoma',
-        'eruptive xanthoma': 'xanthoma',
-        'xanthelasma': 'xanthoma',
-        'diffuse xanthoma': 'xanthoma',
-        
+        "verruciform-xanthoma": "xanthoma",
+        "xanthomas": "xanthoma",
+        "eruptive xanthoma": "xanthoma",
+        "xanthelasma": "xanthoma",
+        "diffuse xanthoma": "xanthoma",
         # METABOLIC/GENETIC CONDITIONS - Keep separate due to systemic implications
-        
         # Genodermatoses
-        'necrobiosis lipoidica': 'genodermatosis',
-        'acanthosis nigricans': 'genodermatosis',
-        'ichthyosis vulgaris': 'genodermatosis',
-        'ichthyosis': 'genodermatosis',
-        'xeroderma pigmentosum': 'genodermatosis',
-        'incontinentia pigmenti': 'genodermatosis',
-        'ehlers danlos syndrome': 'genodermatosis',
-        'tuberous sclerosis': 'genodermatosis',
-        'hailey hailey disease': 'genodermatosis',
-        'dariers disease': 'genodermatosis',
-        'epidermolysis bullosa': 'genodermatosis',
-        'neurofibromatosis': 'genodermatosis',
-        'aplasia cutis': 'genodermatosis',
-        'hereditary': 'genodermatosis',
-        
+        "necrobiosis lipoidica": "genodermatosis",
+        "acanthosis nigricans": "genodermatosis",
+        "ichthyosis vulgaris": "genodermatosis",
+        "ichthyosis": "genodermatosis",
+        "xeroderma pigmentosum": "genodermatosis",
+        "incontinentia pigmenti": "genodermatosis",
+        "ehlers danlos syndrome": "genodermatosis",
+        "tuberous sclerosis": "genodermatosis",
+        "hailey hailey disease": "genodermatosis",
+        "dariers disease": "genodermatosis",
+        "epidermolysis bullosa": "genodermatosis",
+        "neurofibromatosis": "genodermatosis",
+        "aplasia cutis": "genodermatosis",
+        "hereditary": "genodermatosis",
         # Metabolic deposits
-        'mucinosis': 'metabolic-deposit',
-        'calcinosis cutis': 'metabolic-deposit',
-        'amyloidosis': 'metabolic-deposit',
-        
+        "mucinosis": "metabolic-deposit",
+        "calcinosis cutis": "metabolic-deposit",
+        "amyloidosis": "metabolic-deposit",
         # MASTOCYTOSIS/HISTIOCYTOSIS
-        'Mastocytosis': 'mastocytosis-histiocytosis',
-        'langerhans cell histiocytosis': 'mastocytosis-histiocytosis',
-        
+        "Mastocytosis": "mastocytosis-histiocytosis",
+        "langerhans cell histiocytosis": "mastocytosis-histiocytosis",
         # DRUG REACTIONS - Consolidate
-        'drug eruption': 'drug-reaction',
-        'stevens johnson syndrome': 'drug-reaction-severe',
-        'stevens-johnson syndrome': 'drug-reaction-severe',
-        'fixed eruptions': 'drug-reaction',
-        'fixed drug eruption': 'drug-reaction',
-        'acute generalized exanthematous pustulosis': 'drug-reaction-severe',
-        
+        "drug eruption": "drug-reaction",
+        "stevens johnson syndrome": "drug-reaction-severe",
+        "stevens-johnson syndrome": "drug-reaction-severe",
+        "fixed eruptions": "drug-reaction",
+        "fixed drug eruption": "drug-reaction",
+        "acute generalized exanthematous pustulosis": "drug-reaction-severe",
         # BULLOUS DISEASES
-        'bullous disease': 'bullous-disease',
-        'bullous pemphigoid': 'bullous-disease',
-        'childhood bullous pemphigoid': 'bullous-disease',
-        'pemphigus vulgaris': 'bullous-disease',
-        'acquired autoimmune bullous diseaseherpes gestationis': 'bullous-disease',
-        
+        "bullous disease": "bullous-disease",
+        "bullous pemphigoid": "bullous-disease",
+        "childhood bullous pemphigoid": "bullous-disease",
+        "pemphigus vulgaris": "bullous-disease",
+        "acquired autoimmune bullous diseaseherpes gestationis": "bullous-disease",
         # PHOTODERMATOLOGY
-        'photodermatoses': 'photodermatitis',
-        'sun damaged skin': 'photodermatitis',
-        'sunburn': 'photodermatitis',
-        'phytophotodermatitis': 'photodermatitis',
-        'polymorphous light eruption': 'photodermatitis',
-        'actinic solar damage(telangiectasia)': 'photodermatitis',
-        'actinic solar damage(solar purpura)': 'photodermatitis',
-        'actinic solar damage(solar elastosis)': 'photodermatitis',
-        'actinic solar damage(cutis rhomboidalis nuchae)': 'photodermatitis',
-        'radiodermatitis': 'photodermatitis',
-        'polymorphic eruption of pregnancy': 'photodermatitis',
-        
+        "photodermatoses": "photodermatitis",
+        "sun damaged skin": "photodermatitis",
+        "sunburn": "photodermatitis",
+        "phytophotodermatitis": "photodermatitis",
+        "polymorphous light eruption": "photodermatitis",
+        "actinic solar damage(telangiectasia)": "photodermatitis",
+        "actinic solar damage(solar purpura)": "photodermatitis",
+        "actinic solar damage(solar elastosis)": "photodermatitis",
+        "actinic solar damage(cutis rhomboidalis nuchae)": "photodermatitis",
+        "radiodermatitis": "photodermatitis",
+        "polymorphic eruption of pregnancy": "photodermatitis",
         # NAIL DISORDERS
-        'onycholysis': 'nail-disorder',
-        'onychoschizia': 'nail-disorder',
-        'leukonychia': 'nail-disorder',
-        'koilonychia': 'nail-disorder',
-        "beau's lines": 'nail-disorder',
-        
+        "onycholysis": "nail-disorder",
+        "onychoschizia": "nail-disorder",
+        "leukonychia": "nail-disorder",
+        "koilonychia": "nail-disorder",
+        "beau's lines": "nail-disorder",
         # MISCELLANEOUS BENIGN CONDITIONS
-        
         # Milia and fordyce spots
-        'milia': 'milia-fordyce',
-        'fordyce spots': 'milia-fordyce',
-        
+        "milia": "milia-fordyce",
+        "fordyce spots": "milia-fordyce",
         # Edema/circulatory
-        'stasis edema': 'circulatory-disorder',
-        'livedo reticularis': 'circulatory-disorder',
-        'elephantiasis nostras': 'circulatory-disorder',
-        'poikiloderma': 'circulatory-disorder',
-        'poikiloderma of civatte': 'circulatory-disorder',
-        'flushing': 'circulatory-disorder',
-        
+        "stasis edema": "circulatory-disorder",
+        "livedo reticularis": "circulatory-disorder",
+        "elephantiasis nostras": "circulatory-disorder",
+        "poikiloderma": "circulatory-disorder",
+        "poikiloderma of civatte": "circulatory-disorder",
+        "flushing": "circulatory-disorder",
         # Keratotic conditions
-        'hyperkeratosis palmaris et plantaris': 'hyperkeratosis',
-        'callus': 'hyperkeratosis',
-        'knuckle pads': 'hyperkeratosis',
-        'juvenile plantar dermatosis': 'hyperkeratosis',
-        'keratolysis exfoliativa of wende': 'hyperkeratosis',
-        'cutaneous horn': 'hyperkeratosis',
-        'atopic winter feet': 'hyperkeratosis',
-        
+        "hyperkeratosis palmaris et plantaris": "hyperkeratosis",
+        "callus": "hyperkeratosis",
+        "knuckle pads": "hyperkeratosis",
+        "juvenile plantar dermatosis": "hyperkeratosis",
+        "keratolysis exfoliativa of wende": "hyperkeratosis",
+        "cutaneous horn": "hyperkeratosis",
+        "atopic winter feet": "hyperkeratosis",
         # Desquamation/xerosis
-        'xerosis': 'xerosis-desquamation',
-        'desquamation': 'xerosis-desquamation',
-        
+        "xerosis": "xerosis-desquamation",
+        "desquamation": "xerosis-desquamation",
         # Cheilitis
-        'cheilitis': 'cheilitis',
-        
+        "cheilitis": "cheilitis",
         # Geographic conditions
-        'geographic tongue': 'geographic-dermatosis',
-        
+        "geographic tongue": "geographic-dermatosis",
         # Papillomatosis
-        'papilomatosis confluentes and reticulate': 'papillomatosis',
-        'confluent and reticulated papillomatosis': 'papillomatosis',
-        
+        "papilomatosis confluentes and reticulate": "papillomatosis",
+        "confluent and reticulated papillomatosis": "papillomatosis",
         # Pregnancy-related dermatoses
-        'papular dermatoses of pregnancy': 'pregnancy-dermatosis',
-        'cholestasis of pregnancy': 'pregnancy-dermatosis',
-        
+        "papular dermatoses of pregnancy": "pregnancy-dermatosis",
+        "cholestasis of pregnancy": "pregnancy-dermatosis",
         # Intertrigo
-        'intertrigo': 'intertrigo',
-        
+        "intertrigo": "intertrigo",
         # Mucositis
-        'muzzle rash': 'mucositis',
-        
+        "muzzle rash": "mucositis",
         # Hair disorders
-        'alopecia areata': 'hair-disorder',
-        'hair diseases': 'hair-disorder',
-        'hypertrichosis': 'hair-disorder',
-        
+        "alopecia areata": "hair-disorder",
+        "hair diseases": "hair-disorder",
+        "hypertrichosis": "hair-disorder",
         # Miscellaneous rare conditions
-        'chilblain': 'environmental-dermatosis',
-        'degos disease': 'rare-dermatosis',
-        'relapsing polychondritis': 'rare-dermatosis',
-        'behcets disease': 'rare-dermatosis',
-        
+        "chilblain": "environmental-dermatosis",
+        "degos disease": "rare-dermatosis",
+        "relapsing polychondritis": "rare-dermatosis",
+        "behcets disease": "rare-dermatosis",
         # Neurotic/behavioral conditions
-        'neurotic excoriations': 'neurotic-dermatoses',
-        'skin lesion in drug addict': 'neurotic-dermatoses',
-        
+        "neurotic excoriations": "neurotic-dermatoses",
+        "skin lesion in drug addict": "neurotic-dermatoses",
         # Dilated pore conditions
-        'dilated pore of winer': 'follicular-disorder',
-        
+        "dilated pore of winer": "follicular-disorder",
         # Clubbing
-        'clubbing of fingers': 'nail-disorder',
-        
+        "clubbing of fingers": "nail-disorder",
         # Crowe's sign (neurofibromatosis)
-        "crowe's sign": 'genodermatosis',
-        
+        "crowe's sign": "genodermatosis",
         # Unilateral dermatoses
-        'unilateral laterothoracic exanthem': 'rare-dermatosis',
-        
+        "unilateral laterothoracic exanthem": "rare-dermatosis",
         # Proliferative conditions
-        'proliferations': 'benign-hyperplasia',
-        
+        "proliferations": "benign-hyperplasia",
         # Lymphocytic infiltrate
-        'lymphocytic infiltrate of jessner': 'inflammatory-infiltrate',
-        
+        "lymphocytic infiltrate of jessner": "inflammatory-infiltrate",
         # Additional miscellaneous conditions
-        'porphyria': 'metabolic-disorder',
-        'eruptive odontogenic cyst': 'rare-cyst',
-        'chondrodermatitis nodularis helicis': 'chondrodermatitis',
-
+        "porphyria": "metabolic-disorder",
+        "eruptive odontogenic cyst": "rare-cyst",
+        "chondrodermatitis nodularis helicis": "chondrodermatitis",
         # Neutrophilic dermatoses (formatting fix)
-        'neutrophilic dermatoses': 'neutrophilic-dermatoses',
-
+        "neutrophilic dermatoses": "neutrophilic-dermatoses",
         # Acrodermatitis (formatting fix)
-        'acrodermatitis enteropathica': 'acrodermatitis-enteropathica',
+        "acrodermatitis enteropathica": "acrodermatitis-enteropathica",
     }
-    
+
     # Apply the mappings
-    metadata_all_harmonized['label'] = metadata_all_harmonized['label'].map(
-        lambda x: label_mappings.get(x, x)
-    )
-    
+    metadata_all_harmonized["label"] = metadata_all_harmonized["label"].map(lambda x: label_mappings.get(x, x))
+
     return metadata_all_harmonized
 
 
@@ -680,216 +588,217 @@ def remove_diagnoses_from_descriptions(metadata_all_harmonized):
     """
     Remove sentences that explicitly state or reference the diagnosis of the disease.
     Keeps all other relevant information like symptoms, demographics, body location, etc.
-    
+
     This version is LESS AGGRESSIVE - focuses on removing only explicit diagnosis statements
     while preserving clinical context, symptoms, treatments, and patient information.
-    
+
     Args:
         metadata_all_harmonized: DataFrame with a 'text_desc' column and 'label' column
-        
+
     Returns:
         DataFrame with diagnosis-referencing sentences removed from text_desc
     """
     import re
     import pandas as pd
-    
+
     # Build a comprehensive set of disease terms from the harmonized labels
     disease_terms = set()
-    
+
     # Get all unique labels
-    unique_labels = metadata_all_harmonized['label'].dropna().unique()
-    
+    unique_labels = metadata_all_harmonized["label"].dropna().unique()
+
     for label in unique_labels:
         # Add the label itself
         disease_terms.add(label.lower())
-        
+
         # Split compound terms and add variations
-        parts = label.lower().replace('-', ' ').replace('_', ' ')
+        parts = label.lower().replace("-", " ").replace("_", " ")
         disease_terms.add(parts)
-        
+
         # Add individual words from multi-word disease names (if >= 2 words)
         words = parts.split()
         if len(words) >= 2:
             disease_terms.add(parts)
             # Add combinations of words for better matching
             for i in range(len(words)):
-                for j in range(i+1, len(words)+1):
-                    phrase = ' '.join(words[i:j])
+                for j in range(i + 1, len(words) + 1):
+                    phrase = " ".join(words[i:j])
                     if len(phrase) > 4:  # Avoid very short phrases
                         disease_terms.add(phrase)
-    
+
     # Add common disease-related terms
     additional_medical_terms = {
-        'melanoma', 'carcinoma', 'lymphoma', 'sarcoma',
-        'keratosis', 'dermatitis', 'eczema', 'psoriasis',
-        'nevus', 'nevi', 'neoplasm',
-        'syndrome', 'lesion'
+        "melanoma",
+        "carcinoma",
+        "lymphoma",
+        "sarcoma",
+        "keratosis",
+        "dermatitis",
+        "eczema",
+        "psoriasis",
+        "nevus",
+        "nevi",
+        "neoplasm",
+        "syndrome",
+        "lesion",
     }
     disease_terms.update(additional_medical_terms)
-    
+
     # Remove overly generic terms that cause false positives
-    overly_generic = {'disease', 'disorder', 'condition', 'skin', 'rash'}
+    overly_generic = {"disease", "disorder", "condition", "skin", "rash"}
     disease_terms = disease_terms - overly_generic
-    
+
     print(f"Loaded {len(disease_terms)} disease terms for filtering")
-    
+
     def contains_disease_term(sentence, terms):
         """Check if sentence contains any disease terms."""
         sentence_lower = sentence.lower()
-        
+
         for term in terms:
             if len(term) < 4:  # Skip very short terms
                 continue
-            
+
             # Use word boundaries to avoid partial matches
-            pattern = r'\b' + re.escape(term) + r'\b'
+            pattern = r"\b" + re.escape(term) + r"\b"
             if re.search(pattern, sentence_lower):
                 return True
-        
+
         return False
-    
+
     def has_clinical_context(sentence):
         """Check if sentence has useful clinical context beyond just naming the disease."""
         sentence_lower = sentence.lower()
-        
+
         clinical_context_indicators = [
             # Symptoms and manifestations
-            r'\b(symptom|manifesta|present|experience|complain|report)',
-            r'\b(itch|pain|burn|swell|red|inflam|tender|numb)',
-            r'\b(rash|spot|patch|bump|lesion|papule|vesicle|pustule|nodule)',
-            
+            r"\b(symptom|manifesta|present|experience|complain|report)",
+            r"\b(itch|pain|burn|swell|red|inflam|tender|numb)",
+            r"\b(rash|spot|patch|bump|lesion|papule|vesicle|pustule|nodule)",
             # Treatments and medications
-            r'\b(treat|therap|medicati|prescri|administ|appli)',
-            r'\b(cream|ointment|lotion|tablet|capsule|injection)',
-            r'\b(antibiotic|antiviral|antifungal|steroid|antihistamine)',
-            
+            r"\b(treat|therap|medicati|prescri|administ|appli)",
+            r"\b(cream|ointment|lotion|tablet|capsule|injection)",
+            r"\b(antibiotic|antiviral|antifungal|steroid|antihistamine)",
             # Body locations and demographics
-            r'\b(locat|area|region|site|zone)',
-            r'\b(age|year|old|male|female|child|adult)',
-            r'\b(face|arm|leg|hand|foot|chest|back|abdomen)',
-            
+            r"\b(locat|area|region|site|zone)",
+            r"\b(age|year|old|male|female|child|adult)",
+            r"\b(face|arm|leg|hand|foot|chest|back|abdomen)",
             # Temporal information
-            r'\b(day|week|month|year|duration|persist|chronic|acute)',
-            r'\b(since|for|after|before|following|during)',
-            
+            r"\b(day|week|month|year|duration|persist|chronic|acute)",
+            r"\b(since|for|after|before|following|during)",
             # Clinical observations
-            r'\b(observ|not|examin|show|reveal|display)',
-            r'\b(size|shape|color|texture|appearance)',
+            r"\b(observ|not|examin|show|reveal|display)",
+            r"\b(size|shape|color|texture|appearance)",
         ]
-        
+
         # Count how many indicators are present
-        indicator_count = sum(1 for pattern in clinical_context_indicators 
-                            if re.search(pattern, sentence_lower))
-        
+        indicator_count = sum(1 for pattern in clinical_context_indicators if re.search(pattern, sentence_lower))
+
         # If sentence has 2+ clinical context indicators, it's probably useful
         return indicator_count >= 2
-    
+
     def is_diagnosis_sentence(sentence, disease_terms):
         """
         Detect explicit diagnosis statements.
         Less aggressive - focuses on removing only clear diagnosis statements.
         """
         sentence_lower = sentence.strip().lower()
-        
+
         if len(sentence_lower) < 3:
             return False
-        
+
         # =================================================================
         # SAFE CONTEXTS: Always keep these
         # =================================================================
         safe_contexts = [
             # Demographics (must be at start)
-            (r'^(the )?(sex|gender|age|patient) (is|was|are)', 100),
-            (r'^the approximate age', 100),
-            (r'^the body location', 100),
-            (r'^the symptoms?', 100),
-            (r'^the duration', 100),
-            (r'^the skin texture', 100),
-            
+            (r"^(the )?(sex|gender|age|patient) (is|was|are)", 100),
+            (r"^the approximate age", 100),
+            (r"^the body location", 100),
+            (r"^the symptoms?", 100),
+            (r"^the duration", 100),
+            (r"^the skin texture", 100),
             # Patient reporting
-            (r'^patient reports?', 200),
-            (r'^the patient reports?', 200),
-            (r'^\d+(-| )year(-| )old.*(reports?|presents?|has|experiencing)', 200),
-            
+            (r"^patient reports?", 200),
+            (r"^the patient reports?", 200),
+            (r"^\d+(-| )year(-| )old.*(reports?|presents?|has|experiencing)", 200),
             # Treatment discussions (these are valuable even if they mention disease)
-            (r'^treatment (with|using|included|option|suggest)', 250),
-            (r'^therapy.*included', 250),
-            (r'^(after|following|post).*(treatment|therapy)', 250),
-            (r'^recommend.*treat', 200),
-            
+            (r"^treatment (with|using|included|option|suggest)", 250),
+            (r"^therapy.*included", 250),
+            (r"^(after|following|post).*(treatment|therapy)", 250),
+            (r"^recommend.*treat", 200),
             # Forum discussions WITH clinical context (keep these!)
-            (r'(forum|users?|discussion).*(suggest.*treat|recommend.*medicati)', 250),
+            (r"(forum|users?|discussion).*(suggest.*treat|recommend.*medicati)", 250),
         ]
-        
+
         # Check if sentence matches any safe context
         for pattern, max_length in safe_contexts:
             if re.search(pattern, sentence_lower) and len(sentence_lower) <= max_length:
                 return False  # Keep this sentence
-        
+
         # =================================================================
         # ALWAYS REMOVE: Explicit diagnosis statements
         # =================================================================
         explicit_diagnosis_patterns = [
-            r'\bdiagnosed (as|with)\b',
-            r'\bdiagnosis (is|was|of):?\s',
-            r'\b(final|clinical|confirmed|differential) diagnosis\b',
-            r'\bpatholog(ical|y) confirmed (as|to be)\b',
+            r"\bdiagnosed (as|with)\b",
+            r"\bdiagnosis (is|was|of):?\s",
+            r"\b(final|clinical|confirmed|differential) diagnosis\b",
+            r"\bpatholog(ical|y) confirmed (as|to be)\b",
         ]
-        
+
         for pattern in explicit_diagnosis_patterns:
             if re.search(pattern, sentence_lower):
                 return True
-        
+
         # =================================================================
         # ALWAYS REMOVE: Image/photo descriptions (pure diagnosis statements)
         # =================================================================
         image_description_patterns = [
-            r'^this image (shows?|depicts?|describes?|features?|displays?|highlights?|illustrates?|discusses?)',
-            r'^this photo (shows?|depicts?|describes?)',
-            r'^the image (shows?|depicts?|describes?)',
-            r'^(clinical|dermoscopic) (image|photo|picture)',
+            r"^this image (shows?|depicts?|describes?|features?|displays?|highlights?|illustrates?|discusses?)",
+            r"^this photo (shows?|depicts?|describes?)",
+            r"^the image (shows?|depicts?|describes?)",
+            r"^(clinical|dermoscopic) (image|photo|picture)",
         ]
-        
+
         for pattern in image_description_patterns:
             if re.search(pattern, sentence_lower):
                 # Remove image descriptions that contain disease terms
                 if contains_disease_term(sentence, disease_terms):
                     return True
-        
+
         # =================================================================
         # ALWAYS REMOVE: "This is [disease]" type statements (but only short ones)
         # =================================================================
-        if re.search(r'^this (is|shows?|depicts?|represents?) (a|an|the)\s+', sentence_lower):
+        if re.search(r"^this (is|shows?|depicts?|represents?) (a|an|the)\s+", sentence_lower):
             if len(sentence_lower) < 100 and contains_disease_term(sentence, disease_terms):
                 return True
-        
+
         # =================================================================
         # SELECTIVELY REMOVE: Forum diagnoses (only if explicit)
         # =================================================================
         explicit_forum_diagnosis = [
-            r'(consensus|users?|forum|discussion) (is|was|are) (that |the |it is )?[\w\s]{0,20}(diagnosis|condition)',
-            r'(users?|members?) (confirmed|diagnosed|identified) (it|this|the condition) as',
-            r'(likely|probably) (is|has) \b[\w-]+\b',  # "likely is melanoma"
+            r"(consensus|users?|forum|discussion) (is|was|are) (that |the |it is )?[\w\s]{0,20}(diagnosis|condition)",
+            r"(users?|members?) (confirmed|diagnosed|identified) (it|this|the condition) as",
+            r"(likely|probably) (is|has) \b[\w-]+\b",  # "likely is melanoma"
         ]
-        
+
         for pattern in explicit_forum_diagnosis:
             if re.search(pattern, sentence_lower) and contains_disease_term(sentence, disease_terms):
                 return True
-        
+
         # =================================================================
         # SELECTIVELY REMOVE: Diagnostic compatibility (only if no clinical context)
         # =================================================================
         diagnostic_compatibility = [
-            r'(consistent|compatible|characteristic|typical|diagnostic) (with|of|for)\b',
-            r'\bpathognomonic (for|of)\b',
+            r"(consistent|compatible|characteristic|typical|diagnostic) (with|of|for)\b",
+            r"\bpathognomonic (for|of)\b",
         ]
-        
+
         for pattern in diagnostic_compatibility:
             if re.search(pattern, sentence_lower):
                 # Only remove if it contains disease term AND lacks clinical context
                 if contains_disease_term(sentence, disease_terms) and not has_clinical_context(sentence):
                     return True
-        
+
         # =================================================================
         # SELECTIVELY REMOVE: Sentences with disease terms
         # Only remove if they're clearly diagnosis statements, not clinical descriptions
@@ -900,115 +809,113 @@ def remove_diagnoses_from_descriptions(metadata_all_harmonized):
                 # But keep if it has clinical context
                 if not has_clinical_context(sentence):
                     return True
-            
+
             # Remove if disease term is at the very end (last 25%)
-            last_portion = sentence_lower[int(len(sentence_lower) * 0.75):]
+            last_portion = sentence_lower[int(len(sentence_lower) * 0.75) :]
             if contains_disease_term(last_portion, disease_terms):
                 # But only if the sentence lacks clinical context
                 if not has_clinical_context(sentence):
                     return True
-            
+
             # Remove "The cause of X is..." type sentences
-            if re.search(r'^(the |this )?(cause|etiology) (of|is)', sentence_lower):
+            if re.search(r"^(the |this )?(cause|etiology) (of|is)", sentence_lower):
                 return True
-        
+
         # =================================================================
         # REMOVE: Generic diagnostic language without useful content
         # =================================================================
         useless_medical_statements = [
-            r'^(it|this|that) (is|was) (caused by|due to)',
-            r'^characterized by\b',  # Only at start
-            r'^(it|this) can be treated',
+            r"^(it|this|that) (is|was) (caused by|due to)",
+            r"^characterized by\b",  # Only at start
+            r"^(it|this) can be treated",
         ]
-        
+
         for pattern in useless_medical_statements:
             if re.search(pattern, sentence_lower):
                 return True
-        
+
         # If we've made it here, keep the sentence
         return False
-    
+
     def clean_description(text, disease_terms):
         """Clean a single text description by removing diagnosis sentences."""
-        if pd.isna(text) or text == '':
+        if pd.isna(text) or text == "":
             return text
-        
+
         # Split into sentences (handle multiple delimiters)
-        sentences = re.split(r'(?<=[.!?])\s+', str(text))
-        
+        sentences = re.split(r"(?<=[.!?])\s+", str(text))
+
         # Filter out diagnosis sentences
         cleaned_sentences = []
         for sentence in sentences:
             # Skip empty sentences
-            if not sentence or sentence.strip() == '':
+            if not sentence or sentence.strip() == "":
                 continue
-            
+
             # Check if this is a diagnosis sentence
             if not is_diagnosis_sentence(sentence, disease_terms):
                 cleaned_sentences.append(sentence)
-        
+
         # Rejoin sentences
-        cleaned_text = ' '.join(cleaned_sentences).strip()
-        
+        cleaned_text = " ".join(cleaned_sentences).strip()
+
         return cleaned_text if cleaned_text else None
-    
+
     # Create a copy to avoid modifying the original
     df_cleaned = metadata_all_harmonized.copy()
-    
+
     # Apply cleaning to text_desc column
-    if 'text_desc' in df_cleaned.columns:
+    if "text_desc" in df_cleaned.columns:
         print("Removing diagnosis-referencing sentences from text descriptions...")
-        df_cleaned['text_desc'] = df_cleaned['text_desc'].apply(
-            lambda x: clean_description(x, disease_terms)
-        )
-        
+        df_cleaned["text_desc"] = df_cleaned["text_desc"].apply(lambda x: clean_description(x, disease_terms))
+
         # Count how many descriptions were modified
-        original_lengths = metadata_all_harmonized['text_desc'].fillna('').str.len()
-        new_lengths = df_cleaned['text_desc'].fillna('').str.len()
+        original_lengths = metadata_all_harmonized["text_desc"].fillna("").str.len()
+        new_lengths = df_cleaned["text_desc"].fillna("").str.len()
         modified_count = (original_lengths != new_lengths).sum()
         completely_removed = (new_lengths == 0).sum()
-        
+
         print(f"Modified {modified_count} out of {len(df_cleaned)} descriptions")
         print(f"Completely removed (set to None): {completely_removed} descriptions")
         print(f"Removed an average of {(original_lengths - new_lengths).mean():.1f} characters per description")
         print(f"Percentage completely removed: {(completely_removed/len(df_cleaned)*100):.1f}%")
-        
+
     else:
         print("Warning: 'text_desc' column not found in DataFrame")
-    
+
     return df_cleaned
 
 
 def main():
     # Define file paths and GCS configuration
-    metadata_path = 'final/metadata_all.csv'
+    metadata_path = "final/metadata_all.csv"
     storage_client = storage.Client()
     bucket_name = "derma-datasets-2"
-    
+
     # Load original metadata from GCS
     metadata_all = load_table_from_gcs(storage_client, bucket_name, metadata_path)
-    
+
     # Harmonize the labels
     metadata_all_harmonized = harmonize_labels(metadata_all)
-    
+
     # Optional: Analyze label distribution
-    print('Original labels:')
-    print(metadata_all['label'].unique())
+    print("Original labels:")
+    print(metadata_all["label"].unique())
     print(f"# of labels: {len(metadata_all['label'].unique())}\n")
-    print('Harmonized labels:')
-    print(metadata_all_harmonized['label'].unique())
+    print("Harmonized labels:")
+    print(metadata_all_harmonized["label"].unique())
     print(f"# of labels: {len(metadata_all_harmonized['label'].unique())}\n")
-    metadata_disease_count = metadata_all_harmonized['label'].value_counts()
+    metadata_disease_count = metadata_all_harmonized["label"].value_counts()
     metadata_low_representation = metadata_disease_count[metadata_disease_count < 5]
-    print(f'{len(metadata_low_representation)} diseases have less than 5 images')
+    print(f"{len(metadata_low_representation)} diseases have less than 5 images")
     print(metadata_low_representation)
-    
+
     # Remove diagnoses from descriptions
     metadata_cleaned = remove_diagnoses_from_descriptions(metadata_all_harmonized)
-    
-    harmonized_output_path = 'final/metadata_all_harmonized.csv'
+
+    harmonized_output_path = "final/metadata_all_harmonized.csv"
     write_table_to_gcs(storage_client, bucket_name, metadata_cleaned, harmonized_output_path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

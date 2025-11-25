@@ -74,7 +74,7 @@ echo "  Follow-up: $FOLLOWUP_URL"
 
 export MODAL_API_EXPLAIN_URL="$EXPLAIN_URL"
 export MODAL_API_ASK_FOLLOWUP_URL="$FOLLOWUP_URL"
-    
+
 # Step 3: Wait for endpoints to be ready
 echo ""
 echo "Step 3: Waiting for endpoints to be ready..."
@@ -110,4 +110,3 @@ else
 fi
 
 exit $TEST_EXIT_CODE
-
