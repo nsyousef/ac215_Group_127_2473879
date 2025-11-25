@@ -26,9 +26,22 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build ${{ matrix.service }} image
+        env:
+          GCS_CREDENTIALS_JSON: ${{ secrets.GCS_CREDENTIALS_JSON }}
         run: |
           if [ "${{ matrix.service }}" = "data-processor" ]; then
             cd src/${{ matrix.service }}
+
+            # Create secrets directory if it doesn't exist
+            mkdir -p ../../../secrets
+
+            # If GitHub secret exists, write it; otherwise create empty file
+            if [ -n "$GCS_CREDENTIALS_JSON" ]; then
+              printf '%s' "$GCS_CREDENTIALS_JSON" > ../../../secrets/gcs-key.json
+            else
+              echo '{}' > ../../../secrets/gcs-key.json
+            fi
+
             docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile ../../..
           else
             cd src/${{ matrix.service }}
