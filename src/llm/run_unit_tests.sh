@@ -11,7 +11,7 @@ echo "================================"
 echo ""
 
 # Run tests excluding integration tests
-pytest tests/test_llm.py -v
+pytest tests/unit.py -v
 
 echo ""
 echo "================================"

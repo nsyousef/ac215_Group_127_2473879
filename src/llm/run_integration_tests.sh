@@ -85,7 +85,7 @@ sleep 5
 echo ""
 echo "Step 4: Running integration tests..."
 echo "--------------------------------"
-pytest tests/test_llm_modal_integration.py -v
+pytest tests/integration.py -v
 
 TEST_EXIT_CODE=$?
 
