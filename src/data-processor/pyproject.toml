@@ -15,4 +15,5 @@ dependencies = [
 dev = [
     "black>=24.0.0",
     "flake8>=7.0.0",
+    "pytest-cov>=4.1.0",
 ]
