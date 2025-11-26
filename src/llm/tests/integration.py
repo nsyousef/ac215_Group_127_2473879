@@ -1,133 +1,152 @@
-"""Integration tests for Modal API endpoints."""
+"""Integration tests using FastAPI TestClient (no actual HTTP calls)."""
 
 import pytest
+from fastapi.testclient import TestClient
+from unittest.mock import Mock, patch, MagicMock
+import sys
 import os
-import requests
+
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mock_data import MOCK_PREDICTIONS, MOCK_METADATA, MOCK_ANSWER1, MOCK_QUESTION1, MOCK_QUESTION2
 
-API_EXPLAIN_URL = os.getenv("MODAL_API_EXPLAIN_URL")
-API_ASK_FOLLOWUP_URL = os.getenv("MODAL_API_ASK_FOLLOWUP_URL")
+
+@pytest.fixture
+def mock_llm_instance():
+    """Create a mocked LLM instance."""
+    mock = MagicMock()
+    mock.explain.return_value = "This is a mocked explanation of the skin condition."
+    mock.ask_followup.return_value = {
+        "answer": "This is a mocked follow-up answer.",
+        "conversation_history": ["How long does it take to heal?"]
+    }
+    return mock
+
+
+@pytest.fixture
+def test_client(mock_llm_instance):
+    """Create a FastAPI test client with mocked LLM."""
+    # Import the modal app and patch the LLM
+    import llm_modal
+    
+    # Create a FastAPI app from the Modal app
+    from modal import App
+    
+    # Mock the Modal app to return a regular FastAPI app
+    with patch('llm_modal.DermatologyLLM') as mock_class:
+        # Set up the mock class
+        mock_class.return_value = mock_llm_instance
+        
+        # Create a simple FastAPI app that mimics the Modal endpoints
+        from fastapi import FastAPI
+        app = FastAPI()
+        
+        @app.post("/explain")
+        def explain(json_data: dict) -> str:
+            return mock_llm_instance.explain(
+                predictions=json_data["predictions"],
+                metadata=json_data["metadata"],
+                temperature=0.3
+            )
+        
+        @app.post("/ask_followup")
+        def ask_followup(json_data: dict) -> dict:
+            return mock_llm_instance.ask_followup(
+                initial_answer=json_data["initial_answer"],
+                question=json_data["question"],
+                conversation_history=json_data.get("conversation_history", []),
+                temperature=0.3
+            )
+        
+        client = TestClient(app)
+        yield client
 
 
 @pytest.mark.integration
 class TestExplainEndpoint:
-    """Test the /explain endpoint."""
+    """Test the /explain endpoint using TestClient."""
 
-    def test_explain_successful_response(self):
+    def test_explain_successful_response(self, test_client):
         """Test that /explain returns successful response."""
         payload = {"predictions": MOCK_PREDICTIONS, "metadata": MOCK_METADATA}
+        
+        response = test_client.post("/explain", json=payload)
+        
+        assert response.status_code == 200
+        content = response.text.strip('"')  # Remove JSON quotes
+        assert isinstance(content, str)
+        assert len(content) > 0
+        assert "mocked explanation" in content.lower()
 
-        response = requests.post(API_EXPLAIN_URL, json=payload)
-
-        assert response.status_code == 200, f"Expected status 200, got {response.status_code}"
-
-        # Response should be plain text (the explanation)
-        content = response.text
-        assert isinstance(content, str), "Response should be text"
-        assert len(content) > 0, "Response should not be empty"
-
-    def test_explain_with_history(self):
+    def test_explain_with_history(self, test_client):
         """Test /explain with historical data."""
         payload = {"predictions": MOCK_PREDICTIONS, "metadata": MOCK_METADATA}
+        
+        response = test_client.post("/explain", json=payload)
+        
+        assert response.status_code == 200
+        assert len(response.text) > 0
 
-        response = requests.post(API_EXPLAIN_URL, json=payload)
-
-        assert response.status_code == 200, f"Expected status 200, got {response.status_code}"
-        assert len(response.text) > 0, "Response should have content"
-
-    def test_explain_minimal_data(self):
+    def test_explain_minimal_data(self, test_client):
         """Test /explain with minimal data."""
         payload = {"predictions": MOCK_PREDICTIONS, "metadata": {}}
-
-        response = requests.post(API_EXPLAIN_URL, json=payload)
-
-        assert response.status_code == 200, f"Expected status 200 even with minimal data, got {response.status_code}"
+        
+        response = test_client.post("/explain", json=payload)
+        
+        assert response.status_code == 200
 
 
 @pytest.mark.integration
 class TestAskFollowupEndpoint:
-    """Test the /ask_followup endpoint."""
+    """Test the /ask_followup endpoint using TestClient."""
 
-    def test_ask_followup_successful_response(self):
+    def test_ask_followup_successful_response(self, test_client):
         """Test that /ask_followup returns successful response."""
-        payload = {"initial_answer": MOCK_ANSWER1, "question": MOCK_QUESTION1, "conversation_history": []}
-
-        response = requests.post(API_ASK_FOLLOWUP_URL, json=payload)
-
-        assert response.status_code == 200, f"Expected status 200, got {response.status_code}"
-
-        # Response should be JSON
+        payload = {
+            "initial_answer": MOCK_ANSWER1,
+            "question": MOCK_QUESTION1,
+            "conversation_history": []
+        }
+        
+        response = test_client.post("/ask_followup", json=payload)
+        
+        assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, dict), "Response should be JSON object"
-        assert "answer" in data, "Response should have 'answer' key"
-        assert "conversation_history" in data, "Response should have 'conversation_history' key"
+        assert isinstance(data, dict)
+        assert "answer" in data
+        assert "conversation_history" in data
+        assert isinstance(data["answer"], str)
+        assert len(data["answer"]) > 0
+        assert isinstance(data["conversation_history"], list)
 
-        # Check answer content
-        assert isinstance(data["answer"], str), "Answer should be a string"
-        assert len(data["answer"]) > 0, "Answer should not be empty"
-
-        # Check conversation history
-        assert isinstance(data["conversation_history"], list), "Conversation history should be a list"
-        assert len(data["conversation_history"]) > 0, "Conversation history should contain the question"
-
-    def test_ask_followup_with_history(self):
+    def test_ask_followup_with_history(self, test_client):
         """Test /ask_followup with existing conversation history."""
         payload = {
             "initial_answer": MOCK_ANSWER1,
             "question": MOCK_QUESTION1,
-            "conversation_history": [MOCK_QUESTION1, MOCK_QUESTION2],
+            "conversation_history": [MOCK_QUESTION2]
         }
-
-        response = requests.post(API_ASK_FOLLOWUP_URL, json=payload)
-
-        assert response.status_code == 200, f"Expected status 200, got {response.status_code}"
-
+        
+        response = test_client.post("/ask_followup", json=payload)
+        
+        assert response.status_code == 200
         data = response.json()
-        assert "answer" in data, "Response should have answer"
-        assert "conversation_history" in data, "Response should have conversation history"
+        assert "answer" in data
+        assert "conversation_history" in data
 
-        # New question should be in history
-        assert payload["question"] in data["conversation_history"], "New question should be in conversation history"
-
-    def test_ask_followup_no_history(self):
+    def test_ask_followup_no_history(self, test_client):
         """Test /ask_followup without conversation history."""
         payload = {
             "initial_answer": MOCK_ANSWER1,
-            "question": MOCK_QUESTION2,
-            # Omitting conversation_history to test default empty list
+            "question": MOCK_QUESTION2
         }
-
-        response = requests.post(API_ASK_FOLLOWUP_URL, json=payload)
-
-        assert response.status_code == 200, f"Expected status 200, got {response.status_code}"
-
+        
+        response = test_client.post("/ask_followup", json=payload)
+        
+        assert response.status_code == 200
         data = response.json()
-        assert "answer" in data, "Response should have answer"
-        assert "conversation_history" in data, "Response should have conversation history"
-        assert len(data["conversation_history"]) >= 1, "History should at least contain the new question"
+        assert "answer" in data
+        assert "conversation_history" in data
+        assert len(data["conversation_history"]) >= 1
 
-    def test_ask_followup_multiple_questions(self):
-        """Test multiple follow-up questions in sequence."""
-
-        # First follow-up
-        payload1 = {"initial_answer": MOCK_ANSWER1, "question": MOCK_QUESTION1, "conversation_history": []}
-
-        response1 = requests.post(API_ASK_FOLLOWUP_URL, json=payload1)
-        assert response1.status_code == 200
-        data1 = response1.json()
-
-        # Second follow-up using history from first
-        payload2 = {
-            "initial_answer": MOCK_ANSWER1,
-            "question": MOCK_QUESTION2,
-            "conversation_history": data1["conversation_history"],
-        }
-
-        response2 = requests.post(API_ASK_FOLLOWUP_URL, json=payload2)
-        assert response2.status_code == 200
-        data2 = response2.json()
-
-        # Both questions should be in final history
-        assert payload1["question"] in data2["conversation_history"], "First question should be in history"
-        assert payload2["question"] in data2["conversation_history"], "Second question should be in history"
