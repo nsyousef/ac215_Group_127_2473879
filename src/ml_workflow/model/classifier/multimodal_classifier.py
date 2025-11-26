@@ -150,6 +150,48 @@ class MultimodalClassifier(nn.Module):
         else:
             raise ValueError(f"Unsupported loss function: {self.loss_fn_name}")
 
+    @classmethod
+    def create_random(
+        cls,
+        vision_embedding_dim: int = 2048,
+        text_embedding_dim: int = 768,
+        num_classes: int = 57,
+        projection_dim: int = 256,
+        fusion_strategy: str = "concat_mlp",
+    ):
+        """
+        Create a randomly initialized model with default configuration.
+        Useful for testing without loading a checkpoint.
+
+        Args:
+            vision_embedding_dim: Size of vision embeddings (default: 2048)
+            text_embedding_dim: Size of text embeddings (default: 768)
+            num_classes: Number of output classes (default: 57)
+            projection_dim: Projection dimension (default: 256)
+            fusion_strategy: Fusion strategy (default: 'concat_mlp')
+
+        Returns:
+            MultimodalClassifier instance with random weights
+        """
+        config = {
+            "vision_embedding_dim": vision_embedding_dim,
+            "text_embedding_dim": text_embedding_dim,
+            "num_classes": num_classes,
+            "projection_dim": projection_dim,
+            "fusion_strategy": fusion_strategy,
+            "image_projection_hidden": [512],
+            "text_projection_hidden": [512],
+            "projection_activation": "relu",
+            "projection_dropout": 0.2,
+            "final_hidden_sizes": [256, 128],
+            "final_activation": "relu",
+            "final_dropout": 0.3,
+            "use_auxiliary_loss": False,
+            "loss_fn": "cross_entropy",
+            "label_smoothing": 0.0,
+        }
+        return cls(config)
+
     def _build_projection(
         self, input_dim: int, hidden_sizes: list, output_dim: int, activation: str, dropout_rate: float
     ) -> nn.Module:
@@ -238,7 +280,6 @@ class MultimodalClassifier(nn.Module):
                 vision_mask = modality_mask_info.get("vision_valid_mask")
                 text_mask = modality_mask_info.get("text_valid_mask")
 
-            aux_losses = []
             aux_total = None
 
             # Vision auxiliary loss only if modality is valid
