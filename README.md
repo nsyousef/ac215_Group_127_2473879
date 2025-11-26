@@ -2,6 +2,15 @@
 
 # Skin Disease Classification - AC215 Group 127.2473879
 
+**CI/CD Status & Test Coverage:**
+
+| Service | Build | Coverage |
+|---------|-------|----------|
+| **data-processor** | [![data-processor build](https://github.com/nsyousef/ac215_Group_127_2473879/actions/workflows/ci.yml/badge.svg?branch=milestone4)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) | [![coverage](https://img.shields.io/badge/coverage-reports-blue?logo=github)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) |
+| **llm** | [![llm build](https://github.com/nsyousef/ac215_Group_127_2473879/actions/workflows/ci.yml/badge.svg?branch=milestone4)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) | [![coverage](https://img.shields.io/badge/coverage-reports-blue?logo=github)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) |
+| **inference-cloud** | [![inference-cloud build](https://github.com/nsyousef/ac215_Group_127_2473879/actions/workflows/ci.yml/badge.svg?branch=milestone4)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) | [![coverage](https://img.shields.io/badge/coverage-reports-blue?logo=github)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) |
+| **frontend-react** | [![frontend-react build](https://github.com/nsyousef/ac215_Group_127_2473879/actions/workflows/ci.yml/badge.svg?branch=milestone4)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) | [![coverage](https://img.shields.io/badge/coverage-reports-blue?logo=github)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) |
+
 This project combines multiple datasets (Fitzpatrick17k, DDI, ISIC, SCIN, Derm1M) into a harmonized dataset and provides a complete ML pipeline for training skin disease classification models.
 
 ## Project Overview
@@ -68,7 +77,7 @@ For detailed information about each service, please refer to the individual READ
 1. **Application Design Document**: [`docs/architecture.pdf`](docs/architecture.pdf)
 2. **Data Versioning Document**: [`docs/milestone4.md`](docs/milestone4.md)
 3. **Model Training/Fine-tuning Document**: [`docs/training_summary.pdf`](docs/training_summary.pdf) and training logs in [`src/ml_workflow/logs/`](src/ml_workflow/logs/)
-4. **Testing Documentation**: 
+4. **Testing Documentation**:
    - Unit tests: `src/data-processor/tests/`, `src/llm/tests/unit.py`, `src/inference-cloud/tests/test_unit.py`
    - Integration tests: `src/frontend-react/python/tests/integration.py`, `src/llm/tests/integration.py`, `src/inference-cloud/tests/test_integration.py`
    - System tests: `src/llm/tests/system.py`, `src/inference-cloud/tests/test_system.py`
