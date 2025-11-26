@@ -14,6 +14,7 @@ dependencies = [
     "fastapi>=0.100.0",
     "requests>=2.31.0",
     "httpx>=0.24.0",
+    "modal",
 ]
 cpu = [
     "torch>=2.0.0; python_version < '4.0'",

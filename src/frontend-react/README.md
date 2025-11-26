@@ -48,13 +48,13 @@ src/frontend-react/
 │   └── preload.js        # Secure context bridge
 ├── python/               # Python backend (API orchestration)
 │   ├── api_manager.py    # Core ML/API orchestration
-│   ├── ml_server.py      # Standalone server mode
+│   ├── ml_server.py      # Read in commands from JavaScript and call Python functions
 │   ├── inference_local/  # Local vision encoder (EfficientNet)
 │   ├── tests/            # Unit/integration/system tests
 │   ├── Dockerfile        # Test container
 │   └── docker-shell.sh   # Test runner
 ├── src/                  # React frontend (Next.js)
-│   ├── app/             # Pages (home, chat, recommendations)
+│   ├── app/             # Main page
 │   ├── components/      # React components
 │   ├── contexts/        # State management (disease, profile)
 │   └── services/        # IPC communication layer

@@ -76,7 +76,7 @@ def mock_llm(mocker, mock_model, mock_processor):
     # Mock the generate method at the LLM instance level to return a string
     def mock_generate_impl(prompt, temperature=0.7):
         """Mock implementation that returns a string."""
-        return "This is a mocked diagnosis response based on the provided information."
+        return "This is a mocked diagnosis response based on the provided information. The diagnosis is eczema."
 
     llm_instance.generate = mock_generate_impl
 
