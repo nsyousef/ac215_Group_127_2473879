@@ -5,7 +5,7 @@ description = "LLM-powered dermatology assistant using MedGemma"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "torch>=2.0.0",
+    "torch>=2.0.0; sys_platform == 'linux'",
     "transformers>=4.30.0",
 ]
 

@@ -22,6 +22,9 @@ WORKDIR /app
 # Copy LLM module contents (includes tests/ and pyproject.toml)
 COPY --chown=app:app ac215_Group_127_2473879/src/llm/ ./
 
+# Install CPU-only PyTorch first to avoid CUDA bloat in CI
+RUN pip install --no-cache-dir --user torch --index-url https://download.pytorch.org/whl/cpu
+
 # Install dependencies including dev/test dependencies
 RUN uv sync --all-extras
 
