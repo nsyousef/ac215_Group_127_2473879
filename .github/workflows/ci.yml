@@ -49,6 +49,9 @@ jobs:
           elif [ "${{ matrix.service }}" = "llm" ]; then
             cd src/${{ matrix.service }}
             docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile.ci ../../..
+          elif [ "${{ matrix.service }}" = "inference-cloud" ]; then
+            cd src/${{ matrix.service }}
+            docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile ../../..
           else
             cd src/${{ matrix.service }}
             docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile .
