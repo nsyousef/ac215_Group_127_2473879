@@ -2,7 +2,7 @@
 set -e
 
 echo "Building Docker image..."
-docker build -f Dockerfile -t inference-cloud:test ..
+docker build -f Dockerfile -t inference-cloud:test ../../..
 
 echo ""
 echo "=========================================="
