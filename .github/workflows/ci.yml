@@ -158,8 +158,11 @@ jobs:
       - name: Run unit tests for ${{ matrix.service }}
         run: |
           case "${{ matrix.service }}" in
-            data-processor|llm|inference-cloud)
+            data-processor)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              ;;
+            llm|inference-cloud)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
               ;;
             frontend-react)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "python -m pytest python/tests/ -v --tb=short" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
@@ -174,7 +177,7 @@ jobs:
         run: |
           case "${{ matrix.service }}" in
             llm)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/ -v --tb=short -m 'integration'" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'integration'" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
               ;;
             inference-cloud)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/test_integration.py -v --tb=short" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
@@ -194,8 +197,11 @@ jobs:
       - name: Generate coverage report for ${{ matrix.service }}
         run: |
           case "${{ matrix.service }}" in
-            data-processor|llm|inference-cloud)
+            data-processor)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
+              ;;
+            llm|inference-cloud)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
               ;;
             frontend-react)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "python -m pytest python/tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
