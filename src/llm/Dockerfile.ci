@@ -2,6 +2,7 @@ FROM python:3.11-slim-bookworm
 
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 RUN set -ex; \
     for i in $(seq 1 8); do mkdir -p "/usr/share/man/man${i}"; done && \
@@ -29,4 +30,4 @@ RUN pip install --no-cache-dir --user --index-url https://download.pytorch.org/w
 RUN uv sync --dev
 
 # Run tests by default
-CMD ["/bin/bash", "-c", "source /app/.venv/bin/activate && pytest tests/ -v --tb=short"]
+CMD ["/bin/bash", "-c", "pytest tests/ -v --tb=short"]
