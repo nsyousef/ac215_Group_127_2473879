@@ -14,16 +14,6 @@ import numpy as np
 API_BASE_URL = "https://inference-cloud-469023639150.us-east4.run.app"
 
 
-def is_api_running():
-    """Check if API is accessible"""
-    try:
-        response = requests.get(f"{API_BASE_URL}/", timeout=5)
-        return response.status_code == 200
-    except Exception:  # Fixed: catch Exception instead of bare except
-        return False
-
-
-@pytest.mark.skipif(not is_api_running(), reason="API not running on Cloud Run")
 class TestSystemEndToEnd:
     """System tests for complete workflows"""
 
@@ -158,7 +148,6 @@ class TestSystemEndToEnd:
             assert len(data["top_k"]) == top_k
 
 
-@pytest.mark.skipif(not is_api_running(), reason="API not running")
 class TestSystemPerformance:
     """System tests for performance characteristics"""
 
@@ -211,7 +200,6 @@ class TestSystemPerformance:
         assert all(results)
 
 
-@pytest.mark.skipif(not is_api_running(), reason="API not running")
 class TestSystemErrorHandling:
     """System tests for error handling"""
 
