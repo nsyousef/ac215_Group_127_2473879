@@ -46,6 +46,9 @@ jobs:
           elif [ "${{ matrix.service }}" = "frontend-react" ]; then
             cd src/${{ matrix.service }}
             docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile.ci .
+          elif [ "${{ matrix.service }}" = "llm" ]; then
+            cd src/${{ matrix.service }}
+            docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile.ci .
           else
             cd src/${{ matrix.service }}
             docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile .

@@ -1,0 +1,29 @@
+FROM python:3.11-slim-bookworm
+
+ENV UV_LINK_MODE=copy
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+
+RUN set -ex; \
+    for i in $(seq 1 8); do mkdir -p "/usr/share/man/man${i}"; done && \
+    apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends $DEBIAN_PACKAGES && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip install --no-cache-dir --upgrade pip && \
+    pip install uv && \
+    useradd -ms /bin/bash app -d /home/app -u 1000 && \
+    mkdir -p /app && \
+    chown app:app /app
+
+USER app
+WORKDIR /app
+
+# Copy LLM module contents (includes tests/)
+COPY --chown=app:app llm/ ./
+
+# Install dependencies including dev/test dependencies
+RUN uv sync --all-extras
+
+# Run linting and tests
+CMD ["pytest", "tests/", "-v", "--tb=short"]
