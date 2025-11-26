@@ -30,4 +30,3 @@ env/
 *.pkl
 *.pth
 !tests/*.json
-

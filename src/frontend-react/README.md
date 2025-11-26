@@ -31,40 +31,111 @@ What happens on first run:
 - Python deps (e.g., `requests`) are installed from `python/requirements.txt`
 - Electron spawns a Python process per case (dummy mode), and the UI uses it via IPC
 
-## Using the App (Dummy Mode)
+## Using the App
 
-1. Click “Add condition/disease”
-2. Select a body position (map click or preset)
-3. Upload an image and add optional notes
-4. Click “Analyze”
-   - The app calls the Python `APIManager(dummy=True)` via IPC
-   - You’ll see predictions, an LLM explanation, and your uploaded image
-5. Going back to Home shows the new condition with a thumbnail and a dot on the body map
+1. **Create/Load Case**: On launch, create a new case or load an existing one
+2. **Add Disease Entry**: Upload image and add description/location
+3. **Get AI Analysis**: Python orchestrates ML predictions and LLM explanations
+4. **Track Over Time**: View progression across multiple entries
+5. **Chat with AI**: Ask follow-up questions about your condition
 
-## Data Storage (Dev)
+## Repository Structure
 
-- Python venv: `src/frontend-react/python/.venv/` (ignored by git)
-- App data is stored in your system's standard folder for applications.
-- These folders are local-only and should not be committed.
+```
+src/frontend-react/
+├── electron/              # Electron main process
+│   ├── main.js           # App lifecycle, IPC bridge
+│   └── preload.js        # Secure context bridge
+├── python/               # Python backend (API orchestration)
+│   ├── api_manager.py    # Core ML/API orchestration
+│   ├── ml_server.py      # Standalone server mode
+│   ├── inference_local/  # Local vision encoder (EfficientNet)
+│   ├── tests/            # Unit/integration/system tests
+│   ├── Dockerfile        # Test container
+│   └── docker-shell.sh   # Test runner
+├── src/                  # React frontend (Next.js)
+│   ├── app/             # Pages (home, chat, recommendations)
+│   ├── components/      # React components
+│   ├── contexts/        # State management (disease, profile)
+│   └── services/        # IPC communication layer
+└── public/              # Static assets
+```
 
-## Troubleshooting
+## Functionality and API Manager
 
-- Python not found or wrong version
-  - Install Python: `brew install python@3.11`
-  - Recreate venv: `npm run python:venv`
-  - Force a specific Python: `PYTHON=/usr/local/bin/python3 npm run python:venv`
-- Missing Python packages (e.g., ImportError: requests)
-  - Re-run venv setup: `npm run python:venv`
-- Electron doesn’t launch or crashes on start
-  - Ensure CLT installed: `xcode-select --install`
-  - Clean install: `rm -rf node_modules && npm install`
-- Port already in use (Next.js default 3000)
-  - Stop other dev servers or set a different port before running:
-    ```bash
-    PORT=3001 npm run dev-electron
-    ```
+### How It Works
 
-## Notes
+```
+┌─────────────┐
+│   React UI  │  ← User interacts with disease tracker
+└──────┬──────┘
+       │ IPC (stdin/stdout)
+┌──────▼─────────┐
+│    Electron    │  ← Spawns Python process per case
+└──────┬─────────┘
+       │ subprocess
+┌──────▼─────────────────────────────┐
+│   API Manager (Python)              │
+│   1. Vision Encoder (local)         │  ← Generate image embeddings
+│   2. Cloud ML (Google Cloud Run)    │  ← Disease predictions
+│   3. Modal LLM (MedGemma)          │  ← Medical explanations
+└──────────────────────────────────────┘
+```
 
-- Public dummy data under `public/assets/data/` is kept for reference but not loaded anymore.
-- This README targets dev only. Packaging/bundling the Python env for production will be documented later.
+### API Manager (`python/api_manager.py`)
+
+Core orchestration layer that:
+
+**1. Manages ML Pipeline**
+```python
+APIManager(case_id: str, dummy: bool = False)
+  ├─ predict_disease(image, text) → predictions
+  ├─ get_llm_explanation(predictions, metadata) → explanation
+  └─ ask_followup_question(question, context) → answer
+```
+
+**2. Integrates Three API Types**
+- **Cloud ML** (`inference-cloud-*.run.app`): Text embedding + disease prediction
+- **Modal LLM** (`*.modal.run`): Medical explanations via MedGemma-4B/27B
+- **Local Vision** (`inference_local/`): EfficientNet-based image encoding
+
+**3. Handles Data Persistence**
+- Case history, conversation logs, demographics
+- JSON storage in system app data directory
+
+### Quick Start (Development)
+```bash
+cd src/frontend-react
+npm run dev-electron  # Launches Next.js + Electron with Python backend
+```
+
+### Test Python Backend Only
+```bash
+cd python
+python3 ml_server.py --case-id test_case --dummy
+```
+
+### Production Build
+```bash
+npm run build          # Build Next.js
+npm run electron-pack  # Package for macOS → dist/Pibu-AI-*.dmg
+```
+
+## Configuration
+
+### Environment Variables (Python)
+```bash
+# Cloud ML APIs
+export BASE_URL="https://inference-cloud-469023639150.us-east4.run.app"
+
+# Modal LLM APIs (optional override)
+export LLM_EXPLAIN_URL="https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explain.modal.run"
+export LLM_FOLLOWUP_URL="https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-followup.modal.run"
+```
+
+### Data Storage
+- **macOS**: `~/Library/Application Support/pibu-ai/`
+- **Linux**: `~/.config/pibu-ai/`
+- **Windows**: `%APPDATA%/pibu-ai/`
+
+Each case stored as JSON: `{case_id}_history.json`, `{case_id}_chat.json`, etc.
