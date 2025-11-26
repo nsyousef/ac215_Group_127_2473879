@@ -5,10 +5,16 @@ import sys
 import pytest
 from unittest.mock import Mock, MagicMock
 
+# Mock torch before importing llm module to avoid ModuleNotFoundError
+sys.modules["torch"] = MagicMock()
+sys.modules["torch.nn"] = MagicMock()
+sys.modules["torch.cuda"] = MagicMock()
+sys.modules["transformers"] = MagicMock()
+
 # Add parent directory to path to import llm and prompts modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from llm import LLM
+from llm import LLM  # noqa: E402
 
 
 @pytest.fixture
