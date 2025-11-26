@@ -12,6 +12,7 @@ sys.modules["torch"] = MagicMock()
 sys.modules["torch.nn"] = MagicMock()
 sys.modules["torchvision"] = MagicMock()
 sys.modules["torchvision.transforms"] = MagicMock()
+sys.modules["torchvision.models"] = MagicMock()
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
