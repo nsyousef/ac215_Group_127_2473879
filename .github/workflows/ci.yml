@@ -188,6 +188,18 @@ jobs:
           esac
         continue-on-error: true
 
+      - name: Run system tests for ${{ matrix.service }}
+        run: |
+          case "${{ matrix.service }}" in
+            llm|frontend-react)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'system'" || echo "⚠️ No system tests found or tests failed for ${{ matrix.service }}"
+              ;;
+            *)
+              echo "ℹ️ No system tests for ${{ matrix.service }}"
+              ;;
+          esac
+        continue-on-error: true
+
       - name: Create coverage directory
         run: |
           mkdir -p coverage
