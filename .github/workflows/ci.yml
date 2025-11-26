@@ -159,7 +159,7 @@ jobs:
         run: |
           case "${{ matrix.service }}" in
             data-processor|llm|inference-cloud)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -i -c ". /app/.venv/bin/activate && pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
               ;;
             frontend-react)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "python -m pytest python/tests/ -v --tb=short" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
@@ -174,10 +174,10 @@ jobs:
         run: |
           case "${{ matrix.service }}" in
             llm)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/ -v --tb=short -m 'integration'" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -i -c ". /app/.venv/bin/activate && pytest tests/ -v --tb=short -m 'integration'" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
               ;;
             inference-cloud)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/test_integration.py -v --tb=short" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -i -c ". /app/.venv/bin/activate && pytest tests/test_integration.py -v --tb=short" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
               ;;
             *)
               echo "ℹ️ No integration tests for ${{ matrix.service }}"
@@ -195,7 +195,7 @@ jobs:
         run: |
           case "${{ matrix.service }}" in
             data-processor|llm|inference-cloud)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -i -c ". /app/.venv/bin/activate && pytest tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
               ;;
             frontend-react)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "python -m pytest python/tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
