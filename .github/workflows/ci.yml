@@ -96,7 +96,6 @@ jobs:
 
       - name: Run Black formatter check for ${{ matrix.service }}
         run: |
-          cd src/${{ matrix.service }}
           case "${{ matrix.service }}" in
             frontend-react)
               echo "Skipping Python linting for frontend service"
@@ -109,7 +108,6 @@ jobs:
 
       - name: Run Flake8 linter for ${{ matrix.service }}
         run: |
-          cd src/${{ matrix.service }}
           case "${{ matrix.service }}" in
             frontend-react)
               echo "Skipping Python linting for frontend service"
