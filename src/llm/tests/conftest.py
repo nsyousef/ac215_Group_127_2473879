@@ -70,4 +70,14 @@ def mock_llm(mocker, mock_model, mock_processor):
     mock_output = [mock_token_ids]  # outputs[0] returns mock_token_ids which can be sliced
     llm_instance.model.generate.return_value = mock_output
 
+    # Mock the processor.decode to return a proper string response
+    mock_processor.decode.return_value = "This is a mocked response from the model."
+
+    # Mock the generate method at the LLM instance level to return a string
+    def mock_generate_impl(prompt, temperature=0.7):
+        """Mock implementation that returns a string."""
+        return "This is a mocked diagnosis response based on the provided information."
+
+    llm_instance.generate = mock_generate_impl
+
     return llm_instance
