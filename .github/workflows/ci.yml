@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [data-processor, llm] # frontend-react, ml_workflow, inference-cloud]
+        service: [data-processor, llm, frontend-react, inference-cloud]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -73,7 +73,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        service: [data-processor, llm] # frontend-react, ml_workflow, inference-cloud]
+        service: [data-processor, llm, frontend-react, inference-cloud]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -128,7 +128,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        service: [data-processor, llm]
+        service: [data-processor, llm, frontend-react, inference-cloud]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -155,11 +155,11 @@ jobs:
       - name: Run unit tests for ${{ matrix.service }}
         run: |
           case "${{ matrix.service }}" in
-            data-processor|ml_workflow|inference-cloud|llm)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+            data-processor|llm|inference-cloud)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/test_unit.py -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
               ;;
             frontend-react)
-              docker run --rm -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} npm test || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest python/tests/unit.py -v --tb=short" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
               ;;
             *)
               echo "⚠️ Unknown service: ${{ matrix.service }}"
@@ -173,6 +173,9 @@ jobs:
             llm)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/ -v --tb=short -m 'integration'" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
               ;;
+            inference-cloud)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/test_integration.py -v --tb=short" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
+              ;;
             *)
               echo "ℹ️ No integration tests for ${{ matrix.service }}"
               ;;
@@ -182,8 +185,11 @@ jobs:
       - name: Generate coverage report for ${{ matrix.service }}
         run: |
           case "${{ matrix.service }}" in
-            data-processor|ml_workflow|inference-cloud|llm)
+            data-processor|llm|inference-cloud)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/ --cov --cov-report=xml --cov-report=html:/workspace/coverage" || true
+              ;;
+            frontend-react)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest python/tests/ --cov --cov-report=xml --cov-report=html:/workspace/coverage" || true
               ;;
           esac
         continue-on-error: true
