@@ -33,4 +33,3 @@ RUN chmod +x /app/run_unit_tests.sh /app/run_integration_tests.sh /app/run_syste
 
 # Default command
 CMD ["./run_unit_tests.sh"]
-

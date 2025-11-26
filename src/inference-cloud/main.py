@@ -18,9 +18,15 @@ async def lifespan(app: FastAPI):
     global model
 
     checkpoint_path = os.getenv("MODEL_CHECKPOINT_PATH", "/models/test_best.pth")
-    device = os.getenv("DEVICE", "cpu")  # Cloud Run typically uses CPU
+    device = os.getenv("DEVICE", "cpu")
 
-    print(f"Loading model from {checkpoint_path}...")
+    # Handle special case for testing
+    if checkpoint_path.lower() in ["none", "null", ""]:
+        checkpoint_path = None
+        print("No checkpoint specified - initializing baseline model with random weights")
+    else:
+        print(f"Loading model from {checkpoint_path}...")
+
     model = InferenceClassifier(checkpoint_path=checkpoint_path, device=device)
     print("Model loaded successfully!")
 

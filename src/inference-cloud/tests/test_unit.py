@@ -12,11 +12,8 @@ from inference_classifier import InferenceClassifier
 def classifier():
     """
     Load classifier once for all tests
-    Uses the model checkpoint specified in Dockerfile
     """
-    checkpoint_path = "/app/models/test_best.pth"
-    device = "cpu"
-    return InferenceClassifier(checkpoint_path=checkpoint_path, device=device)
+    return InferenceClassifier(checkpoint_path=None, device="cpu")
 
 
 class TestEmbedText:

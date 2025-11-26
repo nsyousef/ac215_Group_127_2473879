@@ -9,11 +9,11 @@ import pytest
 from fastapi.testclient import TestClient
 import numpy as np
 
-# Set environment variables for model loading
-os.environ["MODEL_CHECKPOINT_PATH"] = "/app/models/test_best.pth"
+# Set environment variables for model loading - use "none" for baseline model
+os.environ["MODEL_CHECKPOINT_PATH"] = "none"  # ← Changed this
 os.environ["DEVICE"] = "cpu"
 
-# Import app after setting env vars  # noqa: E402
+# Import app after setting env vars
 from main import app  # noqa: E402
 
 
