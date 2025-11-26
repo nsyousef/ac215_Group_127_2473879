@@ -12,8 +12,8 @@ RUN npm ci --ignore-scripts
 
 COPY . .
 
-# Install CPU-only PyTorch to avoid compatibility issues
-RUN pip3 install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu || true
+# Use CI-specific requirements file that excludes torch to save disk space
+RUN cp python/requirements-ci.txt python/requirements.txt
 
 # Now run the postinstall script that sets up Python environment
 RUN node ./scripts/setup-python-env.js
