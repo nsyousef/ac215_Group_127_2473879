@@ -14,9 +14,7 @@ dev = [
     "black>=24.0.0",
     "flake8>=7.0.0",
 ]
-
 # CPU-only torch for CI environments
-[project.optional-dependencies]
 cpu = [
     "torch>=2.0.0; python_version < '4.0'",
 ]
