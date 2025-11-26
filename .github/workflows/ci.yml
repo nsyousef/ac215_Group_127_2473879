@@ -161,7 +161,10 @@ jobs:
             data-processor)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
               ;;
-            llm|inference-cloud)
+            llm)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "cd /app && bash run_unit_tests.sh" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              ;;
+            inference-cloud)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
               ;;
             frontend-react)
@@ -177,7 +180,7 @@ jobs:
         run: |
           case "${{ matrix.service }}" in
             llm)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'integration'" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "cd /app && bash run_integration_tests.sh" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
               ;;
             inference-cloud)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/test_integration.py -v --tb=short" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
@@ -191,7 +194,10 @@ jobs:
       - name: Run system tests for ${{ matrix.service }}
         run: |
           case "${{ matrix.service }}" in
-            llm|frontend-react)
+            llm)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "cd /app && bash run_system_tests.sh" || echo "⚠️ No system tests found or tests failed for ${{ matrix.service }}"
+              ;;
+            frontend-react)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'system'" || echo "⚠️ No system tests found or tests failed for ${{ matrix.service }}"
               ;;
             *)
