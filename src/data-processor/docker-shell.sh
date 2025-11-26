@@ -6,7 +6,7 @@ LOG_FILE="data-processor.log"
 
 {
     echo "Building data-processor Docker container..."
-    docker build -t data-processor -f Dockerfile ../../..
+    docker build -t data-processor -f Dockerfile.ci ../../..
 
     echo ""
     echo "Running data-processor..."
