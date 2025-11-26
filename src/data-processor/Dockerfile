@@ -22,7 +22,7 @@ WORKDIR /app
 COPY --chown=app:app ac215_Group_127_2473879/src/data-processor ./
 COPY --chown=app:app secrets/ ./secrets/
 
-RUN uv sync
+RUN uv sync --all-extras
 
 ENTRYPOINT ["/bin/bash"]
 CMD ["-c", "\
