@@ -2,6 +2,7 @@ FROM python:3.11-slim-bookworm
 
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 ENV GOOGLE_APPLICATION_CREDENTIALS=secrets/apcomp215.json
 
 RUN set -ex; \

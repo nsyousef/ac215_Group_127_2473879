@@ -197,14 +197,11 @@ jobs:
       - name: Generate coverage report for ${{ matrix.service }}
         run: |
           case "${{ matrix.service }}" in
-            data-processor|inference-cloud)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "pytest tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
-              ;;
-            llm)
+            data-processor|llm|inference-cloud)
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "pytest tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
               ;;
             frontend-react)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "pytest python/tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "python -m pytest python/tests/ --cov --cov-report=xml:/workspace/coverage/coverage.xml --cov-report=html:/workspace/coverage" || true
               ;;
           esac
         continue-on-error: true
