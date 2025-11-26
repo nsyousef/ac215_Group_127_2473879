@@ -27,7 +27,7 @@ COPY --chown=app:app ac215_Group_127_2473879/src/llm/ ./
 RUN pip install --no-cache-dir --user --index-url https://download.pytorch.org/whl/cpu torch
 
 # Create venv and sync dependencies
-RUN uv venv /app/.venv && uv sync --dev
+RUN uv venv /app/.venv && uv sync
 
 # Run tests by default
 CMD ["/bin/bash", "-c", "pytest tests/ -v --tb=short"]
