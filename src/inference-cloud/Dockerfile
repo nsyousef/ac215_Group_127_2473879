@@ -22,7 +22,7 @@ WORKDIR /app
 # Copy ml_workflow first (from parent context)
 COPY --chown=app:app ml_workflow/ ./ml_workflow/
 
-# Copy inference-cloud contents
+# Copy inference-cloud contents (includes docker-entrypoint.sh and tests/)
 COPY --chown=app:app inference-cloud/ ./
 
 # Install dependencies
@@ -32,9 +32,13 @@ RUN uv sync
 ENV PORT=8080
 ENV MODEL_CHECKPOINT_PATH=/app/models/test_best.pth
 ENV DEVICE=cpu
+ENV DEV=0
 
 # Expose port
 EXPOSE 8080
 
-# Start FastAPI server automatically
-CMD ["/bin/bash", "-c", "source /app/.venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
+# Make entrypoint executable (already copied above)
+RUN chmod +x /app/docker-entrypoint.sh
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["serve"]
