@@ -20,7 +20,7 @@ USER app
 WORKDIR /app
 
 # Copy LLM module contents (includes tests/)
-COPY --chown=app:app llm/ ./
+COPY --chown=app:app ac215_Group_127_2473879/src/llm/ ./
 
 # Install dependencies including dev/test dependencies
 RUN uv sync --all-extras
