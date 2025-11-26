@@ -101,7 +101,7 @@ jobs:
               echo "Skipping Python linting for frontend service"
               ;;
             *)
-              docker run --rm -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} /bin/bash -c "source /app/.venv/bin/activate && black --check --line-length 120 /workspace"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && black --check --line-length 120 /workspace"
               ;;
           esac
         continue-on-error: false
@@ -113,7 +113,7 @@ jobs:
               echo "Skipping Python linting for frontend service"
               ;;
             *)
-              docker run --rm -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} /bin/bash -c "source /app/.venv/bin/activate && flake8 --max-line-length=120 --extend-ignore=E203,W503 /workspace"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && flake8 --max-line-length=120 --extend-ignore=E203,W503 /workspace"
               ;;
           esac
         continue-on-error: true
