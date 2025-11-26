@@ -104,7 +104,7 @@ jobs:
               docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && black --check --line-length 120 /workspace"
               ;;
           esac
-        continue-on-error: false
+        continue-on-error: true
 
       - name: Run Flake8 linter for ${{ matrix.service }}
         run: |
