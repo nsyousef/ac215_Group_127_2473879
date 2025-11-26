@@ -158,11 +158,14 @@ jobs:
       - name: Run unit tests for ${{ matrix.service }}
         run: |
           case "${{ matrix.service }}" in
-            data-processor|llm|inference-cloud)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/test_unit.py -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+            data-processor)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              ;;
+            llm|inference-cloud)
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
               ;;
             frontend-react)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest python/tests/unit.py -v --tb=short" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "source /app/.venv/bin/activate && pytest python/tests/ -v --tb=short" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
               ;;
             *)
               echo "⚠️ Unknown service: ${{ matrix.service }}"
