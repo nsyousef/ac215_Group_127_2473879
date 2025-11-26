@@ -3,6 +3,9 @@ FROM node:18-slim
 # Install Python and build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv python3-pip && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Create symlink for python command
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -15,8 +18,14 @@ COPY . .
 # Use CI-specific requirements file that excludes torch to save disk space
 RUN cp python/requirements-ci.txt python/requirements.txt
 
-# Now run the postinstall script that sets up Python environment
-RUN node ./scripts/setup-python-env.js
+# Create Python virtual environment and install requirements
+RUN python3 -m venv /app/venv && \
+    . /app/venv/bin/activate && \
+    pip install --upgrade pip && \
+    pip install -r python/requirements.txt
+
+# Set venv in PATH
+ENV PATH="/app/venv/bin:$PATH"
 
 # Run linting and unit tests
 CMD ["/bin/bash", "-c", "npm run lint || true"]

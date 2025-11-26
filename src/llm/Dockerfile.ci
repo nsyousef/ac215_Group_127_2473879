@@ -26,8 +26,8 @@ COPY --chown=app:app ac215_Group_127_2473879/src/llm/ ./
 # Install CPU-only PyTorch first to prevent CUDA installation
 RUN pip install --no-cache-dir --user --index-url https://download.pytorch.org/whl/cpu torch
 
-# Install dependencies with dev extras only (skips CUDA torch)
-RUN uv sync --dev
+# Install base and dev dependencies (skips cpu extra which would reinstall torch)
+RUN uv sync
 
 # Run tests by default
 CMD ["/bin/bash", "-c", "pytest tests/ -v --tb=short"]
