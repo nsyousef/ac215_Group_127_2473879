@@ -7,8 +7,8 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-# Install without running postinstall scripts (which tries to set up Python before it's available)
-RUN npm ci --ignore-scripts
+# Install dependencies using npm install with frozen lockfile
+RUN npm install --frozen-lockfile --ignore-scripts
 
 COPY . .
 
