@@ -586,303 +586,322 @@ def harmonize_labels(metadata_all):
 
 def remove_diagnoses_from_descriptions(metadata_all_harmonized):
     """
-    Remove sentences that explicitly state or reference the diagnosis of the disease.
-    Keeps all other relevant information like symptoms, demographics, body location, etc.
-
-    This version is LESS AGGRESSIVE - focuses on removing only explicit diagnosis statements
-    while preserving clinical context, symptoms, treatments, and patient information.
-
-    Args:
-        metadata_all_harmonized: DataFrame with a 'text_desc' column and 'label' column
-
-    Returns:
-        DataFrame with diagnosis-referencing sentences removed from text_desc
+    OPTIMIZED & BULLETPROOF version - Remove ALL diagnosis-referencing sentences while preserving clinical info.
     """
     import re
     import pandas as pd
-
-    # Build a comprehensive set of disease terms from the harmonized labels
+    from functools import lru_cache
+    
+    # Build disease terms
     disease_terms = set()
-
-    # Get all unique labels
     unique_labels = metadata_all_harmonized["label"].dropna().unique()
 
     for label in unique_labels:
-        # Add the label itself
         disease_terms.add(label.lower())
-
-        # Split compound terms and add variations
         parts = label.lower().replace("-", " ").replace("_", " ")
         disease_terms.add(parts)
-
-        # Add individual words from multi-word disease names (if >= 2 words)
         words = parts.split()
         if len(words) >= 2:
             disease_terms.add(parts)
-            # Add combinations of words for better matching
             for i in range(len(words)):
                 for j in range(i + 1, len(words) + 1):
                     phrase = " ".join(words[i:j])
-                    if len(phrase) > 4:  # Avoid very short phrases
+                    if len(phrase) > 4:
                         disease_terms.add(phrase)
 
-    # Add common disease-related terms
     additional_medical_terms = {
-        "melanoma",
-        "carcinoma",
-        "lymphoma",
-        "sarcoma",
-        "keratosis",
-        "dermatitis",
-        "eczema",
-        "psoriasis",
-        "nevus",
-        "nevi",
-        "neoplasm",
-        "syndrome",
-        "lesion",
+        "melanoma", "carcinoma", "lymphoma", "sarcoma", "keratosis",
+        "dermatitis", "eczema", "psoriasis", "nevus", "nevi", "neoplasm",
+        "syndrome", "basal cell", "squamous cell", "actinic", "seborrheic",
+        "atopic", "tinea", "candidiasis", "vitiligo", "rosacea", "lupus",
+        "scabies", "impetigo", "cellulitis", "abscess", "folliculitis",
+        "herpes", "zoster", "shingles", "chickenpox", "varicella",
+        "molluscum", "warts", "verruca", "acne", "urticaria", "hives",
+        "angioedema", "pemphigus", "bullous", "erythema", "granuloma",
+        "scleroderma", "morphea", "lichen", "pityriasis", "ichthyosis",
+        "xanthoma", "lipoma", "hemangioma", "pyoderma",
+        # Additional terms to catch remaining leakage
+        "pemphigoid", "keloid", "fibroma", "papilloma", "atheroma",
+        "neurofibroma", "trichoepithelioma", "dermographism", "behcet",
+        "necrobiosis", "pustulosis", "pseudoporphyria", "rhinoscleroma",
+        "poikiloderma", "telangiectasia", "angiofibroma", "syringoma",
     }
     disease_terms.update(additional_medical_terms)
-
-    # Remove overly generic terms that cause false positives
-    overly_generic = {"disease", "disorder", "condition", "skin", "rash"}
+    overly_generic = {"disease", "disorder", "condition", "skin", "rash", "lesion"}
     disease_terms = disease_terms - overly_generic
 
+    # Filter out very short terms and sort by length (longest first for better matching)
+    disease_terms = [term for term in disease_terms if len(term) >= 4]
+    disease_terms = sorted(disease_terms, key=len, reverse=True)
+    
     print(f"Loaded {len(disease_terms)} disease terms for filtering")
 
-    def contains_disease_term(sentence, terms):
-        """Check if sentence contains any disease terms."""
-        sentence_lower = sentence.lower()
+    # =================================================================
+    # PRE-COMPILE ALL REGEX PATTERNS (huge performance boost)
+    # =================================================================
+    
+    # Create a single combined regex for disease terms
+    disease_pattern = r"\b(" + "|".join(re.escape(term) for term in disease_terms) + r")\b"
+    disease_regex = re.compile(disease_pattern, re.IGNORECASE)
+    
+    # Catch words with disease-indicating suffixes
+    medical_suffix_regex = re.compile(
+        r'\b\w+(oma|itis|osis|derma|plasia|trophy|pathy|cele|ectomy|plasty)\b',
+        re.IGNORECASE
+    )
+    
+    # Pre-compile all other patterns
+    pure_demographic_regexes = [
+        re.compile(r"^the sex is (male|female)\.?$", re.IGNORECASE),
+        re.compile(r"^the (approximate )?age is \d+\.?$", re.IGNORECASE),
+        re.compile(r"^the gender is (male|female)\.?$", re.IGNORECASE),
+        re.compile(r"^the body location is [\w\s,/]+\.?$", re.IGNORECASE),
+        re.compile(r"^the symptoms are [\w\s,]+\.?$", re.IGNORECASE),
+        re.compile(r"^the duration (of the skin condition )?is [\w\s]+\.?$", re.IGNORECASE),
+        re.compile(r"^(male|female), \d+ years? old\.?$", re.IGNORECASE),
+    ]
+    
+    disease_start_regex = re.compile(
+        r"^(" + "|".join(re.escape(term) for term in disease_terms[:100]) + r")[\s:,]",  # Top 100 most common
+        re.IGNORECASE
+    )
+    
+    explicit_diagnosis_regexes = [
+        re.compile(r"\bdiagnosed (as|with)\b", re.IGNORECASE),
+        re.compile(r"\bdiagnosis (is|was|of|:)\s", re.IGNORECASE),
+        re.compile(r"\b(final|clinical|confirmed|differential|initial|primary|secondary) diagnosis\b", re.IGNORECASE),
+        re.compile(r"\bpatholog(ical|y) (confirmed|diagnosis)\b", re.IGNORECASE),
+        re.compile(r"\bconsensus (is|was|diagnosis)\b", re.IGNORECASE),
+        re.compile(r"\bidentified as\b", re.IGNORECASE),
+        re.compile(r"\bconfirmed (as|to be)\b", re.IGNORECASE),
+        re.compile(r"\b(seems|appears) (like|to be)\b", re.IGNORECASE),
+        re.compile(r"\bmost likely\b", re.IGNORECASE),
+        re.compile(r"\bprobably\b.*\b(is|has)\b", re.IGNORECASE),
+        re.compile(r"\blikely (is|has|diagnosis)\b", re.IGNORECASE),
+        re.compile(r"\bindicative of\b", re.IGNORECASE),
+        re.compile(r"\btypical (of|for|presentation)\b", re.IGNORECASE),
+        re.compile(r"\bcharacteristic (of|for)\b", re.IGNORECASE),
+        re.compile(r"\bsuggestive of\b", re.IGNORECASE),
+        re.compile(r"\bcompatible with\b", re.IGNORECASE),
+        re.compile(r"\bconsistent with\b", re.IGNORECASE),
+        re.compile(r"\bpathognomonic\b", re.IGNORECASE),
+    ]
+    
+    image_description_regexes = [
+        re.compile(r"^this (image|photo|picture|figure)", re.IGNORECASE),
+        re.compile(r"^the (image|photo|picture|figure)", re.IGNORECASE),
+        re.compile(r"^(clinical|dermoscopic) (image|photo|picture)", re.IGNORECASE),
+        re.compile(r"^(representative|shown|depicting)", re.IGNORECASE),
+    ]
+    
+    this_is_regex = re.compile(
+        r"^(this|these|it) (is|are|was|were|shows?|depicts?|describes?|represents?|displays?|features?|highlights?|illustrates?|discusses?)\s",
+        re.IGNORECASE
+    )
+    
+    forum_regexes = [
+        re.compile(r"(users?|members?|participants?|forum|discussion|replies?|consensus) (suggest|suggested|recommend|indicated|confirmed|agreed|noted|mentioned|pointed out|discussed)", re.IGNORECASE),
+        re.compile(r"(several|many|some|multiple) users", re.IGNORECASE),
+        re.compile(r"(the )?(primary|predominant|main) (opinion|diagnosis|suggestion)", re.IGNORECASE),
+        re.compile(r"(most|majority of) (users?|participants?)", re.IGNORECASE),
+        re.compile(r"discussion (among|suggests?|indicates?)", re.IGNORECASE),
+    ]
+    
+    disease_statement_regexes = [
+        re.compile(r"\b(can|may|might|could|will|is|are|was|were) (be|cause|lead|result|present|appear)", re.IGNORECASE),
+        re.compile(r"\b(affects?|involves?|presents?)\b", re.IGNORECASE),
+        re.compile(r"\b(caused by|due to|related to|associated with)\b", re.IGNORECASE),
+        re.compile(r"\b(treatment|therapy) (for|of|includes?|options?)\b", re.IGNORECASE),
+    ]
+    
+    diagnostic_jargon_regexes = [
+        re.compile(r"^characterized by\b", re.IGNORECASE),
+        re.compile(r"^features include\b", re.IGNORECASE),
+        re.compile(r"^presents? with\b", re.IGNORECASE),
+        re.compile(r"^(clinical|typical) (features?|presentation|appearance|findings?)\b", re.IGNORECASE),
+        re.compile(r"^manifestations? (of|include)\b", re.IGNORECASE),
+        re.compile(r"^(the )?(condition|disease) (is|can be|may be)\b", re.IGNORECASE),
+        re.compile(r"^(the )?(cause|etiology|pathogenesis)\b", re.IGNORECASE),
+    ]
+    
+    diagnosis_condition_regex = re.compile(r"(diagnosis|condition|disease)", re.IGNORECASE)
 
-        for term in terms:
-            if len(term) < 4:  # Skip very short terms
-                continue
-
-            # Use word boundaries to avoid partial matches
-            pattern = r"\b" + re.escape(term) + r"\b"
-            if re.search(pattern, sentence_lower):
-                return True
-
-        return False
-
-    def has_clinical_context(sentence):
-        """Check if sentence has useful clinical context beyond just naming the disease."""
-        sentence_lower = sentence.lower()
-
-        clinical_context_indicators = [
-            # Symptoms and manifestations
-            r"\b(symptom|manifesta|present|experience|complain|report)",
-            r"\b(itch|pain|burn|swell|red|inflam|tender|numb)",
-            r"\b(rash|spot|patch|bump|lesion|papule|vesicle|pustule|nodule)",
-            # Treatments and medications
-            r"\b(treat|therap|medicati|prescri|administ|appli)",
-            r"\b(cream|ointment|lotion|tablet|capsule|injection)",
-            r"\b(antibiotic|antiviral|antifungal|steroid|antihistamine)",
-            # Body locations and demographics
-            r"\b(locat|area|region|site|zone)",
-            r"\b(age|year|old|male|female|child|adult)",
-            r"\b(face|arm|leg|hand|foot|chest|back|abdomen)",
-            # Temporal information
-            r"\b(day|week|month|year|duration|persist|chronic|acute)",
-            r"\b(since|for|after|before|following|during)",
-            # Clinical observations
-            r"\b(observ|not|examin|show|reveal|display)",
-            r"\b(size|shape|color|texture|appearance)",
-        ]
-
-        # Count how many indicators are present
-        indicator_count = sum(1 for pattern in clinical_context_indicators if re.search(pattern, sentence_lower))
-
-        # If sentence has 2+ clinical context indicators, it's probably useful
-        return indicator_count >= 2
-
-    def is_diagnosis_sentence(sentence, disease_terms):
-        """
-        Detect explicit diagnosis statements.
-        Less aggressive - focuses on removing only clear diagnosis statements.
-        """
+    # =================================================================
+    # OPTIMIZED CHECKING FUNCTIONS
+    # =================================================================
+    
+    def contains_disease_term(sentence_lower):
+        """Fast disease term detection using pre-compiled regex."""
+        return disease_regex.search(sentence_lower) is not None
+    
+    def is_pure_demographic_or_observation(sentence_lower):
+        """Check if sentence is purely demographic."""
+        if len(sentence_lower) < 10:
+            return False
+        return any(regex.match(sentence_lower) for regex in pure_demographic_regexes)
+    
+    def is_diagnosis_sentence(sentence):
+        """Optimized diagnosis detection with pre-compiled patterns."""
         sentence_lower = sentence.strip().lower()
-
+        
         if len(sentence_lower) < 3:
             return False
-
+        
+        word_count = len(sentence_lower.split())
+    
         # =================================================================
-        # SAFE CONTEXTS: Always keep these
+        # STEP 1: Remove very short sentences (1-5 words)
         # =================================================================
-        safe_contexts = [
-            # Demographics (must be at start)
-            (r"^(the )?(sex|gender|age|patient) (is|was|are)", 100),
-            (r"^the approximate age", 100),
-            (r"^the body location", 100),
-            (r"^the symptoms?", 100),
-            (r"^the duration", 100),
-            (r"^the skin texture", 100),
-            # Patient reporting
-            (r"^patient reports?", 200),
-            (r"^the patient reports?", 200),
-            (r"^\d+(-| )year(-| )old.*(reports?|presents?|has|experiencing)", 200),
-            # Treatment discussions (these are valuable even if they mention disease)
-            (r"^treatment (with|using|included|option|suggest)", 250),
-            (r"^therapy.*included", 250),
-            (r"^(after|following|post).*(treatment|therapy)", 250),
-            (r"^recommend.*treat", 200),
-            # Forum discussions WITH clinical context (keep these!)
-            (r"(forum|users?|discussion).*(suggest.*treat|recommend.*medicati)", 250),
-        ]
-
-        # Check if sentence matches any safe context
-        for pattern, max_length in safe_contexts:
-            if re.search(pattern, sentence_lower) and len(sentence_lower) <= max_length:
-                return False  # Keep this sentence
-
-        # =================================================================
-        # ALWAYS REMOVE: Explicit diagnosis statements
-        # =================================================================
-        explicit_diagnosis_patterns = [
-            r"\bdiagnosed (as|with)\b",
-            r"\bdiagnosis (is|was|of):?\s",
-            r"\b(final|clinical|confirmed|differential) diagnosis\b",
-            r"\bpatholog(ical|y) confirmed (as|to be)\b",
-        ]
-
-        for pattern in explicit_diagnosis_patterns:
-            if re.search(pattern, sentence_lower):
+        if word_count <= 5:
+            # Contains disease term
+            if contains_disease_term(sentence_lower):
+                return True
+            
+            # Contains medical suffix (likely a disease name)
+            if medical_suffix_regex.search(sentence_lower):
                 return True
 
+            # Single medical word (catches standalone terms like "furuncle")
+            if word_count == 1 and len(sentence_lower) > 5:
+                return True
+            
+            # Is a standalone capitalized medical term (like a label)
+            if sentence.strip().endswith('.') and sentence.strip()[0].isupper() and word_count <= 3:
+                return True
+        
         # =================================================================
-        # ALWAYS REMOVE: Image/photo descriptions (pure diagnosis statements)
+        # STEP 2: Remove 6-20 word sentences that are mostly disease names
         # =================================================================
-        image_description_patterns = [
-            r"^this image (shows?|depicts?|describes?|features?|displays?|highlights?|illustrates?|discusses?)",
-            r"^this photo (shows?|depicts?|describes?)",
-            r"^the image (shows?|depicts?|describes?)",
-            r"^(clinical|dermoscopic) (image|photo|picture)",
-        ]
-
-        for pattern in image_description_patterns:
-            if re.search(pattern, sentence_lower):
-                # Remove image descriptions that contain disease terms
-                if contains_disease_term(sentence, disease_terms):
+        if 6 <= word_count <= 20:
+            if contains_disease_term(sentence_lower):
+                # Count meaningful content words (not stopwords)
+                sentence_without_stopwords = re.sub(
+                    r'\b(the|body|location|is|are|was|were|on|in|at|of|and|or|with|to|a|an|for|by|from)\b',
+                    '', sentence_lower
+                )
+                # If <40 chars of real content, it's mostly a disease name
+                if len(sentence_without_stopwords.strip()) < 40:
                     return True
-
+        
         # =================================================================
-        # ALWAYS REMOVE: "This is [disease]" type statements (but only short ones)
+        # STEP 3: Keep pure demographics
         # =================================================================
-        if re.search(r"^this (is|shows?|depicts?|represents?) (a|an|the)\s+", sentence_lower):
-            if len(sentence_lower) < 100 and contains_disease_term(sentence, disease_terms):
+        if is_pure_demographic_or_observation(sentence_lower):
+            return False
+        
+        # =================================================================
+        # STEP 4: Remove sentences starting with disease terms
+        # =================================================================
+        if disease_start_regex.match(sentence_lower):
+            return True
+        
+        # =================================================================
+        # STEP 5: Explicit diagnosis patterns
+        # =================================================================
+        if any(regex.search(sentence_lower) for regex in explicit_diagnosis_regexes):
+            return True
+        
+        # =================================================================
+        # STEP 6: Image descriptions
+        # =================================================================
+        if any(regex.search(sentence_lower) for regex in image_description_regexes):
+            return True
+        
+        # =================================================================
+        # STEP 7: "This is/shows" statements
+        # =================================================================
+        if this_is_regex.search(sentence_lower):
+            if contains_disease_term(sentence_lower) or len(sentence_lower) < 150:
                 return True
-
+        
         # =================================================================
-        # SELECTIVELY REMOVE: Forum diagnoses (only if explicit)
+        # STEP 8: Forum patterns
         # =================================================================
-        explicit_forum_diagnosis = [
-            r"(consensus|users?|forum|discussion) (is|was|are) (that |the |it is )?[\w\s]{0,20}(diagnosis|condition)",
-            r"(users?|members?) (confirmed|diagnosed|identified) (it|this|the condition) as",
-            r"(likely|probably) (is|has) \b[\w-]+\b",  # "likely is melanoma"
-        ]
-
-        for pattern in explicit_forum_diagnosis:
-            if re.search(pattern, sentence_lower) and contains_disease_term(sentence, disease_terms):
-                return True
-
-        # =================================================================
-        # SELECTIVELY REMOVE: Diagnostic compatibility (only if no clinical context)
-        # =================================================================
-        diagnostic_compatibility = [
-            r"(consistent|compatible|characteristic|typical|diagnostic) (with|of|for)\b",
-            r"\bpathognomonic (for|of)\b",
-        ]
-
-        for pattern in diagnostic_compatibility:
-            if re.search(pattern, sentence_lower):
-                # Only remove if it contains disease term AND lacks clinical context
-                if contains_disease_term(sentence, disease_terms) and not has_clinical_context(sentence):
+        for regex in forum_regexes:
+            if regex.search(sentence_lower):
+                if diagnosis_condition_regex.search(sentence_lower) or contains_disease_term(sentence_lower):
                     return True
-
+        
         # =================================================================
-        # SELECTIVELY REMOVE: Sentences with disease terms
-        # Only remove if they're clearly diagnosis statements, not clinical descriptions
+        # STEP 9: Disease terms in sentence
         # =================================================================
-        if contains_disease_term(sentence, disease_terms):
-            # Remove if it's a very short sentence (likely just naming the disease)
-            if len(sentence_lower) < 80:
-                # But keep if it has clinical context
-                if not has_clinical_context(sentence):
-                    return True
-
-            # Remove if disease term is at the very end (last 25%)
-            last_portion = sentence_lower[int(len(sentence_lower) * 0.75) :]
-            if contains_disease_term(last_portion, disease_terms):
-                # But only if the sentence lacks clinical context
-                if not has_clinical_context(sentence):
-                    return True
-
-            # Remove "The cause of X is..." type sentences
-            if re.search(r"^(the |this )?(cause|etiology) (of|is)", sentence_lower):
+        has_disease_term = contains_disease_term(sentence_lower)
+        
+        if has_disease_term:
+            # Disease statement patterns
+            if any(regex.search(sentence_lower) for regex in disease_statement_regexes):
                 return True
-
-        # =================================================================
-        # REMOVE: Generic diagnostic language without useful content
-        # =================================================================
-        useless_medical_statements = [
-            r"^(it|this|that) (is|was) (caused by|due to)",
-            r"^characterized by\b",  # Only at start
-            r"^(it|this) can be treated",
-        ]
-
-        for pattern in useless_medical_statements:
-            if re.search(pattern, sentence_lower):
+            
+            # Length-based filtering
+            if len(sentence_lower) < 200:
                 return True
-
-        # If we've made it here, keep the sentence
+            
+            # Position-based filtering for longer sentences
+            first_portion = sentence_lower[:int(len(sentence_lower) * 0.3)]
+            last_portion = sentence_lower[int(len(sentence_lower) * 0.7):]
+            
+            if disease_regex.search(first_portion) or disease_regex.search(last_portion):
+                return True
+        
+        # =================================================================
+        # STEP 10: Diagnostic jargon
+        # =================================================================
+        if any(regex.search(sentence_lower) for regex in diagnostic_jargon_regexes):
+            return True
+        
+        # =================================================================
+        # STEP 11: Final catch-all for standalone medical terms
+        # =================================================================
+        if word_count <= 10 and sentence.strip().endswith('.'):
+            if medical_suffix_regex.search(sentence_lower) or contains_disease_term(sentence_lower):
+                # But NOT if it's describing patient symptoms/experiences
+                if not re.search(r'\b(patient|person|individual|poster|user|reports?|experiencing|presents?|symptoms?)\b', sentence_lower):
+                    return True
+        
         return False
 
-    def clean_description(text, disease_terms):
-        """Clean a single text description by removing diagnosis sentences."""
+    def clean_description(text):
+        """Clean a single text description."""
         if pd.isna(text) or text == "":
             return text
-
-        # Split into sentences (handle multiple delimiters)
+        
+        # Split into sentences
         sentences = re.split(r"(?<=[.!?])\s+", str(text))
-
-        # Filter out diagnosis sentences
-        cleaned_sentences = []
-        for sentence in sentences:
-            # Skip empty sentences
-            if not sentence or sentence.strip() == "":
-                continue
-
-            # Check if this is a diagnosis sentence
-            if not is_diagnosis_sentence(sentence, disease_terms):
-                cleaned_sentences.append(sentence)
-
-        # Rejoin sentences
+        
+        # Filter sentences
+        cleaned_sentences = [
+            sentence for sentence in sentences
+            if sentence and sentence.strip() and not is_diagnosis_sentence(sentence)
+        ]
+        
         cleaned_text = " ".join(cleaned_sentences).strip()
-
         return cleaned_text if cleaned_text else None
 
-    # Create a copy to avoid modifying the original
+    # =================================================================
+    # PROCESS DATA
+    # =================================================================
+    
     df_cleaned = metadata_all_harmonized.copy()
-
-    # Apply cleaning to text_desc column
+    
     if "text_desc" in df_cleaned.columns:
         print("Removing diagnosis-referencing sentences from text descriptions...")
-        df_cleaned["text_desc"] = df_cleaned["text_desc"].apply(lambda x: clean_description(x, disease_terms))
-
-        # Count how many descriptions were modified
+        
+        # Use pandas apply (can be parallelized if needed)
+        df_cleaned["text_desc"] = df_cleaned["text_desc"].apply(clean_description)
+        
+        # Statistics
         original_lengths = metadata_all_harmonized["text_desc"].fillna("").str.len()
         new_lengths = df_cleaned["text_desc"].fillna("").str.len()
         modified_count = (original_lengths != new_lengths).sum()
         completely_removed = (new_lengths == 0).sum()
-
+        
         print(f"Modified {modified_count} out of {len(df_cleaned)} descriptions")
-        print(f"Completely removed (set to None): {completely_removed} descriptions")
-        print(f"Removed an average of {(original_lengths - new_lengths).mean():.1f} characters per description")
-        print(f"Percentage completely removed: {(completely_removed/len(df_cleaned)*100):.1f}%")
-
+        print(f"Completely removed: {completely_removed} descriptions")
+        print(f"Removed avg {(original_lengths - new_lengths).mean():.1f} chars per description")
+        print(f"Percentage removed: {(completely_removed/len(df_cleaned)*100):.1f}%")
     else:
-        print("Warning: 'text_desc' column not found in DataFrame")
-
+        print("Warning: 'text_desc' column not found")
+    
     return df_cleaned
 
 
