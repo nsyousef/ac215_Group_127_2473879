@@ -1,0 +1,41 @@
+{
+  "appId": "com.dermaassistant.app",
+  "productName": "Derma Assistant",
+  "files": [
+    ".next",
+    "out",
+    "public",
+    "electron",
+    "python",
+    "resources",
+    "package.json",
+    "node_modules"
+  ],
+  "directories": {
+    "buildResources": "build-resources"
+  },
+  "mac": {
+    "target": [
+      "dmg",
+      "zip"
+    ],
+    "icon": "build-resources/icon.icns",
+    "entitlements": "build-resources/entitlements.plist",
+    "entitlementsInherit": "build-resources/entitlements.plist"
+  },
+  "dmg": {
+    "contents": [
+      {
+        "x": 220,
+        "y": 150,
+        "type": "file"
+      },
+      {
+        "x": 470,
+        "y": 150,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
+  }
+}

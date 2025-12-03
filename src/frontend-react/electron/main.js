@@ -65,21 +65,51 @@ const PY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const pyProcesses = new Map(); // caseId -> { child, buffer, pending, lastUsed }
 
 function resolvePythonBin() {
+  // Production: use bundled Python
+  if (!isDev) {
+    const bundledPython = path.join(
+      process.resourcesPath,
+      'python-bundle',
+      'venv',
+      'bin',
+      'python'
+    );
+    if (fsSync.existsSync(bundledPython)) {
+      console.log('✅ Using bundled Python:', bundledPython);
+      return bundledPython;
+    }
+  }
+
   // Dev path to repo-local venv
-  const devVenvPy = path.join(__dirname, '..', 'python', '.venv', 'bin', 'python3');
-  if (fsSync.existsSync(devVenvPy)) return devVenvPy;
+  const devVenvPy = path.join(__dirname, '..', 'resources', 'python-bundle', 'venv', 'bin', 'python');
+  if (fsSync.existsSync(devVenvPy)) {
+    console.log('✅ Using dev venv Python:', devVenvPy);
+    return devVenvPy;
+  }
+
+  // Fallback dev path
+  const fallbackVenv = path.join(__dirname, '..', 'python', '.venv', 'bin', 'python3');
+  if (fsSync.existsSync(fallbackVenv)) {
+    console.log('✅ Using fallback venv Python:', fallbackVenv);
+    return fallbackVenv;
+  }
 
   // Optional meta file written by setup script
   const metaPath = path.join(__dirname, '..', 'python', '.python-bin-path.json');
   try {
     if (fsSync.existsSync(metaPath)) {
       const { python } = JSON.parse(fsSync.readFileSync(metaPath, 'utf8'));
-      if (python && fsSync.existsSync(python)) return python;
+      if (python && fsSync.existsSync(python)) {
+        console.log('✅ Using Python from meta file:', python);
+        return python;
+      }
     }
   } catch {}
 
-  // Fallback to env or system
-  return process.env.PYTHON || 'python3';
+  // Fallback to system Python
+  const systemPython = process.env.PYTHON || 'python3';
+  console.log('⚠️  Falling back to system Python:', systemPython);
+  return systemPython;
 }
 
 function spawnPythonForCase(caseId) {
