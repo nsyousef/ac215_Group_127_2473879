@@ -1,9 +1,9 @@
 requests>=2.32.0
 pillow>=10.0.0
-torch>=2.0.0
-torchvision>=0.15.0
 numpy>=1.24.0,<2.0.0
 pytest>=7.4.0
 pytest-mock>=3.11.0
+pytest-cov>=4.1.0
 modal>=0.56.0  # For deploying LLM APIs during integration tests
+# torch and torchvision excluded in CI to save disk space
 # Add future deps here (numpy, pillow, etc.)

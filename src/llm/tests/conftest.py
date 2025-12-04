@@ -5,10 +5,16 @@ import sys
 import pytest
 from unittest.mock import Mock, MagicMock
 
+# Mock torch before importing llm module to avoid ModuleNotFoundError
+sys.modules["torch"] = MagicMock()
+sys.modules["torch.nn"] = MagicMock()
+sys.modules["torch.cuda"] = MagicMock()
+sys.modules["transformers"] = MagicMock()
+
 # Add parent directory to path to import llm and prompts modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from llm import LLM
+from llm import LLM  # noqa: E402
 
 
 @pytest.fixture
@@ -63,5 +69,15 @@ def mock_llm(mocker, mock_model, mock_processor):
     mock_token_ids = [1, 2, 3, 4, 5]  # This will be sliced: [input_length:]
     mock_output = [mock_token_ids]  # outputs[0] returns mock_token_ids which can be sliced
     llm_instance.model.generate.return_value = mock_output
+
+    # Mock the processor.decode to return a proper string response
+    mock_processor.decode.return_value = "This is a mocked response from the model."
+
+    # Mock the generate method at the LLM instance level to return a string
+    def mock_generate_impl(prompt, temperature=0.7):
+        """Mock implementation that returns a string."""
+        return "This is a mocked diagnosis response based on the provided information. The diagnosis is eczema."
+
+    llm_instance.generate = mock_generate_impl
 
     return llm_instance

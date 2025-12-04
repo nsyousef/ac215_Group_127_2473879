@@ -2,13 +2,17 @@
 
 import os
 import sys
-import json
 import pytest
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock
 from PIL import Image
 import numpy as np
+
+# Mock torch before importing api_manager to avoid ModuleNotFoundError
+sys.modules["torch"] = MagicMock()
+sys.modules["torch.nn"] = MagicMock()
+sys.modules["torchvision"] = MagicMock()
+sys.modules["torchvision.transforms"] = MagicMock()
+sys.modules["torchvision.models"] = MagicMock()
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

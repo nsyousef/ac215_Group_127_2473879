@@ -10,8 +10,8 @@ GPU=${2:-H200}   # Default to H200
 # Map model names
 if [ "$MODEL" = "4b" ]; then
     MODEL_NAME="medgemma-4b"
-    MAX_TOKENS=500
-    GPU_DEFAULT="A100"
+    MAX_TOKENS=50
+    GPU_DEFAULT="H200"
 elif [ "$MODEL" = "27b" ]; then
     MODEL_NAME="medgemma-27b"
     MAX_TOKENS=700

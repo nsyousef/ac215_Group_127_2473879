@@ -1,19 +1,25 @@
 #!/bin/bash
 
-# Run unit tests only (excludes integration tests)
-# This script runs all tests except those marked with @pytest.mark.integration
+# Run unit tests only (excludes integration and system tests)
 
-set -e  # Exit on error
+set -e
 
 echo "================================"
-echo "Running LLM Unit Tests"
+echo "Running Unit Tests"
 echo "================================"
 echo ""
 
-# Run tests excluding integration tests
 pytest tests/unit.py -v
 
-echo ""
-echo "================================"
-echo "Unit tests completed successfully!"
-echo "================================"
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "================================"
+    echo "✅ Unit tests passed!"
+    echo "================================"
+else
+    echo ""
+    echo "================================"
+    echo "❌ Unit tests failed!"
+    echo "================================"
+    exit 1
+fi

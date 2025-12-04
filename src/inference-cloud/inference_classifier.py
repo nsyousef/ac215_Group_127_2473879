@@ -17,16 +17,23 @@ from ml_workflow.utils import logger
 class InferenceClassifier:
     """Multimodal classifier for inference with vision and text embeddings."""
 
-    def __init__(self, checkpoint_path: str, device: str = "cuda"):
+    def __init__(self, checkpoint_path: str = None, device: str = "cuda"):
         """
-        Initialize classifier from checkpoint.
+        Initialize classifier from checkpoint or with random weights.
 
         Args:
-            checkpoint_path: Path to trained model checkpoint
+            checkpoint_path: Path to trained model checkpoint (None for baseline random initialization)
             device: Device to use (cuda/cpu)
         """
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
 
+        # If no checkpoint provided, initialize with default baseline configuration
+        if checkpoint_path is None:
+            logger.info("No checkpoint provided, initializing baseline classifier with random weights")
+            self._init_baseline()
+            return
+
+        # Load from checkpoint
         logger.info(f"Loading multimodal classifier from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
 
@@ -78,10 +85,49 @@ class InferenceClassifier:
         # Initialize text encoder
         self._init_text_encoder(encoder_config)
 
-        logger.info(f"Multimodal classifier loaded successfully")
+        logger.info("Multimodal classifier loaded successfully")
         logger.info(f"  Device: {self.device}")
         logger.info(f"  Number of classes: {len(self.classes)}")
         logger.info(f"  Fusion strategy: {multimodal_config['fusion_strategy']}")
+        logger.info(f"  Text encoder: {self.text_model_name}")
+        logger.info(f"  Text pooling: {self.pooling_strategy}")
+
+    def _init_baseline(self):
+        """Initialize baseline classifier with random weights and default configuration."""
+        # Default class names (57 skin conditions as indices)
+        num_classes = 57
+        self.classes = [f"condition_{i}" for i in range(num_classes)]
+        self.class_to_idx = {cls: i for i, cls in enumerate(self.classes)}
+        self.idx_to_class = {v: k for k, v in self.class_to_idx.items()}
+
+        # Create multimodal classifier with random weights
+        logger.info("Creating baseline multimodal classifier with random weights")
+        self.model = MultimodalClassifier.create_random(
+            vision_embedding_dim=2048,
+            text_embedding_dim=768,
+            num_classes=num_classes,
+            projection_dim=256,
+            fusion_strategy="concat_mlp",
+        )
+
+        self.model.to(self.device)
+        self.model.eval()
+
+        # Default encoder config (use PubMedBERT)
+        default_encoder_config = {
+            "model_name": "pubmedbert",
+            "max_length": 512,
+            "pooling_type": "cls",
+            "qwen_instr": "",
+        }
+
+        # Initialize text encoder
+        self._init_text_encoder(default_encoder_config)
+
+        logger.info("Baseline classifier initialized successfully")
+        logger.info(f"  Device: {self.device}")
+        logger.info(f"  Number of classes: {len(self.classes)}")
+        logger.info("  Fusion strategy: concat_mlp")
         logger.info(f"  Text encoder: {self.text_model_name}")
         logger.info(f"  Text pooling: {self.pooling_strategy}")
 

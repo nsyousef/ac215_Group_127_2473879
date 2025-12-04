@@ -2,6 +2,7 @@ FROM python:3.11-slim-bookworm
 
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 ENV GOOGLE_APPLICATION_CREDENTIALS=secrets/apcomp215.json
 
 RUN set -ex; \
@@ -26,12 +27,4 @@ RUN uv sync --all-extras
 
 ENTRYPOINT ["/bin/bash"]
 CMD ["-c", "\
-    source /app/.venv/bin/activate && \
-    python processor_ddi.py && \
-    python processor_fitz.py && \
-    python processor_skincap.py && \
-    python processor_isic.py && \
-    python processor_derm1m.py && \
-    python harmonize_labels_filter_desc.py && \
-    python verify_output.py \
-"]
+    source /app/.venv/bin/activate"]
