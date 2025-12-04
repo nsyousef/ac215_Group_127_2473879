@@ -1,10 +1,9 @@
 # Model Training Configuration for Modal
-# EfficientNet-B0 + SapBERT 256 with Complete Image Masking Experiment
 
 # Data source configuration
 data:
   use_local: True  # Use Modal Volume for fast local SSD access
-  dataset: dataset_v1  # Dataset name (auto-constructs metadata_path and img_prefix)
+  dataset: dataset_v2  # Dataset name (auto-constructs metadata_path and img_prefix)
   min_samples_per_label: 100
   datasets:
     - fitzpatrick17k
@@ -68,7 +67,7 @@ augmentation:
 
 # Vision model configuration
 vision_model:
-  name: "efficientnet_b0"  # resnet50, resnet101, densenet121, efficientnet_b0, efficientnet_b1, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
+  name: "resnet50"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
   pretrained: true
   pooling_type: "avg"  # For ImageNet models: avg, max, concat
   unfreeze_layers: 10  # Number of layers to unfreeze from end
@@ -114,7 +113,7 @@ multimodal_classifier:
 masking:
   # Complete masking: mask entire modality for the whole run
   # Options: null (no complete masking), "image" (mask all images), "text" (mask all text)
-  mask_complete: "image"  # null, "image", or "text"
+  mask_complete: null  # null, "image", or "text"
 
   # Random masking during training (modality dropout)
   # Only applies if mask_complete is null
@@ -125,9 +124,9 @@ masking:
 
 # Encoder configuration
 encoder:
-  embedding_filename: "sapbert_256_cls.parquet" # Filename only (directory auto-constructed from dataset)
-  model_name: "sapbert" # or biosyn, sapbert, qwen, or path to a model
-  max_length: 256 # Maximum sequence length
+  embedding_filename: "pubmedbert_512_cls.parquet" # Filename only (directory auto-constructed from dataset)
+  model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
+  max_length: 512 # Maximum sequence length
   pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
   batch_size: 32 # The batch size to use when creating embeddings
   qwen_instr: "Represent the patient's description and characteristics (including clinical details, age, sex, and symptoms) as a semantic embedding suitable for clinical classification. Return an embedding." # The instructions for the QWEN embedding to use (allows us to experiment with different instructions; ignored if model is not QWEN)
@@ -152,7 +151,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_arch_010_efficientnet_b0_sapbert256_mask_image"
+  experiment_name: "exp_arch_001_resnet50_dv2"
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration

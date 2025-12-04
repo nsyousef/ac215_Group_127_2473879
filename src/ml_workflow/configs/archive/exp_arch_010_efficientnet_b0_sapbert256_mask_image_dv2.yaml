@@ -1,10 +1,10 @@
 # Model Training Configuration for Modal
-# EfficientNet-B0 + SapBERT 256 with Complete Text Masking Experiment
+# EfficientNet-B0 + SapBERT 256 with Complete Image Masking Experiment
 
 # Data source configuration
 data:
   use_local: True  # Use Modal Volume for fast local SSD access
-  dataset: dataset_v1  # Dataset name (auto-constructs metadata_path and img_prefix)
+  dataset: dataset_v2  # Dataset name (auto-constructs metadata_path and img_prefix)
   min_samples_per_label: 100
   datasets:
     - fitzpatrick17k
@@ -97,7 +97,7 @@ multimodal_classifier:
 
   # Auxiliary losses (optional)
   use_auxiliary_loss: False  # Enable auxiliary losses on individual modalities
-  auxiliary_loss_weight: 0.0  # Weight for auxiliary losses (0.0-1.0)
+  auxiliary_loss_weight: 0.0  # Not used in ablation mode, but set to 0.0 for clarity
 
   # Loss function configuration
   loss_fn: "cross_entropy"  # "cross_entropy" or "focal"
@@ -114,7 +114,7 @@ multimodal_classifier:
 masking:
   # Complete masking: mask entire modality for the whole run
   # Options: null (no complete masking), "image" (mask all images), "text" (mask all text)
-  mask_complete: "text"  # null, "image", or "text"
+  mask_complete: "image"  # null, "image", or "text"
 
   # Random masking during training (modality dropout)
   # Only applies if mask_complete is null
@@ -152,7 +152,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_arch_011_efficientnet_b0_sapbert256_mask_text"
+  experiment_name: "exp_arch_010_efficientnet_b0_sapbert256_mask_image_dv2"
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration

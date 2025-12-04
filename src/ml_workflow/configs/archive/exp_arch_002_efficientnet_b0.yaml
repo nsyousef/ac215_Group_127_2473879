@@ -4,7 +4,7 @@
 # Data source configuration
 data:
   use_local: True  # Use Modal Volume for fast local SSD access
-  dataset: dataset_v1  # Dataset name (auto-constructs metadata_path and img_prefix)
+  dataset: dataset_v2  # Dataset name (auto-constructs metadata_path and img_prefix)
   min_samples_per_label: 100
   datasets:
     - fitzpatrick17k

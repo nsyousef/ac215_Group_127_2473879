@@ -2,9 +2,8 @@
 
 # Data source configuration
 data:
-  use_local: True  # Use Modal CloudBucketMount for fast local access
-  metadata_path: "/gcs-data/final/metadata_all_harmonized.csv"  # Mounted from GCS bucket
-  img_prefix: "/gcs-data/final/imgs"  # Mounted from GCS bucket
+  use_local: True  # Use Modal Volume for fast local SSD access
+  dataset: dataset_v2  # Dataset name (auto-constructs metadata_path and img_prefix)
   min_samples_per_label: 1000
   datasets:
     - fitzpatrick17k
@@ -115,11 +114,11 @@ multimodal_classifier:
 
 # Encoder configuration
 # IMPORTANT: If you change the model_name, max_length, pooling_type, etc. you must also change the
-# pre_existing_path. Otherwise, the dataloader will just load the existing embeddings (computed with the previous model),
+# embedding_filename. Otherwise, the dataloader will just load the existing embeddings (computed with the previous model),
 # instead of re-computing them with the new model. To make the configuration recompute the embeddings each time, set
-# pre_existing_path to null. This will not save the embeddings and will force a recompute from scratch.
+# embedding_filename to null. This will not save the embeddings and will force a recompute from scratch.
 encoder:
-  pre_existing_path: null # The path to which to store the embeddings (to store in Google cloud, begin path with gs://<bucket-name>/). Set to null to not save embeddings anywhere.
+  embedding_filename: null # Filename of pre-computed embeddings (e.g., "pubmedbert_512_cls.parquet"). Full path is auto-constructed from dataset. Set to null to not use pre-computed embeddings.
   model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
   max_length: 512 # Maximum sequence length
   pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
