@@ -65,8 +65,12 @@ class MLClient {
 
     if (isElectron() && window.electronAPI && window.electronAPI.mlGetInitialPrediction) {
       const userTimestamp = new Date().toISOString();
-      // Route to Python via Electron IPC
-      return await window.electronAPI.mlGetInitialPrediction(caseId, imagePath, textDescription, userTimestamp);
+      return await window.electronAPI.mlGetInitialPrediction(
+        caseId,
+        imagePath,
+        textDescription,
+        userTimestamp,
+      );
     }
 
     // Non-Electron fallback: no public dummy loading; return a structured error
@@ -74,7 +78,7 @@ class MLClient {
   }
 
   /**
-   * Send follow-up chat message
+   * Send follow-up chat message (non-streaming).
    *
    * Workflow (matching api_manager.py):
    * 1. Load conversation history from local storage
@@ -86,6 +90,31 @@ class MLClient {
    * @param {string} userQuery - User's follow-up question
    * @returns {Promise<Object>} Response object with answer and conversation history
    */
+  async *getInitialPredictionStream(imagePath, textDescription, caseId, metadata = {}) {
+    await this.initialize();
+    const userTimestamp = new Date().toISOString();
+
+    if (isElectron() && window.electronAPI?.mlGetInitialPredictionStream) {
+      const stream = window.electronAPI.mlGetInitialPredictionStream(
+        caseId,
+        imagePath,
+        textDescription,
+        userTimestamp,
+      );
+
+      for await (const item of stream) {
+        // During streaming, item is usually a string chunk
+        // On final step (done=true), we passed finalResponse as value
+        yield item;
+      }
+      return;
+    }
+
+    // Fallback: non-streaming; just return final result once
+    const result = await this.getInitialPrediction(imagePath, textDescription, caseId, metadata);
+    yield { finalResponse: result };
+  }
+
   async chatMessage(caseId, userQuery) {
     await this.initialize();
 
@@ -94,6 +123,61 @@ class MLClient {
       return await window.electronAPI.mlChatMessage(caseId, userQuery, userTimestamp);
     }
     throw new Error('Chat is only available in Electron runtime.');
+  }
+
+  /**
+   * Stream follow-up chat response in chunks.
+   *
+   * Expected Electron IPC shape:
+   *   window.electronAPI.mlChatMessageStream(caseId, userQuery, userTimestamp)
+   *     -> returns an async iterable of chunks.
+   *
+   * Each yielded `chunk` can be:
+   *   - a string, or
+   *   - an object like { delta: '...', done: false } / { text: '...' }
+   *
+   * @param {string} caseId - Unique case identifier
+   * @param {string} userQuery - User's follow-up question
+   * @returns {AsyncGenerator<string|Object>} Async iterable of chunks
+   */
+  async *chatMessageStream(caseId, userQuery) {
+    await this.initialize();
+    const userTimestamp = new Date().toISOString();
+
+    // Electron + streaming IPC path
+    if (isElectron() && window.electronAPI && window.electronAPI.mlChatMessageStream) {
+      // Assumes mlChatMessageStream returns an async iterable
+      const stream = window.electronAPI.mlChatMessageStream(
+        caseId,
+        userQuery,
+        userTimestamp,
+      );
+
+      // If preload returns an async iterable, forward chunks directly
+      if (stream && typeof stream[Symbol.asyncIterator] === 'function') {
+        for await (const chunk of stream) {
+          yield chunk;
+        }
+        return;
+      }
+
+      // If the API returns a single response object instead of a stream,
+      // normalize to one final chunk.
+      if (stream && stream.answer) {
+        yield stream.answer;
+        return;
+      }
+    }
+
+    // Fallback: use non-streaming chatMessage and yield once
+    const fullResponse = await this.chatMessage(caseId, userQuery);
+    if (fullResponse && fullResponse.answer) {
+      yield fullResponse.answer;
+    } else {
+      // In case the shape is different or answer is missing,
+      // yield the whole object so the caller can inspect it.
+      yield fullResponse;
+    }
   }
 
   /**

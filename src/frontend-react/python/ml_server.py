@@ -99,25 +99,45 @@ def handle_message(msg):
             image_path = data.get("image_path")
             text = data.get("text_description", "")
             user_timestamp = data.get("user_timestamp")
+
             if not image_path:
                 raise ValueError("Missing image_path")
+
+            # Create streaming callback for explanation chunks
+            def on_stream_chunk(text: str):
+                # Each call becomes one "chunk" event up to Node
+                send({"id": req_id, "chunk": text})
+
+            # Run prediction (this will stream explanation chunks)
             result = manager.get_initial_prediction(
-                image_path=image_path, text_description=text, user_timestamp=user_timestamp
+                image_path=image_path,
+                text_description=text,
+                user_timestamp=user_timestamp,
+                on_chunk=on_stream_chunk,  # ← IMPORTANT: Pass streaming callback
             )
+
+            # After streaming, send final combined response
             send({"id": req_id, "ok": True, "result": result})
         elif cmd == "chat":
             question = data.get("question")
             user_timestamp = data.get("user_timestamp")
             if not question:
                 raise ValueError("Missing question")
-            result = manager.chat_message(user_query=question, user_timestamp=user_timestamp)
+
+            # This is what actually turns on streaming for this request
+            def on_stream_chunk(text: str):
+                # Each call becomes one "chunk" event up to Node
+                send({"id": req_id, "chunk": text})
+
+            result = manager.chat_message(
+                user_query=question,
+                user_timestamp=user_timestamp,
+                on_chunk=on_stream_chunk,  # ← IMPORTANT
+            )
+
+            # Final message with the full structured result
             send({"id": req_id, "ok": True, "result": result})
-        elif cmd == "load_conversation_history":
-            # Load conversation history for the case
-            result = manager.conversation_history
-            send({"id": req_id, "ok": True, "result": result})
-        else:
-            raise ValueError(f"Unknown cmd: {cmd}")
+
     except Exception as e:
         err = {
             "id": req_id,

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { isElectron } from '@/utils/config';
 import {
   Dialog,
   DialogTitle,
@@ -17,6 +18,7 @@ import {
   TextField,
   IconButton,
   LinearProgress,
+  CircularProgress,
   useMediaQuery,
   useTheme,
 } from '@mui/material';
@@ -53,7 +55,7 @@ function formatBodyPartLabel(bodyPart) {
     .join(' ');
 }
 
-export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = true, onboardingBack }) {
+export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = true, onboardingBack, onStartAnalysis }) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
   const { addDisease } = useDiseaseContext();
@@ -67,9 +69,22 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   const [note, setNote] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState(null);
+  const streamUnsubscribeRef = useRef(null);
+  const firstChunkReceivedRef = useRef(false);
+  const currentCaseIdRef = useRef(null);
 
   useEffect(() => {
     if (!open) reset();
+  }, [open]);
+
+  // Cleanup stream subscription on unmount or when dialog closes
+  useEffect(() => {
+    return () => {
+      if (streamUnsubscribeRef.current) {
+        streamUnsubscribeRef.current();
+        streamUnsubscribeRef.current = null;
+      }
+    };
   }, [open]);
 
   function reset() {
@@ -80,6 +95,13 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     setNote('');
     setAnalyzing(false);
     setError(null);
+    // Clean up stream subscription
+    if (streamUnsubscribeRef.current) {
+      streamUnsubscribeRef.current();
+      streamUnsubscribeRef.current = null;
+    }
+    firstChunkReceivedRef.current = false;
+    currentCaseIdRef.current = null;
   }
 
   // File handling
@@ -116,34 +138,37 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   };
 
   const analyzeImage = async () => {
+    console.log('analyzeImage called', { file, bodyPart, note, mapPos });
     setAnalyzing(true);
     setError(null);
+
     try {
       // Ensure we have map coordinates: if user picked from list only, set default based on label
       let finalMapPos = mapPos;
-      if (!finalMapPos && bodyPart) {
-        if (BODY_PART_DEFAULTS[bodyPart]) {
-          const defaults = BODY_PART_DEFAULTS[bodyPart];
-          finalMapPos = {
-            leftPct: defaults.leftPct,
-            topPct: defaults.topPct,
-          };
-          setMapPos(finalMapPos);
-        }
+      if (!finalMapPos && bodyPart && BODY_PART_DEFAULTS[bodyPart]) {
+        const defaults = BODY_PART_DEFAULTS[bodyPart];
+        finalMapPos = {
+          leftPct: defaults.leftPct,
+          topPct: defaults.topPct,
+        };
+        setMapPos(finalMapPos);
       }
 
       // Generate case ID for this analysis
       const timestamp = Date.now();
-      const diseaseId = `${timestamp}`;  // Disease ID (no prefix, just timestamp)
-      const caseId = `case_${timestamp}`;  // Folder name for Python storage
+      const diseaseId = `${timestamp}`;       // Disease ID (no prefix, just timestamp)
+      const caseId = `case_${timestamp}`;     // Folder name for Python storage
 
       // Save uploaded file to temp location for Python to access via IPC
       let imagePath;
       if (window.electronAPI && window.electronAPI.saveUploadedImage) {
-        // Use IPC to save file in main process
         const buffer = await file.arrayBuffer();
         const uint8Array = new Uint8Array(buffer);
-        imagePath = await window.electronAPI.saveUploadedImage(caseId, file.name, uint8Array);
+        imagePath = await window.electronAPI.saveUploadedImage(
+          caseId,
+          file.name,
+          uint8Array,
+        );
       } else {
         throw new Error('Image upload is only available in Electron runtime.');
       }
@@ -157,17 +182,159 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
       // Step 1: Save body location FIRST (before APIManager instantiation)
       await mlClient.saveBodyLocation(caseId, bodyLocation);
 
-      // Step 2: Call ML client to get predictions (matches api_manager.py workflow)
-      const results = await mlClient.getInitialPrediction(
-        imagePath, // file path
-        note || '', // text description
-        caseId
+      // Step 2: Show analyzing step
+      setStep(5);
+      firstChunkReceivedRef.current = false;
+      currentCaseIdRef.current = caseId;
+
+      // Step 3: Subscribe to streaming chunks BEFORE starting prediction
+      // This allows us to detect when LLM response starts
+      let unsubscribe = null;
+      if (isElectron() && window.electronAPI?.mlOnStreamChunk) {
+        unsubscribe = window.electronAPI.mlOnStreamChunk((chunk) => {
+          // Only handle chunks for this specific case
+          if (!firstChunkReceivedRef.current && currentCaseIdRef.current === caseId && chunk) {
+            firstChunkReceivedRef.current = true;
+
+            // First chunk received - hide analyzing screen and navigate
+            setAnalyzing(false);
+            setStep(null);
+
+            // Create minimal disease object for navigation
+            const tempDisease = {
+              id: diseaseId,
+              name: 'Analyzing...', // Placeholder, will be updated
+              image: preview,
+              bodyPart: bodyPart || 'Unknown',
+              mapPosition: finalMapPos ? {
+                leftPct: finalMapPos.leftPct,
+                topPct: finalMapPos.topPct
+              } : null,
+              description: '',
+              confidenceLevel: 0,
+              date: new Date().toISOString().split('T')[0],
+              llmResponse: '', // Will be populated by streaming
+              timelineData: [],
+              conversationHistory: [],
+              caseId: caseId,
+            };
+
+            // Navigate to results view
+            if (onStartAnalysis) {
+              onStartAnalysis(tempDisease);
+            }
+
+            close();
+
+            // Clean up subscription after first chunk
+            if (unsubscribe) {
+              unsubscribe();
+              streamUnsubscribeRef.current = null;
+            }
+          }
+        });
+        streamUnsubscribeRef.current = unsubscribe;
+      }
+
+      // Step 4: Kick off prediction request (this will trigger LLM streaming on the backend)
+      const predictionPromise = mlClient.getInitialPrediction(
+        imagePath,      // file path
+        note || '',     // text description
+        caseId,
+        {},             // metadata
       );
+
+      // Fallback: If no chunks arrive within 30 seconds, navigate anyway
+      // This handles cases where streaming might not work
+      const fallbackTimeout = setTimeout(() => {
+        if (!firstChunkReceivedRef.current && currentCaseIdRef.current === caseId) {
+          console.warn('No streaming chunks received, navigating anyway after timeout');
+          firstChunkReceivedRef.current = true;
+
+          setAnalyzing(false);
+          setStep(null);
+
+          const tempDisease = {
+            id: diseaseId,
+            name: 'Analyzing...',
+            image: preview,
+            bodyPart: bodyPart || 'Unknown',
+            mapPosition: finalMapPos ? {
+              leftPct: finalMapPos.leftPct,
+              topPct: finalMapPos.topPct
+            } : null,
+            description: '',
+            confidenceLevel: 0,
+            date: new Date().toISOString().split('T')[0],
+            llmResponse: '',
+            timelineData: [],
+            conversationHistory: [],
+            caseId: caseId,
+          };
+
+          if (onStartAnalysis) {
+            onStartAnalysis(tempDisease);
+          }
+
+          close();
+
+          if (streamUnsubscribeRef.current) {
+            streamUnsubscribeRef.current();
+            streamUnsubscribeRef.current = null;
+          }
+        }
+      }, 30000); // 30 second timeout
+
+      // Wait for the full result in the background
+      const results = await predictionPromise;
+
+      // Clear fallback timeout if prediction completes
+      clearTimeout(fallbackTimeout);
+
+      // If prediction completed but we never received a chunk, navigate now
+      // This handles cases where streaming doesn't work or completes too quickly
+      if (!firstChunkReceivedRef.current && currentCaseIdRef.current === caseId) {
+        console.warn('Prediction completed but no chunks received, navigating now');
+        firstChunkReceivedRef.current = true;
+
+        setAnalyzing(false);
+        setStep(null);
+
+        const tempDisease = {
+          id: diseaseId,
+          name: 'Analyzing...',
+          image: preview,
+          bodyPart: bodyPart || 'Unknown',
+          mapPosition: finalMapPos ? {
+            leftPct: finalMapPos.leftPct,
+            topPct: finalMapPos.topPct
+          } : null,
+          description: '',
+          confidenceLevel: 0,
+          date: new Date().toISOString().split('T')[0],
+          llmResponse: '',
+          timelineData: [],
+          conversationHistory: [],
+          caseId: caseId,
+        };
+
+        if (onStartAnalysis) {
+          onStartAnalysis(tempDisease);
+        }
+
+        close();
+
+        if (streamUnsubscribeRef.current) {
+          streamUnsubscribeRef.current();
+          streamUnsubscribeRef.current = null;
+        }
+      }
 
       // Find disease with highest confidence from predictions
       const predictions = results.predictions || {};
       let topDisease = 'Unknown Condition';
       let maxConfidence = 0;
+
       Object.entries(predictions).forEach(([disease, confidence]) => {
         if (confidence > maxConfidence) {
           maxConfidence = confidence;
@@ -181,19 +348,13 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
 
-      // Get the enriched disease object from Python response (includes all UI fields)
-      // Python's _build_enriched_disease() returns: id, name, description, bodyPart,
-      // mapPosition, image, confidenceLevel, llmResponse, timelineData, conversationHistory
+      // Get the enriched disease object from Python response
       const enrichedDisease = results.enriched_disease || {};
 
-      // Build complete disease object with both minimal data (for diseases.json)
-      // and enriched data (for immediate UI display)
       const newDisease = {
-        // Minimal fields (saved to diseases.json)
-        id: diseaseId,  // Use timestamp without "case_" prefix
+        id: diseaseId,
         name: formattedName,
         image: preview,
-        // Enriched fields (from case_history.json, already loaded by Python)
         description: enrichedDisease.description || '',
         bodyPart: enrichedDisease.bodyPart || bodyPart || 'Unknown',
         mapPosition: enrichedDisease.mapPosition || null,
@@ -201,28 +362,76 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         date: enrichedDisease.date || '',
         llmResponse: enrichedDisease.llmResponse || '',
         timelineData: enrichedDisease.timelineData || [],
-        conversationHistory: enrichedDisease.conversationHistory || []
+        conversationHistory: enrichedDisease.conversationHistory || [],
       };
 
-      // Add to context (saves minimal fields to diseases.json)
       await addDisease(newDisease);
 
-      setAnalyzing(false);
-      // Pass complete enriched object to parent so it can be immediately used
+      // Update the selected condition with full data (it was already set to tempDisease)
+      // The results view will re-render with the updated data
       if (onSaved) onSaved(newDisease);
+
+      // Clean up stream subscription if still active
+      if (streamUnsubscribeRef.current) {
+        streamUnsubscribeRef.current();
+        streamUnsubscribeRef.current = null;
+      }
+
+      // Note: onStartAnalysis was already called earlier with tempDisease (when first chunk arrived)
+      // The selectedCondition will be updated when addDisease triggers a re-render
     } catch (e) {
       console.error('Analysis failed:', e);
+      console.error('Error details:', {
+        message: e.message,
+        stack: e.stack,
+        name: e.name,
+      });
+
+      // Clean up stream subscription on error
+      if (streamUnsubscribeRef.current) {
+        streamUnsubscribeRef.current();
+        streamUnsubscribeRef.current = null;
+      }
+      firstChunkReceivedRef.current = false;
+      currentCaseIdRef.current = null;
+
+      const errorMessage = e.message || 'Analysis failed. Please try again.';
+      setError(errorMessage);
       setAnalyzing(false);
-      setError('Analysis failed. Please try again.');
-      // allow user to retry by going back to photo step
-      setStep(2);
+      setStep(2); // Go back to photo step on error
     }
   };
 
-  const handleStartAnalysis = () => {
-    // Move from notes (4) to analyzing (5)
-    setStep(5);
-    analyzeImage();
+
+
+  const handleStartAnalysis = async () => {
+    console.log('handleStartAnalysis called', { file, bodyPart, step, hasFile: !!file, hasBodyPart: !!bodyPart });
+
+    if (!file) {
+      console.error('No file selected');
+      setError('Please upload an image first.');
+      setStep(2); // Go back to photo step
+      return;
+    }
+    if (!bodyPart) {
+      console.error('No body part selected');
+      setError('Please select a body part first.');
+      setStep(0); // Go back to body part selection
+      return;
+    }
+
+    console.log('Starting analyzeImage...');
+    try {
+      // Start analysis and immediately close dialog to show chat
+      await analyzeImage();
+      console.log('analyzeImage completed successfully');
+    } catch (error) {
+      console.error('Error in analyzeImage:', error);
+      console.error('Error stack:', error.stack);
+      setError(`Failed to start analysis: ${error.message || error}`);
+      setAnalyzing(false);
+      setStep(2); // Go back to photo step on error
+    }
   };
 
   const close = () => {
@@ -234,15 +443,18 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     if (!canCancel && (reason === 'backdropClick' || reason === 'escapeKeyDown')) {
       return; // prevent closing during onboarding
     }
+    if (analyzing || step === 5) {
+      return; // prevent closing during analysis
+    }
     close();
   };
 
   return (
-    <Dialog open={open} fullScreen={fullScreen} onClose={handleDialogClose} disableEscapeKeyDown={!canCancel} fullWidth maxWidth="sm">
+    <Dialog open={open} fullScreen={fullScreen} onClose={handleDialogClose} disableEscapeKeyDown={!canCancel || step === 5} fullWidth maxWidth="sm">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="h6" component="div">Add Condition</Typography>
-        {canCancel && (
-          <IconButton onClick={close} size="small"><CloseIcon /></IconButton>
+        {canCancel && step !== 5 && (
+          <IconButton onClick={close} size="small" disabled={analyzing}><CloseIcon /></IconButton>
         )}
       </DialogTitle>
 
@@ -359,20 +571,32 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             <Typography variant="subtitle1" sx={{ mb: 1 }}>Optional Notes</Typography>
             <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>Add any symptoms or context (optional, max 1000 characters).</Typography>
             <TextField value={note} onChange={(e) => setNote(e.target.value.slice(0, 1000))} placeholder="Describe symptoms, duration, etc." multiline minRows={4} fullWidth />
+            {error && (
+              <Typography variant="body2" sx={{ color: 'error.main', mt: 2 }}>
+                {error}
+              </Typography>
+            )}
           </Box>
         )}
 
-        {/* Step 5: Analyzing */}
         {step === 5 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 4 }}>
-            <Typography variant="h6">Analyzing...</Typography>
-            <Typography variant="body2" sx={{ color: '#666', textAlign: 'center' }}>We never send your raw image to the server. Only a private embedding is generated for analysis.</Typography>
-            <Box sx={{ width: '80%', mt: 2 }}>
-              <LinearProgress sx={{ mt: 2 }} />
-            </Box>
-            {error && <Typography variant="body2" sx={{ color: 'error.main' }}>{error}</Typography>}
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              py: 4,
+              width: '100%',
+            }}
+          >
+            <CircularProgress sx={{ mb: 2 }} />
+            <Typography variant="h6">Analyzing…</Typography>
+            <Typography variant="body2" sx={{ color: '#666', mt: 1 }}>
+              Please wait while we analyze your image
+            </Typography>
           </Box>
         )}
+
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2 }}>
@@ -417,16 +641,25 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             <Button variant="text" onClick={() => setStep(2)}>Back</Button>
             <Box>
               {canCancel && <Button variant="text" onClick={close}>Cancel</Button>}
-              <Button variant="contained" onClick={handleStartAnalysis} sx={{ ml: 1 }}>Analyze</Button>
+              <Button
+                variant="contained"
+                onClick={handleStartAnalysis}
+                disabled={analyzing || !file}
+                sx={{ ml: 1 }}
+              >
+                Analyze
+              </Button>
             </Box>
           </Box>
         )}
 
+        {/* Step 5: No buttons, just show analyzing (buttons hidden) */}
         {step === 5 && (
-          <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: 'center' }}>
-            {canCancel && <Button variant="text" onClick={close}>Cancel</Button>}
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+            {/* No buttons during analysis */}
           </Box>
         )}
+
       </DialogActions>
     </Dialog>
   );

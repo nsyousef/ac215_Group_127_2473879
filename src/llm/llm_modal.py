@@ -2,6 +2,9 @@
 
 import os
 import modal
+from fastapi.responses import StreamingResponse
+import json
+import asyncio
 
 # Configuration from environment variables
 MODEL_NAME = os.getenv("MODAL_MODEL_NAME", "medgemma-27b")
@@ -39,7 +42,7 @@ app = modal.App(
 )
 
 
-@app.cls(gpu=GPU, min_containers=0, max_containers=1, scaledown_window=100)
+@app.cls(gpu=GPU, min_containers=0, max_containers=1, scaledown_window=1000)
 class DermatologyLLM:
     """Modal class for dermatology LLM assistant."""
 
@@ -73,3 +76,54 @@ class DermatologyLLM:
             conversation_history=json_data.get("conversation_history", []),
             temperature=0.3,
         )
+
+    @modal.fastapi_endpoint(method="POST")
+    async def ask_followup_stream(self, json_data: dict):
+        initial_answer = json_data["initial_answer"]
+        question = json_data["question"]
+        history = json_data.get("conversation_history", [])
+
+        # Generator that yields bytes for HTTP streaming
+        async def event_stream():
+            for item in self.llm.ask_followup_stream(
+                initial_answer=initial_answer,
+                question=question,
+                conversation_history=history,
+            ):
+                # Yield newline-delimited JSON (important!)
+                yield (json.dumps(item) + "\n").encode("utf-8")
+                await asyncio.sleep(0)  # allow event loop to flush
+
+        return StreamingResponse(event_stream(), media_type="application/json")
+
+    @modal.fastapi_endpoint(method="POST")
+    async def explain_stream(self, json_data: dict):
+        """
+        Streaming endpoint for explanation output.
+        Expects same format as non-streaming explain endpoint:
+            {
+                "predictions": {"disease1": 0.78, "disease2": 0.15, ...},
+                "metadata": {"user_input": "...", "cv_analysis": {...}, "history": {...}}
+            }
+
+        Streams newline-delimited JSON objects:
+            {"delta": "..."}\n
+            {"delta": "..."}\n
+            ...
+        """
+        predictions = json_data["predictions"]
+        metadata = json_data["metadata"]
+
+        # Build prompt from predictions and metadata (same as non-streaming version)
+        prompt = self.llm.build_prompt(predictions, metadata)
+
+        async def event_stream():
+            # explain_stream_generator yields dicts of the form {"delta": "text"}
+            for chunk in self.llm.explain_stream_generator(prompt):
+                if chunk:
+                    # Send as JSONL (chunk is already a dict with "delta" key)
+                    yield (json.dumps(chunk) + "\n").encode("utf-8")
+                # Yield control to event loop so client gets tokens immediately
+                await asyncio.sleep(0)
+
+        return StreamingResponse(event_stream(), media_type="application/json")

@@ -10,6 +10,10 @@ from typing import Dict, Any, List, Optional, Tuple
 import requests
 from inference_local.vision_encoder import VisionEncoder
 
+from typing import Any, Dict, List, Tuple, Optional, Callable
+import json
+import requests
+
 # Shared vision encoder instance (lazy-loaded)
 _VISION_ENCODER = None
 
@@ -27,8 +31,8 @@ TEXT_EMBEDDING_URL = os.getenv("TEXT_EMBEDDING_URL", f"{BASE_URL}/embed-text")
 PREDICTION_URL = os.getenv("PREDICTION_URL", f"{BASE_URL}/predict")
 
 # LLM API URLs (can be overridden with environment variables for testing)
-DEFAULT_LLM_EXPLAIN_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explain.modal.run"
-DEFAULT_LLM_FOLLOWUP_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-followup.modal.run"
+DEFAULT_LLM_EXPLAIN_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explai-0d573f.modal.run"
+DEFAULT_LLM_FOLLOWUP_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-fo-8013b2.modal.run/"
 
 
 def debug_log(msg: str):
@@ -543,6 +547,7 @@ class APIManager:
         image_path: str,
         text_description: str,
         user_timestamp: Optional[str] = None,
+        on_chunk: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
         """
         Process initial image and text input to generate predictions and LLM analysis.
@@ -552,13 +557,14 @@ class APIManager:
         2. Run local ML model for embeddings and CV analysis
         3. Send embedding to cloud for disease predictions
         4. Build metadata combining all inputs and history
-        5. Call LLM API to generate explanation
+        5. Call LLM API to generate explanation (streaming if on_chunk provided)
         6. Save results for future reference
 
         Args:
             image_path: Path to image file on disk
             text_description: User's description of their skin condition
             user_timestamp: Optional ISO timestamp of when user initiated request
+            on_chunk: Optional callback function for streaming LLM explanation chunks
 
         Returns:
             Dictionary containing:
@@ -573,12 +579,24 @@ class APIManager:
         debug_log("  → Loading and saving image...")
         from PIL import Image
 
+        # Normalize and validate image path
+        image_path = str(Path(image_path).resolve())
+        debug_log(f"    Image path: {image_path}")
+        debug_log(f"    Path exists: {Path(image_path).exists()}")
+
+        if not Path(image_path).exists():
+            raise FileNotFoundError(f"Image file not found at path: {image_path}")
+
         image = Image.open(image_path)
         saved_image_path = self._save_image(image)
 
+        # Verify saved image path exists before using it
+        if saved_image_path and not Path(saved_image_path).exists():
+            raise FileNotFoundError(f"Saved image not found at: {saved_image_path}")
+
         # Step 1: Run local ML model for embeddings TODO
         debug_log("  → Running local ML model for embeddings...")
-        embedding = self._run_local_ml_model(saved_image_path)
+        embedding = self._run_local_ml_model(image)
 
         # Step 2: Run CV analysis TODO
         debug_log("  → Running CV analysis...")
@@ -601,7 +619,15 @@ class APIManager:
 
         # Step 5: Call LLM API for explanation
         debug_log("  → Calling LLM for explanation...")
-        llm_response, llm_timestamp = self._call_llm_explain(predictions, metadata)
+        llm_response_dict, llm_timestamp = self._call_llm_explain(
+            predictions=predictions,
+            metadata=metadata,
+            on_chunk=on_chunk if on_chunk else (lambda x: None),  # Use provided callback or no-op
+        )
+        # Extract the answer string from the response dict (for backward compatibility)
+        llm_response = (
+            llm_response_dict.get("answer", "") if isinstance(llm_response_dict, dict) else str(llm_response_dict)
+        )
 
         # Step 6: Save to conversation history (initial LLM response)
         debug_log("  → Saving conversation...")
@@ -685,63 +711,7 @@ class APIManager:
 
         return text_input
 
-    def chat_message(self, user_query: str, user_timestamp: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Handle follow-up chat messages from the user.
-
-        Workflow:
-        1. Load conversation history
-        2. Get initial answer from first conversation entry
-        3. Call LLM API with user's question
-        4. Save updated conversation
-        5. Return response
-
-        Args:
-            case_id: Unique identifier for the case
-            user_query: User's follow-up question
-
-        Returns:
-            Dictionary containing:
-                - answer: LLM's response to the question
-                - conversation_history: All conversation entries
-        """
-
-        debug_log(f"Processing chat message for case {self.case_id}...")
-
-        # Step 1: Load conversation history
-        debug_log("  → Loading conversation history...")
-        conversation_data = self._load_json_file(
-            file_path=self.conversation_file, default_value=[], description="conversation history"
-        )
-
-        if not conversation_data or len(conversation_data) == 0:
-            raise ValueError(
-                f"No conversation found for case {self.case_id}. " "Please run get_initial_prediction first."
-            )
-
-        # Step 2: Extract initial message and build conversation history
-        initial_message = conversation_data[0]
-        conversation_history = conversation_data[1:]  # All entries after first
-
-        # Step 3: Call LLM API for follow-up
-        debug_log("  → Calling LLM for follow-up answer...")
-        response, llm_timestamp = self._call_llm_followup(
-            initial_message=initial_message,
-            question=user_query,
-            conversation_history=conversation_history[-5:],  # Last 5 entries
-        )
-
-        # Step 4: Save new conversation entry
-        debug_log("  → Saving conversation...")
-        self._save_conversation_entry(
-            user_message=user_query,
-            llm_response=response["answer"],
-            user_timestamp=user_timestamp,
-            llm_timestamp=llm_timestamp,
-        )
-
-        debug_log(f"✓ Chat message processed for case {self.case_id}")
-        return {"answer": response["answer"], "conversation_history": response["conversation_history"]}
+    from typing import Optional, Callable, Dict, Any
 
     # ==================== Helper Methods ====================
     def _save_conversation_entry(
@@ -827,10 +797,19 @@ class APIManager:
         destination = images_dir / filename
 
         try:
+            # Save the image
             image.save(destination)
-            return str(destination)
+
+            # Verify the file was actually saved
+            destination_path = Path(destination).resolve()
+            if not destination_path.exists():
+                raise FileNotFoundError(f"Image save failed: file not found at {destination_path}")
+
+            debug_log(f"    ✓ Image saved to: {destination_path}")
+            return str(destination_path)
 
         except Exception as exc:
+            debug_log(f"    ✗ Error saving image: {exc}")
             raise ValueError(f"Error saving image: {exc}")
 
     def _load_json_file(
@@ -863,6 +842,7 @@ class APIManager:
         Returns:
             Image embedding vector (list of floats)
         """
+
         try:
             debug_log(f"    Encoding image: {image_path}")
 
@@ -876,9 +856,6 @@ class APIManager:
             debug_log(f"    ✓ Embedding extracted (dim={len(embedding_list)})")
             return embedding_list
 
-        except FileNotFoundError:
-            debug_log(f"    ✗ Image file not found: {image_path}")
-            raise ValueError(f"Image file not found: {image_path}")
         except Exception as e:
             debug_log(f"    ✗ Error extracting embedding: {e}")
             import traceback
@@ -968,73 +945,228 @@ class APIManager:
         response.raise_for_status()
         return response.json().get("top_k", {})
 
-    def _call_llm_explain(self, predictions: Dict[str, float], metadata: Dict[str, Any]) -> Tuple[Any, str]:
+    def _call_llm_explain(
+        self,
+        predictions: Dict[str, float],
+        metadata: Dict[str, Any],
+        on_chunk: Callable[[str], None],  # streaming callback required
+    ) -> Tuple[Dict[str, Any], str]:
         """
-        Call LLM API to generate initial explanation.
+        Call the LLM explanation API in FULL STREAMING MODE.
 
-        TODO: Handle API errors and timeouts
-        TODO: Add retry logic
-        TODO: Validate response format
-
-        Args:
-            predictions: Disease predictions with confidence scores
-            metadata: Additional context (user input, CV analysis, history)
-
-        Returns:
-            Tuple of (LLM-generated explanation payload, timestamp string)
+        Streams incremental explanation text via on_chunk(),
+        assembles the final response, and returns (response_dict, timestamp).
         """
 
-        debug_log(" Calling LLM explain API...")
+        debug_log(" Calling LLM explain API (streaming)...")
+
+        payload = {
+            "predictions": predictions,
+            "metadata": metadata,
+        }
+
         try:
-            response = requests.post(
-                self.llm_explain_url, json={"predictions": predictions, "metadata": metadata}, timeout=300
-            )
-            response.raise_for_status()
-            llm_timestamp = _timestamp()
-            return response.json(), llm_timestamp  # or response.text depending on API format
+            full_answer_parts: List[str] = []
+            final_response: Optional[Dict[str, Any]] = None
+
+            with requests.post(
+                self.llm_explain_url,  # IMPORTANT: use streaming URL
+                json=payload,
+                stream=True,
+                timeout=600,
+            ) as resp:
+                resp.raise_for_status()
+
+                for raw_line in resp.iter_lines(decode_unicode=True):
+                    if not raw_line:
+                        continue
+
+                    chunk = None
+
+                    # Try JSON-structured chunk first (preferred)
+                    try:
+                        data = json.loads(raw_line)
+
+                        # If server yields {"delta": "..."} or similar
+                        if isinstance(data, dict):
+                            chunk = data.get("delta") or data.get("text") or data.get("answer_chunk") or None
+
+                            # If server ever sends a final structured block (optional)
+                            if "answer" in data:
+                                final_response = data
+
+                    except json.JSONDecodeError:
+                        # Fallback: raw text chunk
+                        chunk = raw_line
+
+                    # Deliver streamed chunk to upper layers
+                    if chunk:
+                        full_answer_parts.append(chunk)
+                        try:
+                            on_chunk(chunk)
+                        except Exception as cb_err:
+                            debug_log(f"on_chunk callback error in explain: {cb_err}")
+
+            # Build final answer text
+            full_answer = "".join(full_answer_parts).strip()
+
+            # If LLM server provided final structured answer, prefer it
+            if final_response:
+                if "answer" not in final_response:
+                    final_response["answer"] = full_answer
+                return final_response, _timestamp()
+
+            # Otherwise synthesize a structured response
+            return {
+                "answer": full_answer,
+                "predictions": predictions,
+                "metadata": metadata,
+            }, _timestamp()
+
         except requests.exceptions.RequestException as e:
-            debug_log(f"Error calling LLM API: {e}")
+            debug_log(f"Error calling LLM explain API (streaming): {e}")
             raise
 
     def _call_llm_followup(
-        self, initial_message: Dict[str, Any], question: str, conversation_history: List[Dict[str, Any]]
+        self,
+        initial_message: Dict[str, Any],
+        question: str,
+        conversation_history: List[Dict[str, Any]],
+        on_chunk: Callable[[str], None],  # required now, not optional
     ) -> Tuple[Dict[str, Any], str]:
         """
-        Call LLM API for follow-up question.
-
-        Args:
-            initial_message: The first conversation entry (dict with 'user' and 'llm' keys)
-            question: User's follow-up question
-            conversation_history: List of conversation entry dicts (last 5)
-
-        Returns:
-            Tuple containing:
-                - Dictionary with answer and updated conversation history
-                - Timestamp string for the LLM response
+        Call LLM API follow-up in fully streaming mode.
+        The endpoint MUST stream newline-delimited JSON messages.
         """
-        # Extract initial answer from initial_message dict
+
         initial_answer = initial_message.get("llm", {}).get("message", "")
 
-        # Extract user messages from conversation history dicts
         history_questions = [
             entry.get("user", {}).get("message", "")
             for entry in conversation_history
             if entry.get("user", {}).get("message")
         ]
 
-        debug_log(" Calling LLM followup API...")
+        payload = {
+            "initial_answer": initial_answer,
+            "question": question,
+            "conversation_history": history_questions,
+        }
+
+        debug_log(" Calling LLM followup API (streaming only)...")
+
         try:
-            response = requests.post(
+            full_answer_parts: List[str] = []
+            final_response: Optional[Dict[str, Any]] = None
+
+            # Always stream
+            with requests.post(
                 self.llm_followup_url,
-                json={
-                    "initial_answer": initial_answer,
-                    "question": question,
-                    "conversation_history": history_questions,
-                },
-                timeout=60,
-            )
-            response.raise_for_status()
-            return response.json(), _timestamp()
+                json=payload,
+                stream=True,
+                timeout=300,
+            ) as resp:
+                resp.raise_for_status()
+
+                for raw_line in resp.iter_lines(decode_unicode=True):
+                    if not raw_line:
+                        continue
+
+                    # Try JSON; fallback to raw text
+                    chunk = None
+                    try:
+                        data = json.loads(raw_line)
+                        # Handle case where endpoint sends JSON-encoded strings
+                        if isinstance(data, str):
+                            chunk = data
+                        elif isinstance(data, dict):
+                            # Extract chunk from dict format
+                            chunk = data.get("delta") or data.get("text") or data.get("answer_chunk") or None
+                            # If this is the *final* JSON package:
+                            if "answer" in data:
+                                final_response = data
+                    except json.JSONDecodeError:
+                        # If not JSON, treat as plain text
+                        chunk = raw_line
+
+                    # Send incremental chunk to UI
+                    if chunk:
+                        full_answer_parts.append(chunk)
+                        try:
+                            on_chunk(chunk)
+                        except Exception as cb_err:
+                            debug_log(f"on_chunk callback error: {cb_err}")
+
+            # Build final content
+            full_answer = "".join(full_answer_parts).strip()
+
+            # If server provided a structured final answer JSON, use that
+            if final_response:
+                if "answer" not in final_response:
+                    final_response["answer"] = full_answer
+                if "conversation_history" not in final_response:
+                    final_response["conversation_history"] = conversation_history
+                return final_response, _timestamp()
+
+            # Otherwise synthesize a final response
+            return {
+                "answer": full_answer,
+                "conversation_history": conversation_history,
+            }, _timestamp()
+
         except requests.exceptions.RequestException as e:
-            debug_log(f"Error calling LLM API: {e}")
+            debug_log(f"Error calling LLM API (streaming): {e}")
             raise
+
+    def chat_message(
+        self,
+        user_query: str,
+        on_chunk: Callable[[str], None],
+        user_timestamp: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Handle follow-up chat messages from the user.
+        """
+
+        debug_log(f"Processing chat message for case {self.case_id}...")
+
+        # Step 1: Load conversation history
+        debug_log("  → Loading conversation history...")
+        conversation_data = self._load_json_file(
+            file_path=self.conversation_file,
+            default_value=[],
+            description="conversation history",
+        )
+
+        if not conversation_data or len(conversation_data) == 0:
+            raise ValueError(
+                f"No conversation found for case {self.case_id}. " "Please run get_initial_prediction first."
+            )
+
+        # Step 2: Extract initial message and build conversation history
+        initial_message = conversation_data[0]
+        conversation_history = conversation_data[1:]
+
+        # Step 3: Call LLM API for follow-up (streaming if on_chunk is provided)
+        debug_log("  → Calling LLM for follow-up answer...")
+        response, llm_timestamp = self._call_llm_followup(
+            initial_message=initial_message,
+            question=user_query,
+            conversation_history=conversation_history[-5:],  # Last 5
+            on_chunk=on_chunk,  # ← IMPORTANT
+        )
+
+        # Step 4: Save new conversation entry
+        debug_log("  → Saving conversation...")
+        self._save_conversation_entry(
+            user_message=user_query,
+            llm_response=response["answer"],
+            user_timestamp=user_timestamp,
+            llm_timestamp=llm_timestamp,
+        )
+
+        debug_log(f"✓ Chat message processed for case {self.case_id}")
+        return {
+            "answer": response["answer"],
+            "conversation_history": response.get("conversation_history", []),
+        }

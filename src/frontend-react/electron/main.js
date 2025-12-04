@@ -18,7 +18,6 @@ process.stderr.write('STDERR_TEST_002\n');
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const url = require('url');
-const url = require('url');
 const fs = require('fs').promises;
 const isDevModule = require('electron-is-dev');
 // Handle both CommonJS and ES6 module exports

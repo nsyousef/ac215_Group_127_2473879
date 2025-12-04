@@ -1,6 +1,8 @@
 import re
 import time
+import threading
 import torch
+from typing import Generator
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -8,6 +10,7 @@ from transformers import (
     AutoModelForImageTextToText,
     StoppingCriteria,
     StoppingCriteriaList,
+    TextIteratorStreamer,
 )
 
 
@@ -67,6 +70,14 @@ class LLM:
         if torch.cuda.is_available():
             print(f"GPU: {torch.cuda.get_device_name(0)}")
             print(f"Memory: {torch.cuda.memory_allocated(0)/1e9:.2f}GB")
+
+    def _get_tokenizer_for_streamer(self):
+        """Get the tokenizer for TextIteratorStreamer."""
+        # For medgemma-27b, processor is already a tokenizer
+        # For medgemma-4b, processor has a tokenizer attribute
+        if hasattr(self.processor, "tokenizer"):
+            return self.processor.tokenizer
+        return self.processor
 
     def build_prompt(self, predictions: dict, metadata: dict) -> str:
         """Build prompt from predictions and metadata."""
@@ -172,3 +183,125 @@ class LLM:
         answer = self.generate(followup_prompt, temperature)
 
         return {"answer": answer, "conversation_history": conversation_history}
+
+    @torch.inference_mode()
+    def generate_stream(self, prompt: str, temperature: float = 0.3) -> Generator[str, None, None]:
+        """
+        Stream response chunks while preserving the 'thought' filtering logic.
+        Yields plain text chunks suitable for streaming over HTTP.
+        """
+        messages = [{"role": "user", "content": prompt}]
+        formatted_prompt = self.processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+        inputs = self.processor(
+            formatted_prompt,
+            return_tensors="pt",
+            add_special_tokens=True,
+        ).to(self.model.device)
+
+        input_length = inputs["input_ids"].shape[1]
+        stopping_criteria = StoppingCriteriaList([ThoughtStoppingCriteria(self.processor, input_length)])
+
+        streamer = TextIteratorStreamer(
+            self._get_tokenizer_for_streamer(),
+            skip_prompt=True,
+            skip_special_tokens=True,
+        )
+
+        gen_kwargs = dict(
+            **inputs,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=temperature > 0,
+            temperature=temperature if temperature > 0 else None,
+            pad_token_id=self.processor.pad_token_id,
+            eos_token_id=self.processor.eos_token_id,
+            stopping_criteria=stopping_criteria,
+            streamer=streamer,
+        )
+
+        # Run model.generate in a background thread so we can iterate over streamer
+        thread = threading.Thread(target=self.model.generate, kwargs=gen_kwargs)
+        thread.start()
+
+        # We use the same cleanup logic as in the non-streaming path,
+        # but incrementally: keep an accumulated buffer and only send
+        # the new cleaned suffix each time.
+        accumulated = ""
+        already_sent = 0
+
+        for new_text in streamer:
+            if not new_text:
+                continue
+
+            accumulated += new_text
+            cleaned = self._extract_user_response(accumulated)
+
+            # Only send what hasn't been sent yet
+            to_send = cleaned[already_sent:]
+            if to_send:
+                already_sent = len(cleaned)
+                yield to_send
+
+    def ask_followup_stream(
+        self,
+        initial_answer: str,
+        question: str,
+        conversation_history: list = None,
+        temperature: float = 0.3,
+    ) -> Generator[str, None, None]:
+        """Streaming variant of ask_followup()."""
+        if conversation_history is None:
+            conversation_history = []
+
+        conversation_history = conversation_history[-4:] if len(conversation_history) >= 4 else conversation_history
+        conversation_history.append(question)
+
+        history_text = ""
+        if len(conversation_history) > 1:
+            history_text = "\n\nPrevious questions in this conversation:\n"
+            for i, q in enumerate(conversation_history[:-1], 1):
+                history_text += f"{i}. {q}\n"
+            history_text += f"\nCurrent question: {question}"
+        else:
+            history_text = f"\n\nQuestion: {question}"
+
+        followup_prompt = f"{self.question_prompt}\n\nYour previous analysis:\n{initial_answer}{history_text}"
+        return self.generate_stream(followup_prompt, temperature)
+
+    def explain_stream(self, prompt: str, on_chunk):
+        """
+        Stream the explanation for a prediction.
+
+        Args:
+            prompt: The constructed explanation prompt (string)
+            on_chunk: A callback that receives each incremental text chunk (string)
+
+        Behavior:
+            - Calls self.generate_stream(prompt) to get incremental tokens
+            - Sends each token to on_chunk()
+            - Does NOT return the full text (caller assembles final answer)
+        """
+        if on_chunk is None:
+            raise ValueError("explain_stream requires on_chunk callback")
+
+        try:
+            # generate_stream() yields token pieces from your LLM backend
+            for delta in self.generate_stream(prompt):
+                if delta:
+                    on_chunk(delta)
+
+        except Exception as e:
+            raise RuntimeError(f"Streaming explain failed: {e}")
+
+    def explain_stream_generator(self, prompt: str):
+        """
+        Generator used by the Modal/HTTP streaming endpoint.
+        Yields dicts of the form: {"delta": "..."}.
+        """
+        for delta in self.generate_stream(prompt):
+            if delta:
+                yield {"delta": delta}

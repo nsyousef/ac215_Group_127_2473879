@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
     Box,
     Container,
@@ -32,9 +32,10 @@ export default function PageContent({ initialView }) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const router = useRouter();
+    const searchParams = useSearchParams();
 
-    // Use initialView passed from PageWrapper
-    const viewParam = initialView || 'home';
+    // Get view from URL query params (reactive to URL changes)
+    const viewParam = searchParams.get('view') || initialView || 'home';
 
     const [selectedCondition, setSelectedCondition] = useState(null);
     const [mobileView, setMobileView] = useState(viewParam);
@@ -146,6 +147,24 @@ export default function PageContent({ initialView }) {
         router.push('/?view=results');
     };
 
+    const handleStartAnalysis = (tempDisease) => {
+        // Called when analysis starts - immediately show results/chat
+        console.log('handleStartAnalysis called in PageContent.jsx', tempDisease);
+
+        // Set selected condition first (this is critical - chat needs a selected condition)
+        setSelectedCondition(tempDisease);
+
+        // Navigate to appropriate view
+        if (isMobile) {
+            // On mobile, navigate to chat view
+            router.push('/?view=chat');
+        } else {
+            // On desktop, navigate to results view (which shows chat in right column)
+            // The chat panel will be visible once selectedCondition is set
+            router.push('/?view=results');
+        }
+    };
+
     // Render onboarding flow if not completed
     if (!profileLoading && !profile?.hasCompletedOnboarding) {
         return (
@@ -250,7 +269,7 @@ export default function PageContent({ initialView }) {
                     )}
                 </Container>
                 {/* Add disease modal (shared) */}
-                <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} />
+                <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} onStartAnalysis={handleStartAnalysis} />
                 <AddTimeEntryFlow open={showAddTimeFlow} onClose={() => setShowAddTimeFlow(false)} conditionId={selectedCondition?.id} onSaved={handleTimeSaved} />
             </MobileLayout>
         );
@@ -308,7 +327,7 @@ export default function PageContent({ initialView }) {
                         </Grid>
                     </Grid>
                 </Container>
-                <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} />
+                <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} onStartAnalysis={handleStartAnalysis} />
             </Box>
         );
     }
