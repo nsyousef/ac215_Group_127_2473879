@@ -5,13 +5,21 @@
 
 set -e
 
-APP_PATH="./out/pibu_ai-darwin-x64/pibu_ai.app/Contents/Resources/app"
-
-if [ ! -d "$APP_PATH" ]; then
-  echo "❌ Error: App not found at $APP_PATH"
+# Detect architecture - try arm64 first, then x64
+if [ -d "./out/pibu_ai-darwin-arm64/pibu_ai.app/Contents/Resources/app" ]; then
+  APP_PATH="./out/pibu_ai-darwin-arm64/pibu_ai.app/Contents/Resources/app"
+  APP_DIR="pibu_ai-darwin-arm64"
+elif [ -d "./out/pibu_ai-darwin-x64/pibu_ai.app/Contents/Resources/app" ]; then
+  APP_PATH="./out/pibu_ai-darwin-x64/pibu_ai.app/Contents/Resources/app"
+  APP_DIR="pibu_ai-darwin-x64"
+else
+  echo "   Error: Packaged app not found"
+  echo "   Expected at ./out/pibu_ai-darwin-arm64/ or ./out/pibu_ai-darwin-x64/"
   echo "   Run 'npx electron-forge package' first"
   exit 1
 fi
+
+echo "Found app at: $APP_PATH"
 
 if [ -f "./out/index.html" ]; then
   echo "📦 Copying out/ directory (static exports) to packaged app..."
@@ -20,9 +28,10 @@ if [ -f "./out/index.html" ]; then
   mkdir -p "$APP_PATH/out"
 
   for item in ./out/*; do
-    # Skip the packaged app directory
-    if [ "$(basename "$item")" != "pibu_ai-darwin-x64" ]; then
-      echo "  Copying $(basename "$item")..."
+    # Skip the packaged app directories
+    basename_item="$(basename "$item")"
+    if [ "$basename_item" != "pibu_ai-darwin-arm64" ] && [ "$basename_item" != "pibu_ai-darwin-x64" ]; then
+      echo "  Copying $basename_item..."
       cp -r "$item" "$APP_PATH/out/"
     fi
   done
