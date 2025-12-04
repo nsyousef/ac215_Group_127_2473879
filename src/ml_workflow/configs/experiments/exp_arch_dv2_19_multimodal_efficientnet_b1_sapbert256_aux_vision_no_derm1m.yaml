@@ -1,5 +1,5 @@
-# Multimodal: EfficientNet-B1 + SapBERT 256 + Vision Auxiliary Loss
-# Full multimodal training with auxiliary loss only for vision modality
+# Multimodal: EfficientNet-B1 + SapBERT 256 + Vision Auxiliary Loss (without derm1m)
+# Same as exp 14 but excluding derm1m dataset
 
 data:
   use_local: True
@@ -9,16 +9,6 @@ data:
     - fitzpatrick17k
     - ddi
     - isic
-    - derm1m
-  derm1m_sources:
-    - IIYI
-    - edu
-    - note
-    - public
-    - pubmed
-    - reddit
-    - twitter
-    - youtube
   has_text: True
   test_size: 0.1
   val_size: 0.1
@@ -108,7 +98,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_arch_dv2_14_multimodal_efficientnet_b1_sapbert256_aux_vision"
+  experiment_name: "exp_arch_dv2_19_multimodal_efficientnet_b1_sapbert256_aux_vision_no_derm1m"
   wandb_project: "APCOMP215"
 
 checkpoint:
