@@ -43,6 +43,11 @@ class MultimodalClassifier(nn.Module):
                     - final_dropout: Dropout rate for final classifier (default: 0.3)
                     - use_auxiliary_loss: Enable auxiliary losses on individual modalities (default: False)
                     - auxiliary_loss_weight: Weight for auxiliary losses (default: 0.3)
+                      Used if per-modality weights not set
+                    - auxiliary_vision_loss_weight: Weight for vision auxiliary loss
+                      (default: uses auxiliary_loss_weight)
+                    - auxiliary_text_loss_weight: Weight for text auxiliary loss
+                      (default: uses auxiliary_loss_weight)
                     - label_smoothing: Label smoothing for cross entropy (default: 0.0)
                     - alpha, gamma, reduction: For focal loss
                     - sample_weights: Sample weights for focal loss
@@ -72,7 +77,10 @@ class MultimodalClassifier(nn.Module):
 
         # Auxiliary loss configuration
         self.use_auxiliary_loss = config.get("use_auxiliary_loss", False)
-        self.auxiliary_loss_weight = config.get("auxiliary_loss_weight", 0.3)
+        # Support separate weights for vision and text, with fallback to shared weight
+        default_aux_weight = config.get("auxiliary_loss_weight", 0.3)
+        self.auxiliary_vision_loss_weight = config.get("auxiliary_vision_loss_weight", default_aux_weight)
+        self.auxiliary_text_loss_weight = config.get("auxiliary_text_loss_weight", default_aux_weight)
 
         # Validate fusion strategy
         if self.fusion_strategy not in ["weighted_sum", "concat_mlp"]:
@@ -339,28 +347,25 @@ class MultimodalClassifier(nn.Module):
                 vision_mask = modality_mask_info.get("vision_valid_mask")
                 text_mask = modality_mask_info.get("text_valid_mask")
 
-            aux_total = None
+            total_loss = main_loss
 
-            # Vision auxiliary loss only if modality is valid
-            if vision_mask is None:
-                loss_term = self.criterion(outputs["aux_vision_logits"], targets)
-                aux_total = loss_term if aux_total is None else aux_total + loss_term
-            elif vision_mask.any():
-                loss_term = self._compute_masked_loss(outputs["aux_vision_logits"], targets, vision_mask)
-                aux_total = loss_term if aux_total is None else aux_total + loss_term
+            # Vision auxiliary loss (only if weight > 0 and modality is valid)
+            if self.auxiliary_vision_loss_weight > 0:
+                if vision_mask is None:
+                    loss_term = self.criterion(outputs["aux_vision_logits"], targets)
+                    total_loss = total_loss + self.auxiliary_vision_loss_weight * loss_term
+                elif vision_mask.any():
+                    loss_term = self._compute_masked_loss(outputs["aux_vision_logits"], targets, vision_mask)
+                    total_loss = total_loss + self.auxiliary_vision_loss_weight * loss_term
 
-            # Text auxiliary loss only if modality is valid
-            if text_mask is None:
-                loss_term = self.criterion(outputs["aux_text_logits"], targets)
-                aux_total = loss_term if aux_total is None else aux_total + loss_term
-            elif text_mask.any():
-                loss_term = self._compute_masked_loss(outputs["aux_text_logits"], targets, text_mask)
-                aux_total = loss_term if aux_total is None else aux_total + loss_term
-
-            if aux_total is not None:
-                total_loss = main_loss + self.auxiliary_loss_weight * aux_total
-            else:
-                total_loss = main_loss
+            # Text auxiliary loss (only if weight > 0 and modality is valid)
+            if self.auxiliary_text_loss_weight > 0:
+                if text_mask is None:
+                    loss_term = self.criterion(outputs["aux_text_logits"], targets)
+                    total_loss = total_loss + self.auxiliary_text_loss_weight * loss_term
+                elif text_mask.any():
+                    loss_term = self._compute_masked_loss(outputs["aux_text_logits"], targets, text_mask)
+                    total_loss = total_loss + self.auxiliary_text_loss_weight * loss_term
         else:
             total_loss = main_loss
 
@@ -396,6 +401,8 @@ class MultimodalClassifier(nn.Module):
             "text_projection_hidden": self.text_projection_hidden,
             "final_hidden_sizes": self.final_hidden_sizes,
             "use_auxiliary_loss": self.use_auxiliary_loss,
+            "auxiliary_vision_loss_weight": self.auxiliary_vision_loss_weight,
+            "auxiliary_text_loss_weight": self.auxiliary_text_loss_weight,
             "total_parameters": total_params,
             "trainable_parameters": trainable_params,
             "trainable_percentage": f"{(trainable_params/total_params)*100:.2f}%",
