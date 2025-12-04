@@ -5,6 +5,7 @@
 
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
+const url = require('url');
 const fs = require('fs').promises;
 const isDev = require('electron-is-dev');
 const { spawn } = require('child_process');
@@ -64,6 +65,9 @@ const PY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 const pyProcesses = new Map(); // caseId -> { child, buffer, pending, lastUsed }
 
+const activeStreams = new Map(); // streamId -> { caseId, question }
+
+
 function resolvePythonBin() {
   // Dev path to repo-local venv
   const devVenvPy = path.join(__dirname, '..', 'python', '.venv', 'bin', 'python3');
@@ -105,7 +109,8 @@ function spawnPythonForCase(caseId) {
   const state = {
     child,
     buffer: '',
-    pending: new Map(), // id -> { resolve, reject }
+    // id -> { resolve, reject, onChunk? }
+    pending: new Map(),
     lastUsed: Date.now(),
   };
 
@@ -116,14 +121,52 @@ function spawnPythonForCase(caseId) {
       const line = state.buffer.slice(0, idx);
       state.buffer = state.buffer.slice(idx + 1);
       if (!line.trim()) continue;
+
       try {
         const msg = JSON.parse(line);
-        const { id, ok, result, error } = msg;
-        const p = state.pending.get(id);
-        if (p) {
+        const { id } = msg;
+        if (!id) {
+          console.warn('Python message without id:', msg);
+          continue;
+        }
+
+        const pendingReq = state.pending.get(id);
+        if (!pendingReq) {
+          // Could be a late chunk for an already-completed request; ignore
+          continue;
+        }
+
+        const { resolve, reject, onChunk } = pendingReq;
+
+        // If Python sends streaming chunks, we expect a field like `chunk`
+        if (typeof onChunk === 'function' && Object.prototype.hasOwnProperty.call(msg, 'chunk')) {
+          try {
+            onChunk(msg.chunk, msg);
+          } catch (err) {
+            console.error('onChunk handler error:', err);
+          }
+        }
+
+        // Decide if this message is FINAL or just a partial one.
+        // A simple convention:
+        //   - msg.done === true  -> final
+        //   - OR msg.ok === true/false with result/error -> final
+        const isFinal =
+          msg.done === true ||
+          Object.prototype.hasOwnProperty.call(msg, 'ok') ||
+          Object.prototype.hasOwnProperty.call(msg, 'error');
+
+        if (isFinal) {
           state.pending.delete(id);
-          if (ok) p.resolve(result);
-          else p.reject(new Error(error || 'Python error'));
+
+          if (msg.ok === false || msg.error) {
+            reject(new Error(msg.error || 'Python error'));
+          } else {
+            // Prefer msg.result if present, else whole msg
+            resolve(
+              Object.prototype.hasOwnProperty.call(msg, 'result') ? msg.result : msg
+            );
+          }
         }
       } catch (e) {
         console.error('Failed to parse Python response:', e, line);
@@ -150,15 +193,30 @@ function spawnPythonForCase(caseId) {
 }
 
 let reqSeq = 0;
-function pyRequest(caseId, cmd, data) {
+
+/**
+ * pyRequest
+ * @param {string} caseId
+ * @param {string} cmd
+ * @param {Object} data
+ * @param {(chunk: any, msg?: any) => void} [onChunk] optional streaming callback
+ */
+function pyRequest(caseId, cmd, data, onChunk) {
   const state = spawnPythonForCase(caseId);
   const id = `${Date.now()}_${reqSeq++}`;
+
   // Only add case_id if not already present (for static methods that pass their own case_id)
-  const payload = { id, cmd, data: data.case_id ? data : { ...data, case_id: caseId } };
+  const payload = {
+    id,
+    cmd,
+    data: data.case_id ? data : { ...data, case_id: caseId },
+  };
+
   state.lastUsed = Date.now();
 
   return new Promise((resolve, reject) => {
-    state.pending.set(id, { resolve, reject });
+    state.pending.set(id, { resolve, reject, onChunk });
+
     try {
       state.child.stdin.write(JSON.stringify(payload) + '\n');
     } catch (e) {
@@ -167,6 +225,7 @@ function pyRequest(caseId, cmd, data) {
     }
   });
 }
+
 
 // Cleanup timer for idle Python processes
 setInterval(() => {
@@ -188,8 +247,84 @@ ipcMain.handle('ml:getInitialPrediction', async (event, { caseId, imagePath, tex
     image_path: imagePath,
     text_description: textDescription,
     user_timestamp: userTimestamp
+  }, (chunk) => {
+    // Emit chunk event to renderer
+    event.sender.send('ml:streamChunk', { chunk });
   });
 });
+
+const activeInitialStreams = new Map();
+
+ipcMain.on(
+  'ml:getInitialPredictionStream:start',
+  async (event, { streamId, caseId, imagePath, textDescription, userTimestamp }) => {
+    if (!caseId) {
+      event.sender.send('ml:getInitialPredictionStream:chunk', {
+        streamId,
+        done: true,
+        error: 'caseId required',
+      });
+      return;
+    }
+
+    if (!imagePath) {
+      event.sender.send('ml:getInitialPredictionStream:chunk', {
+        streamId,
+        done: true,
+        error: 'imagePath required',
+      });
+      return;
+    }
+
+    const sender = event.sender;
+
+    // Track active stream (optional, but matches what you do for chat)
+    activeStreams.set(streamId, { caseId, imagePath, textDescription });
+
+    try {
+      const finalResponse = await pyRequest(
+        caseId,
+        'predict',
+        {
+          image_path: imagePath,
+          text_description: textDescription,
+          user_timestamp: userTimestamp,
+        },
+        (chunk) => {
+          // stream each chunk out as it arrives
+          sender.send('ml:getInitialPredictionStream:chunk', {
+            streamId,
+            done: false,
+            chunk,          // string or partial object, frontend normalizes
+          });
+        }
+      );
+
+      // final message
+      sender.send('ml:getInitialPredictionStream:chunk', {
+        streamId,
+        done: true,
+        finalResponse,     // this is what your generator in mlClient sees at the end
+      });
+    } catch (err) {
+      sender.send('ml:getInitialPredictionStream:chunk', {
+        streamId,
+        done: true,
+        error: err?.message || 'Unknown error in initial prediction stream',
+      });
+    } finally {
+      activeStreams.delete(streamId);
+    }
+  }
+);
+
+ipcMain.on('ml:getInitialPredictionStream:cancel', (event, { streamId }) => {
+  // For now we just drop tracking; you could also kill the Python process
+  if (activeStreams.has(streamId)) {
+    activeStreams.delete(streamId);
+  }
+});
+
 
 ipcMain.handle('ml:chatMessage', async (event, { caseId, question, userTimestamp }) => {
   if (!caseId) throw new Error('caseId required');
@@ -197,7 +332,70 @@ ipcMain.handle('ml:chatMessage', async (event, { caseId, question, userTimestamp
   return await pyRequest(caseId, 'chat', {
     question,
     user_timestamp: userTimestamp
+  }, (chunk) => {
+    // Emit chunk event to renderer
+    event.sender.send('ml:streamChunk', { chunk });
   });
+});
+
+ipcMain.on('ml:chatMessageStream:start', async (event, { streamId, caseId, question, userTimestamp }) => {
+  if (!caseId) {
+    event.sender.send('ml:chatMessageStream:chunk', {
+      streamId,
+      done: true,
+      error: 'caseId required',
+    });
+    return;
+  }
+
+  if (!question) {
+    event.sender.send('ml:chatMessageStream:chunk', {
+      streamId,
+      done: true,
+      error: 'question required',
+    });
+    return;
+  }
+
+  const sender = event.sender;
+
+  // If you add real cancellation later, you can store some handle here.
+  activeStreams.set(streamId, { caseId, question });
+
+  try {
+    const finalResponse = await pyRequest(
+      caseId,
+      'chat',
+      {
+        question,
+        user_timestamp: userTimestamp,
+      },
+      (chunk) => {
+        // Stream each chunk as it arrives
+        sender.send('ml:chatMessageStream:chunk', {
+          streamId,
+          done: false,
+          chunk, // can be string or object; frontend normalizes it
+        });
+      }
+    );
+
+    // Indicate completion to the renderer
+    sender.send('ml:chatMessageStream:chunk', {
+      streamId,
+      done: true,
+      // optional: pass finalResponse if you ever want it
+      finalResponse,
+    });
+  } catch (err) {
+    sender.send('ml:chatMessageStream:chunk', {
+      streamId,
+      done: true,
+      error: err?.message || 'Unknown error in chat stream',
+    });
+  } finally {
+    activeStreams.delete(streamId);
+  }
 });
 
 ipcMain.handle('ml:saveBodyLocation', async (event, { caseId, bodyLocation }) => {
@@ -271,6 +469,15 @@ ipcMain.handle('save-uploaded-image', async (event, caseId, filename, buffer) =>
     const imagePath = path.join(tempDir, `${caseId}_${filename}`);
     await fs.writeFile(imagePath, Buffer.from(buffer));
 
+    // Verify file was written and exists
+    try {
+      await fs.access(imagePath);
+      console.log(`Image saved successfully: ${imagePath}`);
+    } catch (accessError) {
+      console.error(`Image file not accessible after write: ${imagePath}`, accessError);
+      throw new Error(`Failed to verify image file: ${imagePath}`);
+    }
+
     return imagePath;
   } catch (e) {
     console.error('Error saving uploaded image:', e);
@@ -320,8 +527,14 @@ function createWindow() {
 
   mainWindow.loadURL(startURL);
 
+  // Always open DevTools in dev mode for debugging
   if (isDev) {
     mainWindow.webContents.openDevTools();
+    // Also add keyboard shortcut to toggle DevTools (Cmd+Option+I on Mac, Ctrl+Shift+I on Windows/Linux)
+    mainWindow.webContents.on('did-finish-load', () => {
+      console.log('Electron window loaded. DevTools should be open.');
+      console.log('If DevTools is not visible, press Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux)');
+    });
   }
 
   mainWindow.on('closed', () => {

@@ -143,8 +143,30 @@ export default function Home() {
         // So just set it as selected and navigate!
         setSelectedCondition(newDisease);
 
-        // Navigate to results view
+        // Navigate to results view (or chat if it was just started)
         router.push('/?view=results');
+    };
+
+    const handleStartAnalysis = (tempDisease) => {
+        // Called when analysis starts - immediately show chat
+        console.log('handleStartAnalysis called in page.jsx', tempDisease);
+        console.log('Current view:', viewParam, 'isMobile:', isMobile);
+
+        // Set selected condition first (this is critical - chat needs a selected condition)
+        setSelectedCondition(tempDisease);
+        console.log('Selected condition set:', tempDisease);
+
+        // Navigate to appropriate view
+        console.log('Navigating to view');
+        if (isMobile) {
+            // On mobile, navigate to chat view
+            router.push('/?view=chat');
+        } else {
+            // On desktop, navigate to results view (which shows chat in right column)
+            // The chat panel will be visible once selectedCondition is set
+            router.push('/?view=results');
+        }
+        console.log('Navigation completed');
     };
 
     // Render onboarding flow if not completed
@@ -251,7 +273,7 @@ export default function Home() {
                     )}
                 </Container>
                 {/* Add disease modal (shared) */}
-                <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} />
+                <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} onStartAnalysis={handleStartAnalysis} />
                 <AddTimeEntryFlow open={showAddTimeFlow} onClose={() => setShowAddTimeFlow(false)} conditionId={selectedCondition?.id} onSaved={handleTimeSaved} />
             </MobileLayout>
         );
@@ -309,7 +331,7 @@ export default function Home() {
                         </Grid>
                     </Grid>
                 </Container>
-                <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} />
+                <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} onStartAnalysis={handleStartAnalysis} />
             </Box>
         );
     }
