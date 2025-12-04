@@ -187,7 +187,8 @@ class ImageDataset(Dataset):
                 # Only raise after all retries exhausted
                 if attempts >= self.max_retries:
                     raise RuntimeError(
-                        f"Error loading image at index {idx} (path: {path}) after {attempts} attempts: {type(last_error).__name__}: {str(last_error)}"
+                        f"Error loading image at index {idx} (path: {path}) after {attempts} attempts: "
+                        f"{type(last_error).__name__}: {str(last_error)}"
                     ) from last_error
 
 
@@ -207,13 +208,6 @@ def create_dataloaders(
     img_size = tuple(data_config["img_size"])
     weighted_sampling = training_config["weighted_sampling"]
     use_local = data_config["use_local"]
-
-    # Determine image prefix
-    if use_local:
-        img_prefix = data_config["img_prefix"]
-        logger.info(f"Using local images from: {img_prefix}")
-    elif not img_prefix:
-        logger.warning("No img_prefix provided, using paths as-is")
 
     # Keep persistent workers enabled
     use_persistent_workers = num_workers > 0

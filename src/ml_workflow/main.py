@@ -21,7 +21,7 @@ try:
     from .model.vision.vit import VisionTransformer
     from .model.vision.cnn import CNNModel
     from .model.classifier.multimodal_classifier import MultimodalClassifier
-    from .constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
+    from .constants import GCS_BUCKET_NAME, IMG_ID_COL, EMBEDDING_COL
 except ImportError:
     from ml_workflow.train.train import Trainer
     from ml_workflow.utils import load_metadata, logger, load_checkpoint
@@ -30,7 +30,7 @@ except ImportError:
     from ml_workflow.model.vision.vit import VisionTransformer
     from ml_workflow.model.vision.cnn import CNNModel
     from ml_workflow.model.classifier.multimodal_classifier import MultimodalClassifier
-    from ml_workflow.constants import GCS_METADATA_PATH, GCS_IMAGE_PREFIX, IMG_ID_COL, EMBEDDING_COL
+    from ml_workflow.constants import GCS_BUCKET_NAME, IMG_ID_COL, EMBEDDING_COL
 
 
 def initialize_model(config_path):
@@ -63,13 +63,21 @@ def initialize_model(config_path):
         torch.cuda.manual_seed_all(seed)
     logger.info(f"Set random seed to: {seed}")
 
-    # Determine metadata path depending on training using GCP or local data
     if data_config.get("use_local"):
-        metadata_path = data_config["metadata_path"]
-        img_prefix = data_config["img_prefix"]
+        if "dataset" in data_config:
+            dataset = data_config["dataset"]
+            metadata_path = f"/data/{dataset}/metadata_all_harmonized.csv"
+            img_prefix = f"/data/{dataset}/imgs"
+        else:
+            raise ValueError("'dataset' must be specified in the data configuration")
     else:
-        metadata_path = GCS_METADATA_PATH
-        img_prefix = GCS_IMAGE_PREFIX
+        # GCS mode: construct paths from dataset
+        if "dataset" in data_config:
+            dataset = data_config["dataset"]
+            metadata_path = f"gs://{GCS_BUCKET_NAME}/{dataset}/metadata_all_harmonized.csv"
+            img_prefix = f"gs://{GCS_BUCKET_NAME}/{dataset}/imgs"
+        else:
+            raise ValueError("'dataset' must be specified in the data configuration")
 
     # Load the metadata file and filter it
     logger.info("Loading metadata from GCS (this may take a while)...")
@@ -87,9 +95,23 @@ def initialize_model(config_path):
     # Pre-compute embeddings and store in GCP
     logger.info("Loading/computing embeddings (this may take a while for large datasets)...")
     embedding_start = time.time()
+
+    # If dataset is specified and embedding_filename is provided, auto-construct embeddings path
+    embedding_filename = encoding_config.get("embedding_filename")
+    if embedding_filename and "dataset" in data_config:
+        dataset = data_config["dataset"]
+        # Reconstruct full path with dataset
+        if data_config.get("use_local"):
+            embedding_path = f"/data/{dataset}/embeddings/{embedding_filename}"
+        else:
+            embedding_path = f"gs://{GCS_BUCKET_NAME}/{dataset}/embeddings/{embedding_filename}"
+    else:
+        # Fallback to old parameter name for backwards compatibility
+        embedding_path = encoding_config.get("pre_existing_path")
+
     embeddings = load_or_compute_embeddings(
         data=metadata[["image_id", "text_desc"]],
-        path=encoding_config["pre_existing_path"],
+        path=embedding_path,
         model_name=encoding_config["model_name"],
         batch_size=encoding_config["batch_size"],
         max_length=encoding_config["max_length"],

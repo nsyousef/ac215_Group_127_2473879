@@ -1,10 +1,11 @@
 # Model Training Configuration for Modal
+# EfficientNet-B0 + SapBERT 256 with Complete Text Masking Experiment
 
 # Data source configuration
 data:
   use_local: True  # Use Modal Volume for fast local SSD access
   dataset: dataset_v2  # Dataset name (auto-constructs metadata_path and img_prefix)
-  min_samples_per_label: 1000
+  min_samples_per_label: 100
   datasets:
     - fitzpatrick17k
     - ddi
@@ -19,11 +20,11 @@ data:
     - reddit
     - twitter
     - youtube
-  has_text: null # True to filter for only datasets with text descriptions; False to filter for datasets without text descriptions.
+  has_text: True # True to filter for only datasets with text descriptions; False to filter for datasets without text descriptions.
 
   # Data splits
-  test_size: 0.2
-  val_size: 0.1  # Set to 0.15 for train/val/test split
+  test_size: 0.1
+  val_size: 0.1
 
   # Image configuration
   img_size: [224, 224]  # [height, width]
@@ -33,13 +34,13 @@ data:
 
 # Training parameters
 training:
-  batch_size: 12
-  num_workers: 0
-  prefetch_factor: 1
-  num_epochs: 1
-  patience: 100
+  batch_size: 256
+  num_workers: 16
+  prefetch_factor: 8
+  num_epochs: 10
+  patience: 5
   validation_interval: 1  # Run validation every N epochs (1 = every epoch)
-  n_warmup_epochs: 5  # Number of epochs to freeze backbone (0 = no freezing)
+  n_warmup_epochs: 3  # Number of epochs to freeze backbone (0 = no freezing)
 
   # Statistics and sampling
   compute_stats: False
@@ -47,41 +48,36 @@ training:
 
   # Scheduler configuration
   scheduler:
-    use_cosine_annealing: true  # Enable cosine annealing learning rate scheduler
+    use_cosine_annealing: False  # Enable cosine annealing learning rate scheduler
     vision_eta_min: 0.0000001  # Minimum learning rate for backbone optimizer
     multimodal_classifier_eta_min: 0.0000001  # Minimum learning rate for images head optimizer
 
 # Augmentation parameters
 # Set to null to disable a transform, or provide a value to enable it
 augmentation:
-  brightness_jitter: 0.25
-  contrast_jitter: 0.25
-  saturation_jitter: 0.25
-  hue_jitter: 0.05
+  brightness_jitter: 0.1
+  contrast_jitter: 0.1
+  saturation_jitter: 0.1
+  hue_jitter: 0.01
   rotation_degrees: 25
   translate: null
-  scale: [0.8, 1.1]
+  scale: [0.9, 1.1]
   grayscale_prob: null
   horizontal_flip_prob: 0.5
-  vertical_flip_prob: 0.2
+  vertical_flip_prob: null
 
 # Vision model configuration
 vision_model:
-  name: "resnet50"  # resnet50, resnet101, densenet121, efficientnet_b0, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
+  name: "efficientnet_b0"  # resnet50, resnet101, densenet121, efficientnet_b0, efficientnet_b1, vgg16, vit_b_16, vit_b_32, vit_l_16, vit_l_32
   pretrained: true
-  pooling_type: "max"  # For ImageNet models: avg, max, concat
-  unfreeze_layers: 20  # Number of layers to unfreeze from end
+  pooling_type: "avg"  # For ImageNet models: avg, max, concat
+  unfreeze_layers: 10  # Number of layers to unfreeze from end
 
 # Multimodal classifier configuration
 multimodal_classifier:
-  # These will be set automatically from data and models:
-  num_classes: null  # Will be inferred from data
-  sample_weights: null  # Will be inferred from data
-  vision_embedding_dim: null  # Will be inferred from vision model
-  text_embedding_dim: null  # Will be inferred from text embeddings
-
   # Projection configuration
   projection_dim: 256  # Common projection dimension for both modalities
+  use_l2_normalization: false  # Normalize embeddings before fusion
 
   # Vision projection layers (empty list = just linear layer)
   image_projection_hidden: [512]  # Hidden layers for vision projection
@@ -89,38 +85,49 @@ multimodal_classifier:
   projection_dropout: 0.3  # Dropout for projection layers
 
   # Text projection layers (empty list = just linear layer)
-  text_projection_hidden: [384]  # Hidden layers for text projection
+  text_projection_hidden: [512]  # Hidden layers for text projection
 
   # Final classifier configuration
-  final_hidden_sizes: [128, 64]  # Hidden layers after fusion
+  final_hidden_sizes: [256, 128]  # Hidden layers after fusion
   final_activation: "relu"  # Activation for final classifier
-  final_dropout: 0.4  # Dropout for final classifier
+  final_dropout: 0.3  # Dropout for final classifier
 
   # Fusion strategy
-  fusion_strategy: "weighted_sum"  # "weighted_sum" or "concat_mlp"
+  fusion_strategy: "concat_mlp"  # "weighted_sum" or "concat_mlp"
 
   # Auxiliary losses (optional)
-  use_auxiliary_loss: true  # Enable auxiliary losses on individual modalities
-  auxiliary_loss_weight: 0.2  # Weight for auxiliary losses (0.0-1.0)
+  use_auxiliary_loss: False  # Enable auxiliary losses on individual modalities
+  auxiliary_loss_weight: 0.0  # Not used in ablation mode, but set to 0.0 for clarity
 
   # Loss function configuration
   loss_fn: "cross_entropy"  # "cross_entropy" or "focal"
   label_smoothing: 0.1  # For cross_entropy loss
+  use_class_weights_from_data: false  # Automatically inject class weights from dataloader
 
   # Focal loss parameters (only used if loss_fn is "focal")
   # alpha: 1.0  # Weighting factor for rare class (or sample_weights will be used)
   # gamma: 2.0  # Focusing parameter
   # reduction: "mean"  # Reduction method
 
+# Modality masking configuration
+# Used to train models that can handle missing modalities (modality dropout)
+masking:
+  # Complete masking: mask entire modality for the whole run
+  # Options: null (no complete masking), "image" (mask all images), "text" (mask all text)
+  mask_complete: "text"  # null, "image", or "text"
+
+  # Random masking during training (modality dropout)
+  # Only applies if mask_complete is null
+  random_mask:
+    enabled: false  # Enable random masking
+    image_prob: 0.0  # Probability of masking each image (0.0-1.0)
+    text_prob: 0.0  # Probability of masking each text embedding (0.0-1.0)
+
 # Encoder configuration
-# IMPORTANT: If you change the model_name, max_length, pooling_type, etc. you must also change the
-# embedding_filename. Otherwise, the dataloader will just load the existing embeddings (computed with the previous model),
-# instead of re-computing them with the new model. To make the configuration recompute the embeddings each time, set
-# embedding_filename to null. This will not save the embeddings and will force a recompute from scratch.
 encoder:
-  embedding_filename: null # Filename of pre-computed embeddings (e.g., "pubmedbert_512_cls.parquet"). Full path is auto-constructed from dataset. Set to null to not use pre-computed embeddings.
-  model_name: "pubmedbert" # or biosyn, sapbert, qwen, or path to a model
-  max_length: 512 # Maximum sequence length
+  embedding_filename: "sapbert_256_cls.parquet" # Filename only (directory auto-constructed from dataset)
+  model_name: "sapbert" # or biosyn, sapbert, qwen, or path to a model
+  max_length: 256 # Maximum sequence length
   pooling_type: "cls" # One of 'mean', 'cls', 'last_token'
   batch_size: 32 # The batch size to use when creating embeddings
   qwen_instr: "Represent the patient's description and characteristics (including clinical details, age, sex, and symptoms) as a semantic embedding suitable for clinical classification. Return an embedding." # The instructions for the QWEN embedding to use (allows us to experiment with different instructions; ignored if model is not QWEN)
@@ -129,17 +136,15 @@ encoder:
 optimizer:
   vision_model:
     name: "adamw"
-    learning_rate: 0.00007
-    weight_decay: 0.0001
-    momentum: 0.9
+    learning_rate: 0.0001
+    weight_decay: 0.001
     betas: [0.9, 0.999]
     eps: 0.00000001
 
   multimodal_classifier:
     name: "adamw"
-    learning_rate: 0.0007
-    weight_decay: 0.0001
-    momentum: 0.9
+    learning_rate: 0.0005
+    weight_decay: 0.001
     betas: [0.9, 0.999]
     eps: 0.00000001
 
@@ -147,11 +152,11 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "modal_template"  # Fallback name if config_filename is not available
+  experiment_name: "exp_arch_011_efficientnet_b0_sapbert256_mask_text_dv2"
   wandb_project: "APCOMP215"
 
 # Checkpoint configuration
 checkpoint:
-  save_frequency: 1000  # Save checkpoint every N epochs (it saves the best model anyway)
+  save_frequency: 10  # Save checkpoint every N epochs (it saves the best model anyway)
   keep_last: 1  # Keep last N checkpoints
   load_from: null  # Path to checkpoint to load from (null for no loading)

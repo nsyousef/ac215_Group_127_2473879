@@ -73,7 +73,9 @@ def sync_data_from_gcs():
     """
     One-time sync of data from GCS to Modal Volume
 
-    This copies the dataset from gs://apcomp215-datasets/dataset_v1/ to a persistent Modal Volume for fast local access during training.
+    This copies the dataset from gs://apcomp215-datasets/dataset_v1/ to a persistent
+    Modal Volume for fast local access during training.
+    Data is stored in /data/dataset_v2/ on the Modal Volume.
 
     Usage:
         modal run modal_training_volume.py::sync_data_from_gcs
@@ -100,7 +102,7 @@ def sync_data_from_gcs():
     # Setup paths
     bucket_name = "apcomp215-datasets"
     gcs_prefix = "dataset_v1/"
-    data_dir = "/data/dataset_v1"
+    data_dir = "/data/dataset_v2"
     os.makedirs(data_dir, exist_ok=True)
 
     logger.info(f"Source: gs://{bucket_name}/{gcs_prefix}")
@@ -234,7 +236,7 @@ def train_with_volume(config_path: str = "configs/modal_template.yaml"):
         logger.warning("Cannot write to %s: %s", checkpoint_dir, e)
 
     # Verify data volume is mounted and populated
-    data_dir = "/data/dataset_v1"
+    data_dir = "/data/dataset_v2"
     if os.path.exists(data_dir):
         file_count = len([f for f in Path(data_dir).rglob("*") if f.is_file()])
         logger.info("=" * 70)
@@ -263,7 +265,7 @@ def train_with_volume(config_path: str = "configs/modal_template.yaml"):
     # With /app/src in sys.path, "ml_workflow" is importable as a package
     try:
         from ml_workflow.main import initialize_model
-    except ImportError as e:
+    except ImportError:
         logger.error("Import error details:")
         logger.error("  sys.path: %s", sys.path[:5])
         logger.error("  cwd: %s", os.getcwd())
