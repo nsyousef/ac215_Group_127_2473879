@@ -1,0 +1,117 @@
+# Multimodal: EfficientNet-B1 + SapBERT 256 - Long Run with Tuned Regularization
+# Based on exp 17 with higher dropout, stronger smoothing, and longer training
+
+data:
+  use_local: True
+  dataset: dataset_v2
+  min_samples_per_label: 100
+  datasets:
+    - fitzpatrick17k
+    - ddi
+    - isic
+    - derm1m
+  derm1m_sources:
+    - IIYI
+    - edu
+    - note
+    - public
+    - pubmed
+    - reddit
+    - twitter
+    - youtube
+  has_text: True
+  test_size: 0.1
+  val_size: 0.1
+  img_size: [240, 240]  # EfficientNet-B1 native size
+  seed: 42
+
+training:
+  batch_size: 128
+  num_workers: 16
+  prefetch_factor: 8
+  num_epochs: 50          # Longer training
+  patience: 12
+  validation_interval: 1
+  n_warmup_epochs: 2
+  compute_stats: False
+  weighted_sampling: True
+  scheduler:
+    use_cosine_annealing: True
+    vision_eta_min: 0.000001
+    multimodal_classifier_eta_min: 0.000001
+
+augmentation:
+  brightness_jitter: 0.2
+  contrast_jitter: 0.2
+  saturation_jitter: 0.2
+  hue_jitter: 0.05
+  rotation_degrees: 30
+  translate: [0.1, 0.1]
+  scale: [0.8, 1.2]
+  grayscale_prob: null
+  horizontal_flip_prob: 0.5
+  vertical_flip_prob: null
+
+vision_model:
+  name: "efficientnet_b1"
+  pretrained: true
+  pooling_type: "avg"
+  unfreeze_layers: -1
+
+multimodal_classifier:
+  projection_dim: 256
+  use_l2_normalization: true
+  image_projection_hidden: [512]
+  projection_activation: "relu"
+  projection_dropout: 0.4      # from 0.3
+  text_projection_hidden: [512]
+  final_hidden_sizes: [256]    # from [128]
+  final_activation: "relu"
+  final_dropout: 0.4           # from 0.3
+  fusion_strategy: "concat_mlp"
+  use_auxiliary_loss: true
+  auxiliary_vision_loss_weight: 0.4
+  auxiliary_text_loss_weight: 0.1
+  loss_fn: "cross_entropy"
+  label_smoothing: 0.1         # from 0.05
+  use_class_weights_from_data: false
+
+masking:
+  mask_complete: null
+  random_mask:
+    enabled: true
+    image_prob: 0.1            # keep this
+    text_prob: 0.1             # down from 0.2
+
+encoder:
+  embedding_filename: "sapbert_256_cls.parquet"
+  model_name: "sapbert"
+  max_length: 256
+  pooling_type: "cls"
+  batch_size: 32
+  qwen_instr: ""
+
+optimizer:
+  vision_model:
+    name: "adamw"
+    learning_rate: 0.0002      # from 0.0003
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+  multimodal_classifier:
+    name: "adamw"
+    learning_rate: 0.0005
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+
+output:
+  save_dir: "/checkpoints"
+  log_dir: "./logs"
+  experiment_name: "exp_arch_dv2_18_multimodal_efficientnet_b1_sapbert256_longrun"
+  wandb_project: "APCOMP215"
+
+checkpoint:
+  save_frequency: 10
+  keep_last: 1
+  load_from: null

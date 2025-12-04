@@ -5,12 +5,11 @@ from tqdm import tqdm
 import numpy as np
 
 try:
-    from ..utils import logger, save_checkpoint, load_checkpoint, cleanup_old_checkpoints
+    from ..utils import logger, save_checkpoint, cleanup_old_checkpoints
 except ImportError:
-    from ml_workflow.utils import logger, save_checkpoint, load_checkpoint, cleanup_old_checkpoints
+    from ml_workflow.utils import logger, save_checkpoint, cleanup_old_checkpoints
 import wandb
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 
 class Trainer:
@@ -171,7 +170,10 @@ class Trainer:
         vision_optimizer_cfg = self.config["optimizer"]["vision_model"]
         multimodal_optimizer_cfg = self.config["optimizer"]["multimodal_classifier"]
         logger.info(
-            f"Optimizers -> vision_model: {vision_optimizer_cfg['name']} (lr={vision_optimizer_cfg['learning_rate']}), multimodal_classifier: {multimodal_optimizer_cfg['name']} (lr={multimodal_optimizer_cfg['learning_rate']})"
+            f"Optimizers -> vision_model: {vision_optimizer_cfg['name']} "
+            f"(lr={vision_optimizer_cfg['learning_rate']}), "
+            f"multimodal_classifier: {multimodal_optimizer_cfg['name']} "
+            f"(lr={multimodal_optimizer_cfg['learning_rate']})"
         )
 
         # Log fusion strategy and parameters
@@ -179,7 +181,9 @@ class Trainer:
         logger.info(f"Fusion strategy: {multimodal_info['fusion_strategy']}")
         if "fusion_weights" in multimodal_info:
             logger.info(
-                f"Fusion weights -> alpha_vision: {multimodal_info['fusion_weights']['alpha_vision']:.3f}, alpha_text: {multimodal_info['fusion_weights']['alpha_text']:.3f}"
+                f"Fusion weights -> alpha_vision: "
+                f"{multimodal_info['fusion_weights']['alpha_vision']:.3f}, "
+                f"alpha_text: {multimodal_info['fusion_weights']['alpha_text']:.3f}"
             )
 
         # Use config filename for wandb run name if available, otherwise fall back to experiment_name
@@ -227,7 +231,9 @@ class Trainer:
                     ran_validation = True
                     val_loss, val_acc, val_f1, confusion_matrix = self.validate()
                     logger.info(
-                        f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Train F1: {train_f1:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val F1: {val_f1:.4f}"
+                        f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, "
+                        f"Train Acc: {train_acc:.4f}, Train F1: {train_f1:.4f}, "
+                        f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val F1: {val_f1:.4f}"
                     )
 
                     # Create and log confusion analysis table
@@ -252,7 +258,8 @@ class Trainer:
                 # If validation did not run, still log training metrics
                 if not ran_validation:
                     logger.info(
-                        f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Train F1: {train_f1:.4f}"
+                        f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, "
+                        f"Train Acc: {train_acc:.4f}, Train F1: {train_f1:.4f}"
                     )
 
                 run.log(
@@ -385,8 +392,8 @@ class Trainer:
             # Forward pass through vision model
             vision_embeddings = self.vision_model(images)
 
-            # Forward pass through multimodal classifier
-            outputs = self.multimodal_classifier(vision_embeddings, text_embeddings)
+            # Forward pass through multimodal classifier (pass modality_mask_info for fusion-level masking)
+            outputs = self.multimodal_classifier(vision_embeddings, text_embeddings, modality_mask_info)
             logits = outputs["logits"]
 
             # Compute loss (includes auxiliary losses if enabled)
@@ -483,7 +490,7 @@ class Trainer:
                 vision_embeddings = self.vision_model(images)
 
                 # Forward pass through multimodal classifier
-                outputs = self.multimodal_classifier(vision_embeddings, text_embeddings)
+                outputs = self.multimodal_classifier(vision_embeddings, text_embeddings, modality_mask_info)
                 logits = outputs["logits"]
 
                 # Compute loss
@@ -637,7 +644,7 @@ class Trainer:
                 text_embeddings = text_embeddings.to(self.device, non_blocking=True)
 
                 modality_mask_info = None
-                # Apply complete masking (if enabled) - no random masking in validation
+                # Apply complete masking (if enabled) - no random masking in test
                 if self.mask_complete is not None:
                     images, text_embeddings, modality_mask_info = self._apply_masking(images, text_embeddings)
 
@@ -645,7 +652,7 @@ class Trainer:
                 vision_embeddings = self.vision_model(images)
 
                 # Forward pass through multimodal classifier
-                outputs = self.multimodal_classifier(vision_embeddings, text_embeddings)
+                outputs = self.multimodal_classifier(vision_embeddings, text_embeddings, modality_mask_info)
                 logits = outputs["logits"]
 
                 # Compute loss
@@ -679,7 +686,7 @@ class Trainer:
             f1_per_class = np.where(precision + recall > 0, 2 * precision * recall / (precision + recall), 0.0)
             macro_f1 = float(np.mean(f1_per_class))
 
-        logger.info(f"Test Results:")
+        logger.info("Test Results:")
         logger.info(f"  Test Loss: {avg_loss:.4f}")
         logger.info(f"  Test Accuracy: {accuracy:.2f}%")
         logger.info(f"  Test Macro-F1: {macro_f1:.4f}")

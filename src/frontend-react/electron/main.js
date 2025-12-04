@@ -3,15 +3,65 @@
  * Handles IPC requests from renderer and manages file-based data operations.
  */
 
+// IMMEDIATE TEST: Write a marker file to prove this code runs
+const fs_immediate = require('fs');
+try {
+  fs_immediate.writeFileSync('/tmp/pibu_main_js_loaded.txt', `Main.js loaded at ${new Date().toISOString()}\n`);
+} catch (e) {}
+
+console.log('🚀 pibu_ai Electron main process starting...');
+console.error('🚀 pibu_ai Electron main process starting (stderr)...');
+console.error('TEST_ERROR_OUTPUT_001');
+process.stderr.write('STDERR_TEST_002\n');
+
+// Import modules first
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const url = require('url');
+const url = require('url');
 const fs = require('fs').promises;
-const isDev = require('electron-is-dev');
+const isDevModule = require('electron-is-dev');
+// Handle both CommonJS and ES6 module exports
+const isDev = typeof isDevModule === 'boolean' ? isDevModule : isDevModule.default || false;
+const fs_module = require('fs');
+
+// Write logs to file for debugging - write to /tmp for easier access
+const logFile = '/tmp/pibu_ai_debug.log';
+fs_module.writeFileSync(logFile, `\n========== PROCESS START ${new Date().toISOString()} ==========\n`, { flag: 'a' });
+
+function debugLog(...args) {
+  const msg = args.map(arg => typeof arg === 'string' ? arg : JSON.stringify(arg)).join(' ');
+  const timestamp = new Date().toISOString();
+  const fullMsg = `[${timestamp}] ${msg}\n`;
+  console.log(fullMsg);
+  console.error(fullMsg);  // Also log to stderr
+  try {
+    fs_module.appendFileSync(logFile, fullMsg, 'utf-8');
+  } catch (e) {
+    console.error('Failed to write to debug log:', e);
+  }
+}
+
+debugLog('🚀 Main process loaded, modules imported, logFile at:', logFile);
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  console.error('💥 Uncaught exception:', error);
+  if (logFile) debugLog('💥 Uncaught exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled rejection:', reason);
+  if (logFile) debugLog('💥 Unhandled rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
 const { spawn } = require('child_process');
 const fsSync = require('fs');
+const http = require('http');
 
 let mainWindow;
+let productionServer = null;  // Local server for serving static files in production
 
 // Path to app data directory where diseases, chat, and time tracking data are stored
 const getDataDir = () => {
@@ -69,21 +119,51 @@ const activeStreams = new Map(); // streamId -> { caseId, question }
 
 
 function resolvePythonBin() {
+  // Production: use bundled Python
+  if (!isDev) {
+    const bundledPython = path.join(
+      process.resourcesPath,
+      'python-bundle',
+      'venv',
+      'bin',
+      'python'
+    );
+    if (fsSync.existsSync(bundledPython)) {
+      console.log('✅ Using bundled Python:', bundledPython);
+      return bundledPython;
+    }
+  }
+
   // Dev path to repo-local venv
-  const devVenvPy = path.join(__dirname, '..', 'python', '.venv', 'bin', 'python3');
-  if (fsSync.existsSync(devVenvPy)) return devVenvPy;
+  const devVenvPy = path.join(__dirname, '..', 'resources', 'python-bundle', 'venv', 'bin', 'python');
+  if (fsSync.existsSync(devVenvPy)) {
+    console.log('✅ Using dev venv Python:', devVenvPy);
+    return devVenvPy;
+  }
+
+  // Fallback dev path
+  const fallbackVenv = path.join(__dirname, '..', 'python', '.venv', 'bin', 'python3');
+  if (fsSync.existsSync(fallbackVenv)) {
+    console.log('✅ Using fallback venv Python:', fallbackVenv);
+    return fallbackVenv;
+  }
 
   // Optional meta file written by setup script
   const metaPath = path.join(__dirname, '..', 'python', '.python-bin-path.json');
   try {
     if (fsSync.existsSync(metaPath)) {
       const { python } = JSON.parse(fsSync.readFileSync(metaPath, 'utf8'));
-      if (python && fsSync.existsSync(python)) return python;
+      if (python && fsSync.existsSync(python)) {
+        console.log('✅ Using Python from meta file:', python);
+        return python;
+      }
     }
   } catch {}
 
-  // Fallback to env or system
-  return process.env.PYTHON || 'python3';
+  // Fallback to system Python
+  const systemPython = process.env.PYTHON || 'python3';
+  console.log('⚠️  Falling back to system Python:', systemPython);
+  return systemPython;
 }
 
 function spawnPythonForCase(caseId) {
@@ -504,12 +584,110 @@ ipcMain.handle('read-image-as-data-url', async (event, imagePath) => {
 // Window Creation
 // ============================================================================
 
+// Simple static file server for production
+function startProductionServer() {
+  return new Promise((resolve, reject) => {
+    const outDir = path.join(__dirname, '..', 'out');
+    const publicDir = path.join(__dirname, '..', 'public');
+
+    debugLog(`🔧 Setting up production server:`);
+    debugLog(`   __dirname: ${__dirname}`);
+    debugLog(`   outDir: ${outDir}`);
+    debugLog(`   publicDir: ${publicDir}`);
+    debugLog(`   outDir exists: ${fsSync.existsSync(outDir)}`);
+
+    const server = http.createServer(async (req, res) => {
+      try {
+        debugLog(`📡 HTTP request: ${req.url}`);
+        // Normalize the request path
+        let filePath = req.url;
+        if (filePath === '/') {
+          filePath = '/index.html';
+        }
+
+        // Try to serve from out/ first (static exports), then public/
+        let fullPath = path.join(outDir, filePath);
+
+        let fileExists = false;
+        try {
+          await fs.stat(fullPath);
+          fileExists = true;
+        } catch (err) {
+          // Try public directory
+          fullPath = path.join(publicDir, filePath);
+          try {
+            await fs.stat(fullPath);
+            fileExists = true;
+          } catch (err2) {
+            fileExists = false;
+          }
+        }
+
+        if (!fileExists) {
+          // File not found, serve index.html for client-side routing
+          try {
+            const indexPath = path.join(outDir, 'index.html');
+            const content = await fs.readFile(indexPath);
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(content);
+            debugLog(`✅ Served index.html for route: ${req.url}`);
+            return;
+          } catch (err) {
+            debugLog(`❌ Failed to read index.html:`, err);
+            res.writeHead(404);
+            res.end('Not found');
+            return;
+          }
+        }
+
+        // Read the file
+        const content = await fs.readFile(fullPath);
+
+        // Determine content type
+        let contentType = 'text/plain';
+        if (filePath.endsWith('.html')) contentType = 'text/html; charset=utf-8';
+        else if (filePath.endsWith('.js')) contentType = 'application/javascript; charset=utf-8';
+        else if (filePath.endsWith('.css')) contentType = 'text/css; charset=utf-8';
+        else if (filePath.endsWith('.json')) contentType = 'application/json; charset=utf-8';
+        else if (filePath.endsWith('.svg')) contentType = 'image/svg+xml';
+        else if (filePath.endsWith('.png')) contentType = 'image/png';
+        else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) contentType = 'image/jpeg';
+        else if (filePath.endsWith('.gif')) contentType = 'image/gif';
+        else if (filePath.endsWith('.woff')) contentType = 'font/woff';
+        else if (filePath.endsWith('.woff2')) contentType = 'font/woff2';
+
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Cache-Control': 'no-cache'
+        });
+        res.end(content);
+        debugLog(`✅ Served file: ${filePath} (${content.length} bytes)`);
+      } catch (err) {
+        debugLog(`❌ Server error for ${req.url}:`, err);
+        res.writeHead(500);
+        res.end('Internal server error');
+      }
+    });
+
+    server.listen(4000, '127.0.0.1', () => {
+      debugLog('✅ Production static server running on http://127.0.0.1:4000');
+      resolve(server);
+    });
+
+    server.on('error', (err) => {
+      debugLog('❌ Server startup error:', err);
+      reject(err);
+    });
+  });
+}
+
 function createWindow() {
   const icon = path.join(__dirname, '..', 'build-resources', 'icon.png');
   mainWindow = new BrowserWindow({
     icon: icon,
     width: 1200,
     height: 800,
+    title: 'pibu.ai',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -517,25 +695,23 @@ function createWindow() {
     },
   });
 
-  const startURL = isDev
-    ? 'http://127.0.0.1:3000'
-    : url.format({
-        pathname: path.join(__dirname, '../out/index.html'),
-        protocol: 'file:',
-        slashes: true,
-      });
+  let startURL;
+  if (isDev) {
+    startURL = 'http://127.0.0.1:3000';
+    debugLog('🔧 Development mode - loading from:', startURL);
+  } else {
+    // In production, use local HTTP server to serve static files
+    startURL = 'http://127.0.0.1:4000';
+    debugLog('🔧 Production mode - loading from:', startURL);
+  }
 
+  debugLog(`📱 Loading URL: ${startURL}`);
   mainWindow.loadURL(startURL);
 
-  // Always open DevTools in dev mode for debugging
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-    // Also add keyboard shortcut to toggle DevTools (Cmd+Option+I on Mac, Ctrl+Shift+I on Windows/Linux)
-    mainWindow.webContents.on('did-finish-load', () => {
-      console.log('Electron window loaded. DevTools should be open.');
-      console.log('If DevTools is not visible, press Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux)');
-    });
-  }
+  // Never open dev tools automatically - users can use Cmd+Option+I if needed
+  // if (isDev) {
+  //   mainWindow.webContents.openDevTools();
+  // }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -547,7 +723,27 @@ function createWindow() {
 // ============================================================================
 
 app.on('ready', async () => {
+  debugLog('📍 app.on(ready) event triggered');
   await ensureDataDirExists();
+  debugLog('📍 Data directory ensured');
+
+  // Start production server if not in dev mode
+  debugLog('📍 isDev:', isDev);
+  if (!isDev) {
+    debugLog('📍 Production mode detected - starting HTTP server');
+    try {
+      productionServer = await startProductionServer();
+      debugLog('✅ Production server started');
+      // Give server a moment to be fully ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+      debugLog('❌ Failed to start production server:', error);
+      // Still try to create the window and hope the server will start in time
+    }
+  } else {
+    debugLog('📍 Development mode detected - skipping HTTP server');
+  }
+
   // On macOS, BrowserWindow.icon is ignored; set Dock icon explicitly in dev
   if (process.platform === 'darwin') {
     try {
@@ -556,13 +752,20 @@ app.on('ready', async () => {
         app.dock.setIcon(dockIconPath);
       }
     } catch (e) {
-      console.warn('Failed to set macOS Dock icon:', e);
+      debugLog('Failed to set macOS Dock icon:', e);
     }
   }
+  debugLog('📍 Creating window');
   createWindow();
 });
 
 app.on('window-all-closed', () => {
+  // Clean up production server
+  if (productionServer) {
+    productionServer.close();
+    productionServer = null;
+  }
+
   if (process.platform !== 'darwin') {
     app.quit();
   }

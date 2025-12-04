@@ -43,6 +43,11 @@ class MultimodalClassifier(nn.Module):
                     - final_dropout: Dropout rate for final classifier (default: 0.3)
                     - use_auxiliary_loss: Enable auxiliary losses on individual modalities (default: False)
                     - auxiliary_loss_weight: Weight for auxiliary losses (default: 0.3)
+                      Used if per-modality weights not set
+                    - auxiliary_vision_loss_weight: Weight for vision auxiliary loss
+                      (default: uses auxiliary_loss_weight)
+                    - auxiliary_text_loss_weight: Weight for text auxiliary loss
+                      (default: uses auxiliary_loss_weight)
                     - label_smoothing: Label smoothing for cross entropy (default: 0.0)
                     - alpha, gamma, reduction: For focal loss
                     - sample_weights: Sample weights for focal loss
@@ -72,7 +77,10 @@ class MultimodalClassifier(nn.Module):
 
         # Auxiliary loss configuration
         self.use_auxiliary_loss = config.get("use_auxiliary_loss", False)
-        self.auxiliary_loss_weight = config.get("auxiliary_loss_weight", 0.3)
+        # Support separate weights for vision and text, with fallback to shared weight
+        default_aux_weight = config.get("auxiliary_loss_weight", 0.3)
+        self.auxiliary_vision_loss_weight = config.get("auxiliary_vision_loss_weight", default_aux_weight)
+        self.auxiliary_text_loss_weight = config.get("auxiliary_text_loss_weight", default_aux_weight)
 
         # Validate fusion strategy
         if self.fusion_strategy not in ["weighted_sum", "concat_mlp"]:
@@ -207,44 +215,97 @@ class MultimodalClassifier(nn.Module):
         else:
             return nn.Linear(input_dim, output_dim)
 
-    def forward(self, vision_embeddings: torch.Tensor, text_embeddings: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def forward(
+        self,
+        vision_embeddings: torch.Tensor,
+        text_embeddings: torch.Tensor,
+        modality_mask_info: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Dict[str, torch.Tensor]:
         """
         Forward pass through multimodal classifier
 
         Args:
             vision_embeddings: Vision embeddings from vision model (batch_size, vision_embedding_dim)
             text_embeddings: Pre-computed text embeddings from dataloader (batch_size, text_embedding_dim)
+            modality_mask_info: Optional dict with validity masks:
+                - 'vision_valid_mask': Boolean tensor (batch_size,) - True if vision is valid for sample
+                - 'text_valid_mask': Boolean tensor (batch_size,) - True if text is valid for sample
 
         Returns:
             Dictionary with keys:
                 - 'logits': Main prediction logits (batch_size, num_classes)
                 - 'aux_vision_logits': Auxiliary vision logits (if use_auxiliary_loss=True)
                 - 'aux_text_logits': Auxiliary text logits (if use_auxiliary_loss=True)
+                - 'ablation_mode': str or None - 'vision_only', 'text_only', or None for multimodal
         """
+        # Extract validity masks if provided
+        vision_valid = None
+        text_valid = None
+        if modality_mask_info is not None:
+            vision_valid = modality_mask_info.get("vision_valid_mask")
+            text_valid = modality_mask_info.get("text_valid_mask")
 
-        # Project embeddings to common dimension
+        # Check for complete modality masking (all samples in batch are masked)
+        vision_completely_masked = vision_valid is not None and not vision_valid.any()
+        text_completely_masked = text_valid is not None and not text_valid.any()
+
+        # ABLATION MODE: One modality completely masked
+        # Requires use_auxiliary_loss=True to have single-modality classifiers
+        if vision_completely_masked and not text_completely_masked:
+            if not self.use_auxiliary_loss:
+                raise RuntimeError(
+                    "Ablation mode (mask_complete='image') requires use_auxiliary_loss=True. "
+                    "The auxiliary text classifier is needed for text-only classification."
+                )
+            projected_text = self.text_projection(text_embeddings)
+            if self.use_l2_normalization:
+                projected_text = F.normalize(projected_text, p=2, dim=1)
+            logits = self.aux_text_classifier(projected_text)
+            return {
+                "logits": logits,
+                "aux_text_logits": logits,
+                "ablation_mode": "text_only",
+            }
+
+        if text_completely_masked and not vision_completely_masked:
+            if not self.use_auxiliary_loss:
+                raise RuntimeError(
+                    "Ablation mode (mask_complete='text') requires use_auxiliary_loss=True. "
+                    "The auxiliary vision classifier is needed for vision-only classification."
+                )
+            projected_vision = self.vision_projection(vision_embeddings)
+            if self.use_l2_normalization:
+                projected_vision = F.normalize(projected_vision, p=2, dim=1)
+            logits = self.aux_vision_classifier(projected_vision)
+            return {
+                "logits": logits,
+                "aux_vision_logits": logits,
+                "ablation_mode": "vision_only",
+            }
+
+        # MULTIMODAL MODE: Both modalities present (possibly with per-sample masking)
         projected_vision = self.vision_projection(vision_embeddings)
-        projected_text = self.text_projection(text_embeddings)
-
+        if vision_valid is not None:
+            projected_vision = projected_vision * vision_valid.float().unsqueeze(-1)
         if self.use_l2_normalization:
             projected_vision = F.normalize(projected_vision, p=2, dim=1)
+
+        projected_text = self.text_projection(text_embeddings)
+        if text_valid is not None:
+            projected_text = projected_text * text_valid.float().unsqueeze(-1)
+        if self.use_l2_normalization:
             projected_text = F.normalize(projected_text, p=2, dim=1)
 
-        # Fuse embeddings based on strategy
+        # Fuse embeddings
         if self.fusion_strategy == "weighted_sum":
-            # Normalize weights using softmax to ensure they sum to 1
             weights = torch.softmax(torch.stack([self.alpha_vision, self.alpha_text]), dim=0)
             fused = weights[0] * projected_vision + weights[1] * projected_text
         else:  # concat_mlp
             fused = torch.cat([projected_vision, projected_text], dim=1)
 
-        # Final classification
         logits = self.final_classifier(fused)
 
-        # Prepare output dictionary
-        outputs = {"logits": logits}
-
-        # Auxiliary predictions (optional)
+        outputs = {"logits": logits, "ablation_mode": None}
         if self.use_auxiliary_loss:
             outputs["aux_vision_logits"] = self.aux_vision_classifier(projected_vision)
             outputs["aux_text_logits"] = self.aux_text_classifier(projected_text)
@@ -263,15 +324,21 @@ class MultimodalClassifier(nn.Module):
         Args:
             outputs: Dictionary from forward() containing logits
             targets: Ground truth labels (batch_size,)
+            modality_mask_info: Optional dict with validity masks
 
         Returns:
             Total loss (scalar tensor)
         """
-        # Main loss
+        # Main loss (in ablation mode, this is already from the auxiliary classifier)
         main_loss = self.criterion(outputs["logits"], targets)
 
-        # Auxiliary losses (optional)
-        if self.use_auxiliary_loss and "aux_vision_logits" in outputs:
+        # In ablation mode, main logits ARE from auxiliary classifier - no need to add auxiliary loss
+        ablation_mode = outputs.get("ablation_mode")
+        if ablation_mode is not None:
+            return main_loss
+
+        # Multimodal mode: add auxiliary losses if enabled
+        if self.use_auxiliary_loss and "aux_vision_logits" in outputs and "aux_text_logits" in outputs:
             # Build per-modality masks (1 = valid sample for that modality)
             vision_mask = None
             text_mask = None
@@ -280,29 +347,25 @@ class MultimodalClassifier(nn.Module):
                 vision_mask = modality_mask_info.get("vision_valid_mask")
                 text_mask = modality_mask_info.get("text_valid_mask")
 
-            aux_total = None
+            total_loss = main_loss
 
-            # Vision auxiliary loss only if modality is valid
-            if vision_mask is None:
-                loss_term = self.criterion(outputs["aux_vision_logits"], targets)
-                aux_total = loss_term if aux_total is None else aux_total + loss_term
-            elif vision_mask.any():
-                loss_term = self._compute_masked_loss(outputs["aux_vision_logits"], targets, vision_mask)
-                aux_total = loss_term if aux_total is None else aux_total + loss_term
+            # Vision auxiliary loss (only if weight > 0 and modality is valid)
+            if self.auxiliary_vision_loss_weight > 0:
+                if vision_mask is None:
+                    loss_term = self.criterion(outputs["aux_vision_logits"], targets)
+                    total_loss = total_loss + self.auxiliary_vision_loss_weight * loss_term
+                elif vision_mask.any():
+                    loss_term = self._compute_masked_loss(outputs["aux_vision_logits"], targets, vision_mask)
+                    total_loss = total_loss + self.auxiliary_vision_loss_weight * loss_term
 
-            # Text auxiliary loss only if modality is valid
-            if text_mask is None:
-                loss_term = self.criterion(outputs["aux_text_logits"], targets)
-                aux_total = loss_term if aux_total is None else aux_total + loss_term
-            elif text_mask.any():
-                loss_term = self._compute_masked_loss(outputs["aux_text_logits"], targets, text_mask)
-                aux_total = loss_term if aux_total is None else aux_total + loss_term
-
-            if aux_total is not None:
-                total_loss = main_loss + self.auxiliary_loss_weight * aux_total
-            else:
-                # Both modalities fully masked, use only main loss
-                total_loss = main_loss
+            # Text auxiliary loss (only if weight > 0 and modality is valid)
+            if self.auxiliary_text_loss_weight > 0:
+                if text_mask is None:
+                    loss_term = self.criterion(outputs["aux_text_logits"], targets)
+                    total_loss = total_loss + self.auxiliary_text_loss_weight * loss_term
+                elif text_mask.any():
+                    loss_term = self._compute_masked_loss(outputs["aux_text_logits"], targets, text_mask)
+                    total_loss = total_loss + self.auxiliary_text_loss_weight * loss_term
         else:
             total_loss = main_loss
 
@@ -338,6 +401,8 @@ class MultimodalClassifier(nn.Module):
             "text_projection_hidden": self.text_projection_hidden,
             "final_hidden_sizes": self.final_hidden_sizes,
             "use_auxiliary_loss": self.use_auxiliary_loss,
+            "auxiliary_vision_loss_weight": self.auxiliary_vision_loss_weight,
+            "auxiliary_text_loss_weight": self.auxiliary_text_loss_weight,
             "total_parameters": total_params,
             "trainable_parameters": trainable_params,
             "trainable_percentage": f"{(trainable_params/total_params)*100:.2f}%",

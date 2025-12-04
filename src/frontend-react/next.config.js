@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    output: 'export',  // Required for Electron
+    // Only use static export for production builds (Electron), not for dev server
+    output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
     distDir: 'out',
     reactStrictMode: false,
     images: {
