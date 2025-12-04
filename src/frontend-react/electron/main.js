@@ -3,16 +3,37 @@
  * Handles IPC requests from renderer and manages file-based data operations.
  */
 
-console.log('🚀 pibu_ai Electron main process starting...');
+// IMMEDIATE TEST: Write a marker file to prove this code runs
+const fs_immediate = require('fs');
+try {
+  fs_immediate.writeFileSync('/tmp/pibu_main_js_loaded.txt', `Main.js loaded at ${new Date().toISOString()}\n`);
+} catch (e) {}
 
-// Write logs to file for debugging
-const logFile = path.join(app.getPath('home'), '.pibu_ai_debug.log');
+console.log('🚀 pibu_ai Electron main process starting...');
+console.error('🚀 pibu_ai Electron main process starting (stderr)...');
+console.error('TEST_ERROR_OUTPUT_001');
+process.stderr.write('STDERR_TEST_002\n');
+
+// Import modules first
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const path = require('path');
+const url = require('url');
+const fs = require('fs').promises;
+const isDevModule = require('electron-is-dev');
+// Handle both CommonJS and ES6 module exports
+const isDev = typeof isDevModule === 'boolean' ? isDevModule : isDevModule.default || false;
 const fs_module = require('fs');
+
+// Write logs to file for debugging - write to /tmp for easier access
+const logFile = '/tmp/pibu_ai_debug.log';
+fs_module.writeFileSync(logFile, `\n========== PROCESS START ${new Date().toISOString()} ==========\n`, { flag: 'a' });
+
 function debugLog(...args) {
   const msg = args.map(arg => typeof arg === 'string' ? arg : JSON.stringify(arg)).join(' ');
   const timestamp = new Date().toISOString();
   const fullMsg = `[${timestamp}] ${msg}\n`;
   console.log(fullMsg);
+  console.error(fullMsg);  // Also log to stderr
   try {
     fs_module.appendFileSync(logFile, fullMsg, 'utf-8');
   } catch (e) {
@@ -20,24 +41,20 @@ function debugLog(...args) {
   }
 }
 
-debugLog('🚀 Main process loaded, debugLog initialized');
+debugLog('🚀 Main process loaded, modules imported, logFile at:', logFile);
 
 // Global error handlers
 process.on('uncaughtException', (error) => {
-  debugLog('💥 Uncaught exception:', error);
+  console.error('💥 Uncaught exception:', error);
+  if (logFile) debugLog('💥 Uncaught exception:', error);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  debugLog('💥 Unhandled rejection at:', promise, 'reason:', reason);
+  console.error('💥 Unhandled rejection:', reason);
+  if (logFile) debugLog('💥 Unhandled rejection at:', promise, 'reason:', reason);
   process.exit(1);
 });
-
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
-const path = require('path');
-const url = require('url');
-const fs = require('fs').promises;
-const isDev = require('electron-is-dev');
 const { spawn } = require('child_process');
 const fsSync = require('fs');
 const http = require('http');

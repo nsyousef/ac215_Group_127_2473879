@@ -5,6 +5,8 @@ module.exports = {
     name: 'pibu_ai',
     productName: 'pibu.ai',
     icon: path.join(__dirname, 'build-resources/icon.icns'),
+    // Explicitly set the main entry point
+    main: path.join(__dirname, 'electron/main.js'),
     // Files to include in the packaged app
     files: [
       'electron/',
