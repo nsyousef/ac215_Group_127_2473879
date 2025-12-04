@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to create DMG for Derma Assistant
+# Script to create DMG for pibu_ai
 # Assumes electron-forge has already packaged the app
 
 set -e
@@ -8,7 +8,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 # Find the packaged app
-APP_DIR=$(find ./out -name "Derma Assistant-darwin-x64" -type d | head -1)
+APP_DIR=$(find ./out -name "pibu_ai-darwin-x64" -type d | head -1)
 
 if [ -z "$APP_DIR" ]; then
   echo "❌ Error: Could not find packaged app in ./out"
@@ -22,13 +22,13 @@ echo "📦 Found packaged app at: $APP_DIR"
 mkdir -p ./dist
 
 # Create DMG
-DMG_FILE="./dist/Derma-Assistant.dmg"
+DMG_FILE="./dist/pibu_ai.dmg"
 echo "🎬 Creating DMG: $DMG_FILE"
-echo "   Volume name: Derma Assistant"
+echo "   Volume name: pibu_ai"
 
 hdiutil create \
   -srcfolder "$APP_DIR" \
-  -volname "Derma Assistant" \
+  -volname "pibu_ai" \
   -format UDZO \
   "$DMG_FILE"
 
@@ -40,7 +40,7 @@ if [ -f "$DMG_FILE" ]; then
   echo ""
   echo "📦 To install:"
   echo "   1. Open the DMG file"
-  echo "   2. Drag 'Derma Assistant.app' to the Applications folder"
+  echo "   2. Drag 'pibu_ai.app' to the Applications folder"
   echo "   3. Launch from Applications"
 else
   echo "❌ Error: DMG file was not created"

@@ -1,6 +1,6 @@
 {
-  "appId": "com.dermaassistant.app",
-  "productName": "Derma Assistant",
+  "appId": "com.pibuai.app",
+  "productName": "pibu.ai",
   "files": [
     ".next",
     "out",

@@ -1,6 +1,10 @@
-# Building Derma Assistant for macOS
+# Building pibu.ai for macOS
 
-Complete guide for building the Derma Assistant desktop application for macOS with bundled Python.
+Complete guide for building the pibu.ai desktop application for macOS with bundled Python.
+
+**Naming Convention:**
+- **User-facing name**: `pibu.ai` (shown in Dock, window titles, menus, Applications folder)
+- **Filename/internal name**: `pibu_ai` (used in DMG files, app bundles, directories, config files)
 
 **Table of Contents:**
 - [Quick Start (TL;DR)](#quick-start-tldr)
@@ -33,7 +37,7 @@ npm run build
 npm run make-dmg
 ```
 
-**Output:** `out/make/Derma Assistant-*.dmg`
+**Output:** `dist/pibu_ai.dmg`
 
 Then open the DMG file to install the app on your Mac.
 
@@ -121,7 +125,7 @@ npm run make-dmg
 
 Creates the macOS DMG installer file using `electron-forge` for packaging and manual `hdiutil` for DMG creation.
 
-**Output:** `dist/Derma-Assistant.dmg`
+**Output:** `dist/pibu_ai.dmg`
 
 #### What Happens:
 1. Builds Next.js frontend (if not already built)
@@ -137,7 +141,7 @@ npm run make-dmg
 
 Creates the macOS DMG installer file using `electron-forge` for packaging and manual `hdiutil` for DMG creation.
 
-**Output:** `dist/Derma-Assistant.dmg`
+**Output:** `dist/pibu_ai.dmg`
 
 #### What Happens:
 1. Builds Next.js frontend (if not already built)
@@ -166,10 +170,10 @@ The app DMG includes:
 - **App metadata and permissions** - defined in `build-resources/entitlements.plist`
 
 **User Experience:**
-- Users download the DMG and drag Derma Assistant to Applications
+- Users download the DMG and drag pibu.ai to Applications
 - No need to install Python, Node.js, or npm
 - App works completely standalone
-- User data stored in `~/Library/Application Support/Derma Assistant/`
+- User data stored in `~/Library/Application Support/pibu_ai/`
 
 ### Verification
 
@@ -266,7 +270,7 @@ resources/python-bundle/venv/bin/python python/ml_server.py
 **Solution:**
 ```bash
 # Allow the app to run
-xattr -d com.apple.quarantine "/Applications/Derma Assistant.app"
+xattr -d com.apple.quarantine "/Applications/pibu_ai.app"
 
 # OR: Right-click the app → Open → Open
 ```
@@ -433,7 +437,7 @@ For GitHub Actions, see `.github/workflows/ci.yml` to add frontend build steps.
 **Common Issues:**
 1. Python detection logic: See `electron/main.js` → `resolvePythonBin()`
 2. Bundling issues: See `scripts/bundle-python-macos.sh`
-3. App logs: `~/Library/Application Support/Derma Assistant/logs/`
+3. App logs: `~/Library/Application Support/pibu_ai/logs/`
 
 **Tools:**
 - [Electron Forge](https://www.electronforge.io/) - App packaging

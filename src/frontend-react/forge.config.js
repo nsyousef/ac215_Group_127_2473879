@@ -2,9 +2,20 @@ const path = require('path');
 
 module.exports = {
   packagerConfig: {
-    name: 'Derma Assistant',
-    productName: 'Derma Assistant',
+    name: 'pibu_ai',
+    productName: 'pibu.ai',
     icon: path.join(__dirname, 'build-resources/icon.icns'),
+    // Files to include in the packaged app
+    files: [
+      'electron/',
+      'out/',
+      '.next/',
+      'public/',
+      'resources/',
+      'build-resources/',
+      'package.json',
+      'node_modules/',
+    ],
   },
   makers: [
     {
@@ -12,7 +23,7 @@ module.exports = {
       config: {
         format: 'ULFO',
         contents: [
-          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/Derma Assistant-darwin-x64/Derma Assistant.app') },
+          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/pibu_ai-darwin-x64/pibu_ai.app') },
           { x: 470, y: 150, type: 'link', path: '/Applications' },
         ],
       },
