@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional, Tuple, Callable
 
 import requests
 from prediction_texts import get_prediction_text
+from model_manager import get_model_path
 
 # Shared vision encoder instance (lazy-loaded)
 _VISION_ENCODER = None
@@ -107,21 +108,29 @@ class APIManager:
             # Lazy import to avoid heavy torch load at process start
             from inference_local.vision_encoder import VisionEncoder
 
-            # Look for checkpoint (REQUIRED)
-            current_file = Path(__file__).resolve()
-            python_dir = current_file.parent
-            MODEL_NAME = "test_best.pth"
-            checkpoint_path = python_dir / "inference_local" / MODEL_NAME
+            # Ensure model file is available (download if needed)
+            try:
+                checkpoint_path = get_model_path("vision")
+                debug_log(f"Using checkpoint: {checkpoint_path}")
+            except Exception as e:
+                debug_log(f"✗ Error downloading/locating model: {e}")
+                # Fallback: try local path for development
+                current_file = Path(__file__).resolve()
+                python_dir = current_file.parent
+                fallback_path = python_dir / "inference_local" / "test_best.pth"
 
-            if not checkpoint_path.exists():
-                error_msg = (
-                    f"Model checkpoint not found at {checkpoint_path}\n"
-                    f"Please ensure {MODEL_NAME} is placed in python/inference_local/model/"
-                )
-                debug_log(f"✗ {error_msg}")
-                raise FileNotFoundError(error_msg)
-
-            debug_log(f"Using checkpoint: {checkpoint_path}")
+                if fallback_path.exists():
+                    debug_log(f"Using fallback local checkpoint: {fallback_path}")
+                    checkpoint_path = fallback_path
+                else:
+                    error_msg = (
+                        f"Model not found. Expected at {fallback_path}\n"
+                        f"Please either:\n"
+                        f"  1. Set up GitHub release URL in model_manager.py\n"
+                        f"  2. Place model at python/inference_local/test_best.pth"
+                    )
+                    debug_log(f"✗ {error_msg}")
+                    raise FileNotFoundError(error_msg)
 
             try:
                 _VISION_ENCODER = VisionEncoder(checkpoint_path=str(checkpoint_path))

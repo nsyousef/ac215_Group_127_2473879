@@ -23,9 +23,11 @@
 
 ## Frontend performance - N
 
-* download trained model file from GCP bucket on first startup
+* ~~download trained model file from GCP bucket on first startup~~ → Implemented via `model_manager.py` (GitHub Releases)
 * ~~lazy import PyTorch when running an ML model~~
 * ~~try to optimize Python bundle~~
+* app takes long to start up on first start
+* app is still 2.4 GB even with optimized Python and without the model
 
 ## Training
 
