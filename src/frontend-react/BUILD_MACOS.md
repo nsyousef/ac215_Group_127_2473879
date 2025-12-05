@@ -27,7 +27,7 @@ npm install
 npm run dev-electron
 ```
 
-### For Production Build (Intel Mac)
+### For Production Build (Mac, works for both Intel and M-series)
 
 ```bash
 cd src/frontend-react

@@ -3,15 +3,10 @@ import os
 import sys
 import shutil
 from copy import deepcopy
-import datetime
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
-import requests
-from inference_local.vision_encoder import VisionEncoder
+from typing import Dict, Any, List, Optional, Tuple, Callable
 
-from typing import Any, Dict, List, Tuple, Optional, Callable
-import json
 import requests
 from prediction_texts import get_prediction_text
 
@@ -71,8 +66,8 @@ class APIManager:
         debug_log(str(self.case_dir))
 
         # File paths
-        self.case_history_file = self.case_dir / f"case_history.json"
-        self.conversation_file = self.case_dir / f"conversation_history.json"
+        self.case_history_file = self.case_dir / "case_history.json"
+        self.conversation_file = self.case_dir / "conversation_history.json"
         self.demographics_file = SAVE_DIR / "demographics.json"
 
         # Load existing data
@@ -108,6 +103,9 @@ class APIManager:
 
         if _VISION_ENCODER is None:
             debug_log("Initializing vision encoder...")
+
+            # Lazy import to avoid heavy torch load at process start
+            from inference_local.vision_encoder import VisionEncoder
 
             # Look for checkpoint (REQUIRED)
             current_file = Path(__file__).resolve()
@@ -165,7 +163,7 @@ class APIManager:
                 with open(demographics_file, "r") as f:
                     return json.load(f)
             except json.JSONDecodeError:
-                debug_log(f"Warning: Could not parse demographics file")
+                debug_log("Warning: Could not parse demographics file")
                 return {}
         return {}
 
@@ -220,7 +218,7 @@ class APIManager:
             with open(diseases_file, "r") as f:
                 diseases = json.load(f)
         except json.JSONDecodeError:
-            debug_log(f"Warning: Could not parse diseases file")
+            debug_log("Warning: Could not parse diseases file")
             return []
 
         # Enrich each disease with data from case_history.json
@@ -280,13 +278,13 @@ class APIManager:
                         if conversation and len(conversation) > 0:
                             first_entry = conversation[0]
                             llmResponse = first_entry.get("llm", {}).get("message", "")
-                            
+
                             # Get last message timestamp (from last entry, prefer LLM timestamp, fallback to user)
                             last_entry = conversation[-1]
                             lastMessageTimestamp = (
-                                last_entry.get("llm", {}).get("timestamp") or 
-                                last_entry.get("user", {}).get("timestamp") or 
-                                ""
+                                last_entry.get("llm", {}).get("timestamp")
+                                or last_entry.get("user", {}).get("timestamp")
+                                or ""
                             )
                 except Exception as e:
                     debug_log(f"Warning: Could not load conversation for case {case_id}: {e}")
@@ -448,12 +446,12 @@ class APIManager:
     def delete_cases(case_ids: List[str]) -> None:
         """
         Delete specified cases by removing their folders and updating diseases.json.
-        
+
         Args:
             case_ids: List of case IDs (with or without 'case_' prefix) to delete
         """
         diseases_file = SAVE_DIR / "diseases.json"
-        
+
         # Load current diseases list
         diseases = []
         if diseases_file.exists():
@@ -461,9 +459,9 @@ class APIManager:
                 with open(diseases_file, "r") as f:
                     diseases = json.load(f)
             except json.JSONDecodeError:
-                debug_log(f"Warning: Could not parse diseases file")
+                debug_log("Warning: Could not parse diseases file")
                 diseases = []
-        
+
         # Normalize case IDs (ensure they have 'case_' prefix for folder lookup)
         normalized_case_ids = []
         for case_id in case_ids:
@@ -471,7 +469,7 @@ class APIManager:
                 normalized_case_ids.append(case_id)
             else:
                 normalized_case_ids.append(f"case_{case_id}")
-        
+
         # Delete case folders
         deleted_count = 0
         for case_id in normalized_case_ids:
@@ -482,18 +480,18 @@ class APIManager:
                 deleted_count += 1
             else:
                 debug_log(f"Warning: Case directory not found: {case_dir}")
-        
+
         # Remove deleted cases from diseases list
         # Extract clean IDs (without 'case_' prefix) for comparison
         clean_case_ids = {cid.replace("case_", "") if cid.startswith("case_") else cid for cid in case_ids}
         diseases = [d for d in diseases if d.get("id") not in clean_case_ids]
-        
+
         # Save updated diseases list
         with open(diseases_file, "w") as f:
             json.dump(diseases, f, indent=2)
-        
+
         debug_log(f"Deleted {deleted_count} case(s) and updated diseases.json")
-    
+
     @staticmethod
     def reset_all_data() -> None:
         """
@@ -573,13 +571,11 @@ class APIManager:
         if self.conversation_history and len(self.conversation_history) > 0:
             first_entry = self.conversation_history[0]
             llmResponse = first_entry.get("llm", {}).get("message", "")
-            
+
             # Get last message timestamp (from last entry, prefer LLM timestamp, fallback to user)
             last_entry = self.conversation_history[-1]
             lastMessageTimestamp = (
-                last_entry.get("llm", {}).get("timestamp") or 
-                last_entry.get("user", {}).get("timestamp") or 
-                ""
+                last_entry.get("llm", {}).get("timestamp") or last_entry.get("user", {}).get("timestamp") or ""
             )
 
         # Read image as base64 for thumbnail (if it exists)
