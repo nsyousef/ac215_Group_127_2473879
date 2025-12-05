@@ -212,7 +212,7 @@ def sync_data_from_gcs():
 # STEP 2: Training with volume data (fast local I/O)
 # ============================================================================
 @app.function(
-    gpu="A100-80GB",
+    gpu="H200",
     cpu=20.0,
     timeout=14400,
     region="us-east",

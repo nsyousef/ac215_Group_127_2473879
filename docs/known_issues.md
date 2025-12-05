@@ -44,7 +44,7 @@
 
 ## Other Milestone 5
 
-* blog - N
+* [blog](https://docs.google.com/document/d/11qE0eqtrpNc3p3_MFDzLbbwPbd4hlGgp3y0O_DHbFn0/edit?usp=sharing) - N
 * video
 * Demo Examples/Walkthrough
 * clean up code and make sure it is documented
