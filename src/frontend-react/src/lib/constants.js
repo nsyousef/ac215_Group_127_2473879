@@ -12,20 +12,20 @@ export const CONDITIONS = [
 
 // Default coordinates for each body part (center of bounding box)
 export const BODY_PART_DEFAULTS = {
-  'head': { leftPct: 50, topPct: 10 },
-  'torso': { leftPct: 50, topPct: 36 },
-  'left upper arm': { leftPct: 35, topPct: 28 },
-  'left lower arm': { leftPct: 35, topPct: 46 },
-  'right upper arm': { leftPct: 65, topPct: 28 },
-  'right lower arm': { leftPct: 65, topPct: 46 },
-  'left hand': { leftPct: 35, topPct: 57 },
-  'right hand': { leftPct: 65, topPct: 57 },
-  'left upper leg': { leftPct: 45, topPct: 61 },
-  'right upper leg': { leftPct: 55, topPct: 61 },
-  'left lower leg': { leftPct: 45, topPct: 78 },
-  'right lower leg': { leftPct: 55, topPct: 78 },
-  'left foot': { leftPct: 45, topPct: 92 },
-  'right foot': { leftPct: 55, topPct: 92 },
+  'ear': { leftPct: 40, topPct: 12 },
+  'hair': { leftPct: 50, topPct: 5 },
+  'face': { leftPct: 50, topPct: 12 },
+  'neck': { leftPct: 50, topPct: 18 },
+  'chest': { leftPct: 50, topPct: 28 },
+  'abdomen': { leftPct: 50, topPct: 42 },
+  'shoulders': { leftPct: 50, topPct: 22 },
+  'upper arm': { leftPct: 50, topPct: 32 },
+  'lower arm': { leftPct: 50, topPct: 48 },
+  'hands': { leftPct: 50, topPct: 56 },
+  'groin': { leftPct: 50, topPct: 58 },
+  'thighs': { leftPct: 50, topPct: 68 },
+  'lower legs': { leftPct: 50, topPct: 82 },
+  'foot': { leftPct: 50, topPct: 94 },
 };
 
 export const PAGES = {

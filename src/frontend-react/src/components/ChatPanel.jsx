@@ -17,12 +17,12 @@ import { isElectron } from '@/utils/config';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import mlClient from '@/services/mlClient';
 
-export default function ChatPanel({ conditionId }) {
+export default function ChatPanel({ conditionId, refreshKey }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const listRef = useRef(null);
-  const { diseases } = useDiseaseContext();
+  const { diseases, reload: reloadDiseases } = useDiseaseContext();
 
   // Tracks which message is currently receiving initial-explain chunks
   const streamingInitialIdRef = useRef(null);
@@ -31,32 +31,49 @@ export default function ChatPanel({ conditionId }) {
   const primary = theme?.palette?.primary?.main || '#0891B2';
   const primaryContrast = theme?.palette?.primary?.contrastText || '#fff';
 
-  // Load conversation history when condition changes
+  // Load conversation history when condition changes or refreshKey changes
   useEffect(() => {
+    if (!conditionId) {
+      setMessages([]);
+      return;
+    }
+
     let mounted = true;
     streamingInitialIdRef.current = null; // reset when condition changes
+    
+    // Clear messages immediately when condition changes to show loading state
+    setMessages([]);
 
     async function load() {
       try {
+        console.log('[ChatPanel] Loading conversation history for conditionId:', conditionId, 'refreshKey:', refreshKey);
         const condition = (diseases || []).find((d) => d.id === conditionId);
         if (!condition) {
+          console.log('[ChatPanel] Condition not found for id:', conditionId);
           if (mounted) setMessages([]);
           return;
         }
 
         const caseId = condition.caseId || `case_${conditionId}`;
+        console.log('[ChatPanel] Using caseId:', caseId);
 
         // Always try to load fresh conversation history from Python (source of truth)
         let conversationData = null;
         if (isElectron() && window.electronAPI?.mlLoadConversationHistory) {
           try {
+            console.log('[ChatPanel] Calling mlLoadConversationHistory for caseId:', caseId);
+            // Always reload from Python to get the latest conversation history
             conversationData = await window.electronAPI.mlLoadConversationHistory(caseId);
+            console.log('[ChatPanel] Received conversation data from Python:', conversationData);
           } catch (e) {
-            console.error('Failed to load conversation history from Python:', e);
-            conversationData = condition.conversationHistory;
+            console.error('[ChatPanel] Failed to load conversation history from Python:', e);
+            // Fallback to in-memory data if Python load fails
+            conversationData = condition.conversationHistory || [];
+            console.log('[ChatPanel] Using fallback conversation data:', conversationData);
           }
         } else {
-          conversationData = condition.conversationHistory;
+          conversationData = condition.conversationHistory || [];
+          console.log('[ChatPanel] Not Electron, using in-memory data:', conversationData);
         }
 
         const msgs = [];
@@ -82,8 +99,11 @@ export default function ChatPanel({ conditionId }) {
           }
         });
 
+        console.log('[ChatPanel] Processed messages:', msgs.length, 'from', conversationData?.length || 0, 'entries');
+
         // Legacy: if no conversation history but we have llmResponse, show it
         if (msgs.length === 0 && condition?.llmResponse && mounted) {
+          console.log('[ChatPanel] No messages found, using legacy llmResponse');
           msgs.push({
             id: `initial_${conditionId}`,
             role: 'assistant',
@@ -94,7 +114,10 @@ export default function ChatPanel({ conditionId }) {
           });
         }
 
-        if (mounted) setMessages(msgs);
+        if (mounted) {
+          console.log('[ChatPanel] Setting messages:', msgs.length);
+          setMessages(msgs);
+        }
       } catch (e) {
         console.error('Failed to load chat history', e);
       }
@@ -104,7 +127,7 @@ export default function ChatPanel({ conditionId }) {
     return () => {
       mounted = false;
     };
-  }, [conditionId, diseases]);
+  }, [conditionId, diseases, refreshKey]);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -206,6 +229,14 @@ export default function ChatPanel({ conditionId }) {
             m.id === assistantId ? { ...m, text: (m.text || '') + delta } : m
           )
         );
+      }
+      
+      // After message is successfully sent, reload diseases to update lastMessageTimestamp for sorting
+      try {
+        await reloadDiseases();
+        console.log('[ChatPanel] Reloaded diseases after sending message');
+      } catch (reloadError) {
+        console.warn('[ChatPanel] Failed to reload diseases after message:', reloadError);
       }
     } catch (error) {
       console.error('Error in streaming chat:', error);

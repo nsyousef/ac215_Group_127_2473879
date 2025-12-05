@@ -36,49 +36,96 @@ export default function ResultsPanel({
   const primary = theme.palette.primary.main;
   const primaryHover = '#067891';
 
-  // Local streaming text state
-  const [explanation, setExplanation] = useState(
-    selectedCondition
-      ? selectedCondition.llmResponse ||
-          selectedCondition.description ||
-          ''
-      : ''
-  );
+  // Only show predictionText - never show llmResponse or streaming
+  const [explanation, setExplanation] = useState(() => {
+    if (!selectedCondition) return '';
+    // Only use predictionText - never show llmResponse
+    if (selectedCondition.predictionText) {
+      hasPredictionTextRef.current = true;
+      return selectedCondition.predictionText;
+    }
+    // If no predictionText, show empty or description (but never llmResponse)
+    return selectedCondition.description || '';
+  });
 
   // Ref to auto-scroll the content
   const contentRef = useRef(null);
+  const prevExplanationLengthRef = useRef(0);
+  const isStreamingRef = useRef(false);
+  const hasPredictionTextRef = useRef(false); // Track if we've received predictionText via event
 
-  // Whenever the selected condition changes or its final llmResponse updates,
-  // sync the local explanation.
+  // Scroll to top when a new condition is selected
+  useEffect(() => {
+    if (contentRef.current && selectedCondition) {
+      contentRef.current.scrollTop = 0;
+      prevExplanationLengthRef.current = 0;
+      isStreamingRef.current = false;
+      hasPredictionTextRef.current = false; // Reset when condition changes
+    }
+  }, [selectedCondition?.id]);
+
+  // Whenever the selected condition changes or its predictionText/llmResponse updates,
+  // sync the local explanation. Always prioritize predictionText.
   useEffect(() => {
     if (!selectedCondition) {
       setExplanation('');
+      prevExplanationLengthRef.current = 0;
+      isStreamingRef.current = false;
+      hasPredictionTextRef.current = false;
       return;
     }
-    setExplanation(
-      selectedCondition.llmResponse ||
-        selectedCondition.description ||
-        ''
-    );
+    // Always prioritize predictionText if it exists - set it immediately
+    if (selectedCondition.predictionText) {
+      hasPredictionTextRef.current = true; // Mark that we have predictionText
+      setExplanation(selectedCondition.predictionText);
+      prevExplanationLengthRef.current = selectedCondition.predictionText.length;
+      isStreamingRef.current = false;
+      return;
+    }
+    // Only fall back to description if we don't have predictionText
+    // NEVER use llmResponse - we only show predictionText
+    if (!hasPredictionTextRef.current) {
+      const newExplanation = selectedCondition.description || '';
+      setExplanation(newExplanation);
+      prevExplanationLengthRef.current = newExplanation.length;
+    }
+    isStreamingRef.current = false;
   }, [
     selectedCondition?.id,
-    selectedCondition?.llmResponse,
+    selectedCondition?.predictionText,
     selectedCondition?.description,
   ]);
 
-  // Subscribe to initial LLM explanation streaming from Electron.
-  // This uses the generic mlOnStreamChunk hook that main.js emits during
-  // the 'predict' (initial analysis) pipeline.
+  // Subscribe to predictionText metadata (sent before LLM streaming starts)
+  // This MUST run before the streaming subscription
   useEffect(() => {
-    if (!selectedCondition) return;
+    if (!selectedCondition) {
+      hasPredictionTextRef.current = false;
+      return;
+    }
+    
+    // If condition already has predictionText, set the flag immediately
+    if (selectedCondition.predictionText) {
+      hasPredictionTextRef.current = true;
+      return;
+    }
+    
     if (!isElectron()) return;
     if (typeof window === 'undefined') return;
-    if (!window.electronAPI?.mlOnStreamChunk) return;
+    if (!window.electronAPI?.mlOnPredictionText) return;
 
-    // Handler receives each streamed text chunk
-    const unsubscribe = window.electronAPI.mlOnStreamChunk((chunk) => {
-      if (!chunk) return;
-      setExplanation((prev) => (prev || '') + chunk);
+    // Reset flag when condition changes (only if no predictionText on condition)
+    hasPredictionTextRef.current = false;
+
+    // Handler receives predictionText as soon as ML inference is done
+    const unsubscribe = window.electronAPI.mlOnPredictionText((predictionText) => {
+      if (!predictionText) return;
+      // Set predictionText immediately - this happens before LLM streaming
+      hasPredictionTextRef.current = true;
+      setExplanation(predictionText);
+      isStreamingRef.current = false;
+      prevExplanationLengthRef.current = predictionText.length;
+      
     });
 
     return () => {
@@ -86,12 +133,9 @@ export default function ResultsPanel({
     };
   }, [selectedCondition?.id]);
 
-  // Auto-scroll the CardContent as explanation grows
-  useEffect(() => {
-    if (contentRef.current) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight;
-    }
-  }, [explanation]);
+  // REMOVED: LLM streaming subscription - we only use predictionText, no streaming
+
+  // Auto-scroll removed - we don't stream anymore, only show predictionText
 
   return (
     <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>

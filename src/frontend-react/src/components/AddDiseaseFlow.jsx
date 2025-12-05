@@ -31,20 +31,20 @@ import mlClient from '@/services/mlClient';
 
 // All valid body parts in order
 const BODY_PARTS = [
-  'head',
-  'torso',
-  'left upper arm',
-  'left lower arm',
-  'right upper arm',
-  'right lower arm',
-  'left hand',
-  'right hand',
-  'left upper leg',
-  'right upper leg',
-  'left lower leg',
-  'right lower leg',
-  'left foot',
-  'right foot',
+  'ear',
+  'hair',
+  'face',
+  'neck',
+  'chest',
+  'abdomen',
+  'shoulders',
+  'upper arm',
+  'lower arm',
+  'hands',
+  'groin',
+  'thighs',
+  'lower legs',
+  'foot',
 ];
 
 // Format body part name for display (capitalize properly)
@@ -69,7 +69,6 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   const [note, setNote] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState(null);
-  const streamUnsubscribeRef = useRef(null);
   const firstChunkReceivedRef = useRef(false);
   const currentCaseIdRef = useRef(null);
 
@@ -80,10 +79,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   // Cleanup stream subscription on unmount or when dialog closes
   useEffect(() => {
     return () => {
-      if (streamUnsubscribeRef.current) {
-        streamUnsubscribeRef.current();
-        streamUnsubscribeRef.current = null;
-      }
+      // Cleanup handled in analyzeImage function
     };
   }, [open]);
 
@@ -95,11 +91,6 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     setNote('');
     setAnalyzing(false);
     setError(null);
-    // Clean up stream subscription
-    if (streamUnsubscribeRef.current) {
-      streamUnsubscribeRef.current();
-      streamUnsubscribeRef.current = null;
-    }
     firstChunkReceivedRef.current = false;
     currentCaseIdRef.current = null;
   }
@@ -186,57 +177,70 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
       setStep(5);
       firstChunkReceivedRef.current = false;
       currentCaseIdRef.current = caseId;
+      let receivedPredictionText = null;
 
-      // Step 3: Subscribe to streaming chunks BEFORE starting prediction
-      // This allows us to detect when LLM response starts
-      let unsubscribe = null;
-      if (isElectron() && window.electronAPI?.mlOnStreamChunk) {
-        unsubscribe = window.electronAPI.mlOnStreamChunk((chunk) => {
-          // Only handle chunks for this specific case
-          if (!firstChunkReceivedRef.current && currentCaseIdRef.current === caseId && chunk) {
-            firstChunkReceivedRef.current = true;
+      // Step 3: Subscribe to predictionText FIRST (before streaming)
+      // Navigate immediately when predictionText arrives - this happens before LLM starts
+      let predictionTextUnsubscribe = null;
+      if (isElectron() && window.electronAPI?.mlOnPredictionText) {
+        predictionTextUnsubscribe = window.electronAPI.mlOnPredictionText((predictionText) => {
+          if (predictionText && currentCaseIdRef.current === caseId) {
+            receivedPredictionText = predictionText;
+            // Navigate immediately with predictionText and timeline data
+            if (!firstChunkReceivedRef.current) {
+              firstChunkReceivedRef.current = true;
+              setAnalyzing(false);
+              setStep(null);
 
-            // First chunk received - hide analyzing screen and navigate
-            setAnalyzing(false);
-            setStep(null);
+              // Create timeline entry with initial image
+              const currentDate = new Date().toISOString().split('T')[0];
+              const timelineEntry = {
+                id: 0,
+                date: currentDate,
+                image: imagePath, // Use the saved image path
+                note: note || '',
+              };
 
-            // Create minimal disease object for navigation
-            const tempDisease = {
-              id: diseaseId,
-              name: 'Analyzing...', // Placeholder, will be updated
-              image: preview,
-              bodyPart: bodyPart || 'Unknown',
-              mapPosition: finalMapPos ? {
-                leftPct: finalMapPos.leftPct,
-                topPct: finalMapPos.topPct
-              } : null,
-              description: '',
-              confidenceLevel: 0,
-              date: new Date().toISOString().split('T')[0],
-              llmResponse: '', // Will be populated by streaming
-              timelineData: [],
-              conversationHistory: [],
-              caseId: caseId,
-            };
+              const tempDisease = {
+                id: diseaseId,
+                name: 'Analyzing...', // Placeholder, will be updated
+                image: preview,
+                bodyPart: bodyPart || 'Unknown',
+                mapPosition: finalMapPos ? {
+                  leftPct: finalMapPos.leftPct,
+                  topPct: finalMapPos.topPct
+                } : null,
+                description: '',
+                confidenceLevel: 0,
+                date: currentDate,
+                llmResponse: '', // Will be populated later
+                predictionText: predictionText, // Set predictionText immediately
+                timelineData: [timelineEntry], // Include initial image in timeline
+                conversationHistory: [],
+                caseId: caseId,
+              };
 
-            // Navigate to results view
-            if (onStartAnalysis) {
-              onStartAnalysis(tempDisease);
-            }
+              // Navigate to results view immediately
+              if (onStartAnalysis) {
+                onStartAnalysis(tempDisease);
+              }
 
-            close();
+              close();
 
-            // Clean up subscription after first chunk
-            if (unsubscribe) {
-              unsubscribe();
-              streamUnsubscribeRef.current = null;
+              // Clean up predictionText subscription (don't unsubscribe from chunks - let them go to chat)
+              if (predictionTextUnsubscribe) {
+                predictionTextUnsubscribe();
+              }
             }
           }
         });
-        streamUnsubscribeRef.current = unsubscribe;
       }
 
+      // REMOVED: Chunk-based navigation - we navigate on predictionText instead
+      // This prevents consuming the first chunk, allowing it to go to the chat panel
+
       // Step 4: Kick off prediction request (this will trigger LLM streaming on the backend)
+      // Navigation should already have happened via predictionText, so we just wait for results
       const predictionPromise = mlClient.getInitialPrediction(
         imagePath,      // file path
         note || '',     // text description
@@ -244,15 +248,24 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         {},             // metadata
       );
 
-      // Fallback: If no chunks arrive within 30 seconds, navigate anyway
-      // This handles cases where streaming might not work
+      // Fallback: If predictionText doesn't arrive within 5 seconds, navigate anyway
+      // This handles edge cases where predictionText might not be sent
       const fallbackTimeout = setTimeout(() => {
         if (!firstChunkReceivedRef.current && currentCaseIdRef.current === caseId) {
-          console.warn('No streaming chunks received, navigating anyway after timeout');
+          console.warn('No predictionText received, navigating anyway after timeout');
           firstChunkReceivedRef.current = true;
 
           setAnalyzing(false);
           setStep(null);
+
+          // Create timeline entry with initial image
+          const currentDate = new Date().toISOString().split('T')[0];
+          const timelineEntry = {
+            id: 0,
+            date: currentDate,
+            image: imagePath,
+            note: note || '',
+          };
 
           const tempDisease = {
             id: diseaseId,
@@ -265,9 +278,10 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             } : null,
             description: '',
             confidenceLevel: 0,
-            date: new Date().toISOString().split('T')[0],
+            date: currentDate,
             llmResponse: '',
-            timelineData: [],
+            predictionText: '', // Will be updated when results arrive
+            timelineData: [timelineEntry], // Include initial image
             conversationHistory: [],
             caseId: caseId,
           };
@@ -278,57 +292,17 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
 
           close();
 
-          if (streamUnsubscribeRef.current) {
-            streamUnsubscribeRef.current();
-            streamUnsubscribeRef.current = null;
+          if (predictionTextUnsubscribe) {
+            predictionTextUnsubscribe();
           }
         }
-      }, 30000); // 30 second timeout
+      }, 5000); // 5 second timeout (predictionText should arrive much faster)
 
       // Wait for the full result in the background
       const results = await predictionPromise;
 
       // Clear fallback timeout if prediction completes
       clearTimeout(fallbackTimeout);
-
-      // If prediction completed but we never received a chunk, navigate now
-      // This handles cases where streaming doesn't work or completes too quickly
-      if (!firstChunkReceivedRef.current && currentCaseIdRef.current === caseId) {
-        console.warn('Prediction completed but no chunks received, navigating now');
-        firstChunkReceivedRef.current = true;
-
-        setAnalyzing(false);
-        setStep(null);
-
-        const tempDisease = {
-          id: diseaseId,
-          name: 'Analyzing...',
-          image: preview,
-          bodyPart: bodyPart || 'Unknown',
-          mapPosition: finalMapPos ? {
-            leftPct: finalMapPos.leftPct,
-            topPct: finalMapPos.topPct
-          } : null,
-          description: '',
-          confidenceLevel: 0,
-          date: new Date().toISOString().split('T')[0],
-          llmResponse: '',
-          timelineData: [],
-          conversationHistory: [],
-          caseId: caseId,
-        };
-
-        if (onStartAnalysis) {
-          onStartAnalysis(tempDisease);
-        }
-
-        close();
-
-        if (streamUnsubscribeRef.current) {
-          streamUnsubscribeRef.current();
-          streamUnsubscribeRef.current = null;
-        }
-      }
 
       // Find disease with highest confidence from predictions
       const predictions = results.predictions || {};
@@ -361,6 +335,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         confidenceLevel: enrichedDisease.confidenceLevel || 0,
         date: enrichedDisease.date || '',
         llmResponse: enrichedDisease.llmResponse || '',
+        predictionText: enrichedDisease.predictionText || '',
         timelineData: enrichedDisease.timelineData || [],
         conversationHistory: enrichedDisease.conversationHistory || [],
       };
@@ -371,13 +346,12 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
       // The results view will re-render with the updated data
       if (onSaved) onSaved(newDisease);
 
-      // Clean up stream subscription if still active
-      if (streamUnsubscribeRef.current) {
-        streamUnsubscribeRef.current();
-        streamUnsubscribeRef.current = null;
+      // Clean up predictionText subscription if still active
+      if (predictionTextUnsubscribe) {
+        predictionTextUnsubscribe();
       }
 
-      // Note: onStartAnalysis was already called earlier with tempDisease (when first chunk arrived)
+      // Note: onStartAnalysis was already called earlier with tempDisease (when predictionText arrived)
       // The selectedCondition will be updated when addDisease triggers a re-render
     } catch (e) {
       console.error('Analysis failed:', e);
@@ -387,10 +361,9 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         name: e.name,
       });
 
-      // Clean up stream subscription on error
-      if (streamUnsubscribeRef.current) {
-        streamUnsubscribeRef.current();
-        streamUnsubscribeRef.current = null;
+      // Clean up predictionText subscription on error
+      if (predictionTextUnsubscribe) {
+        predictionTextUnsubscribe();
       }
       firstChunkReceivedRef.current = false;
       currentCaseIdRef.current = null;

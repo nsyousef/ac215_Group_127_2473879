@@ -88,6 +88,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('ml:streamChunk', listener);
     };
   },
+  mlOnPredictionText: (handler) => {
+    if (typeof handler !== 'function') return () => {};
+
+    const listener = (_event, payload) => {
+      if (!payload || typeof payload.predictionText !== 'string') return;
+      handler(payload.predictionText);
+    };
+
+    ipcRenderer.on('ml:predictionText', listener);
+
+    // Unsubscribe helper
+    return () => {
+      ipcRenderer.removeListener('ml:predictionText', listener);
+    };
+  },
 
 
   mlChatMessage: (caseId, question, userTimestamp) =>
@@ -175,6 +190,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('data:saveCaseHistory', caseId, caseHistory),
   addTimelineEntry: (caseId, imagePath, note, date) =>
     ipcRenderer.invoke('data:addTimelineEntry', caseId, imagePath, note, date),
+  deleteCases: (caseIds) =>
+    ipcRenderer.invoke('data:deleteCases', caseIds),
 
   // ================= File Upload IPC =================
   saveUploadedImage: (caseId, filename, buffer) =>

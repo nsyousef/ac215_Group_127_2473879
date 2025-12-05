@@ -79,6 +79,25 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
                     return entry;
                   })
                 );
+
+                // If case_history has no dates yet (initial prediction still saving), 
+                // fall back to in-memory timelineData from the condition object
+                if (data.length === 0 && condition?.timelineData && Array.isArray(condition.timelineData) && condition.timelineData.length > 0) {
+                  data = await Promise.all(
+                    condition.timelineData.map(async (entry) => {
+                      if (entry.image && window.electronAPI?.readImageAsDataUrl) {
+                        try {
+                          const dataUrl = await window.electronAPI.readImageAsDataUrl(entry.image);
+                          return { ...entry, image: dataUrl, conditionId };
+                        } catch (e) {
+                          console.warn('Failed to load image:', entry.image, e);
+                          return { ...entry, conditionId };
+                        }
+                      }
+                      return { ...entry, conditionId };
+                    })
+                  );
+                }
               } catch (e) {
                 console.warn('Failed to load case history from Python via IPC, using in-memory data', e);
                 // Fallback: Use in-memory timelineData if IPC fails
@@ -130,7 +149,7 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
     }
     load();
     return () => (mounted = false);
-  }, [conditionId, refreshKey]);
+  }, [conditionId, refreshKey, diseases]);
 
   // Scroll to top when entries update so newest is visible
   useEffect(() => {

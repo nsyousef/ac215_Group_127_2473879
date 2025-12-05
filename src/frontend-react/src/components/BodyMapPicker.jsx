@@ -16,102 +16,106 @@ export function getBodyPartFromCoordinates(horizontal, vertical) {
     return 'invalid';
   }
 
-  // Head: 2-19% vertical, 41-59% horizontal
-  if (vertical >= 2 && vertical < 19) {
-    if (horizontal >= 41 && horizontal <= 59) {
-      return 'head';
+  // Top region: 2-15% vertical (hair, ear, face)
+  if (vertical >= 2 && vertical < 15) {
+    // Hair: top center, 45-55% horizontal
+    if (vertical >= 2 && vertical < 8 && horizontal >= 45 && horizontal <= 55) {
+      return 'hair';
+    }
+    // Ear: sides, 35-45% or 55-65% horizontal
+    if (horizontal >= 35 && horizontal < 45) {
+      return 'ear';
+    }
+    if (horizontal > 55 && horizontal <= 65) {
+      return 'ear';
+    }
+    // Face: center, 40-60% horizontal
+    if (horizontal >= 40 && horizontal <= 60) {
+      return 'face';
     }
     return 'invalid';
   }
 
-  // Torso and Arms: 19-54% vertical
-  if (vertical >= 19 && vertical < 54) {
-    // Torso: 41-59% horizontal
-    if (horizontal >= 41 && horizontal <= 59) {
-      return 'torso';
+  // Upper region: 15-25% vertical (neck, shoulders)
+  if (vertical >= 15 && vertical < 25) {
+    // Neck: center, 45-55% horizontal
+    if (horizontal >= 45 && horizontal <= 55) {
+      return 'neck';
     }
-
-    // Left side: 30-41% horizontal
-    if (horizontal >= 30 && horizontal < 41) {
-      if (vertical >= 19 && vertical < 38) {
-        return 'left upper arm';
-      }
-      if (vertical >= 38 && vertical < 54) {
-        return 'left lower arm';
-      }
+    // Shoulders: wider area, 35-65% horizontal
+    if (horizontal >= 35 && horizontal <= 65) {
+      return 'shoulders';
     }
-
-    // Right side: 59-70% horizontal
-    if (horizontal > 59 && horizontal <= 70) {
-      if (vertical >= 19 && vertical < 38) {
-        return 'right upper arm';
-      }
-      if (vertical >= 38 && vertical < 54) {
-        return 'right lower arm';
-      }
-    }
-
     return 'invalid';
   }
 
-  // Hands and Upper Legs: 54-68% vertical
-  if (vertical >= 54 && vertical < 68) {
-    // Left hand: 30-41% horizontal
-    if (horizontal >= 30 && horizontal < 41) {
-      if (vertical >= 54 && vertical < 61) {
-        return 'left hand';
-      }
-      return 'invalid'; // >= 61%
+  // Upper-middle region: 25-35% vertical (chest, upper arm)
+  if (vertical >= 25 && vertical < 35) {
+    // Chest: center, 40-60% horizontal
+    if (horizontal >= 40 && horizontal <= 60) {
+      return 'chest';
     }
-
-    // Left upper leg: 41-50% horizontal
-    if (horizontal >= 41 && horizontal < 50) {
-      return 'left upper leg';
+    // Upper arm: sides, 30-40% or 60-70% horizontal
+    if ((horizontal >= 30 && horizontal < 40) || (horizontal > 60 && horizontal <= 70)) {
+      return 'upper arm';
     }
-
-    // Right upper leg: 50-59% horizontal
-    if (horizontal >= 50 && horizontal <= 59) {
-      return 'right upper leg';
-    }
-
-    // Right hand: 59-70% horizontal
-    if (horizontal > 59 && horizontal <= 70) {
-      if (vertical >= 54 && vertical < 61) {
-        return 'right hand';
-      }
-      return 'invalid'; // >= 61%
-    }
-
     return 'invalid';
   }
 
-  // Lower Legs: 68-88% vertical
-  if (vertical >= 68 && vertical < 88) {
-    // Left lower leg: 41-50% horizontal
-    if (horizontal >= 41 && horizontal < 50) {
-      return 'left lower leg';
+  // Middle region: 35-50% vertical (abdomen, lower arm)
+  if (vertical >= 35 && vertical < 50) {
+    // Abdomen: center, 40-60% horizontal
+    if (horizontal >= 40 && horizontal <= 60) {
+      return 'abdomen';
     }
-
-    // Right lower leg: 50-59% horizontal
-    if (horizontal >= 50 && horizontal <= 59) {
-      return 'right lower leg';
+    // Lower arm: sides, 30-40% or 60-70% horizontal
+    if ((horizontal >= 30 && horizontal < 40) || (horizontal > 60 && horizontal <= 70)) {
+      return 'lower arm';
     }
-
     return 'invalid';
   }
 
-  // Feet: 88-97% vertical
-  if (vertical >= 88 && vertical <= 97) {
-    // Left foot: 41-50% horizontal
-    if (horizontal >= 41 && horizontal < 50) {
-      return 'left foot';
+  // Lower-middle region: 50-70% vertical (hands, groin, thighs)
+  if (vertical >= 50 && vertical < 70) {
+    // Hands: sides, 30-40% or 60-70% horizontal, upper part
+    if (vertical >= 50 && vertical < 56) {
+      if ((horizontal >= 30 && horizontal < 40) || (horizontal > 60 && horizontal <= 70)) {
+        return 'hands';
+      }
     }
-
-    // Right foot: 50-59% horizontal
-    if (horizontal >= 50 && horizontal <= 59) {
-      return 'right foot';
+    // Groin: center, 45-55% horizontal, covers V part (extends down to prevent center gap)
+    if (vertical >= 56 && vertical < 66 && horizontal >= 45 && horizontal <= 55) {
+      return 'groin';
     }
+    // Thighs: left and right bounding boxes, lower part (excluding center area)
+    if (vertical >= 62 && vertical < 70) {
+      // Left thigh: 40-45% horizontal (not including center)
+      if (horizontal >= 40 && horizontal < 45) {
+        return 'thighs';
+      }
+      // Right thigh: 55-60% horizontal (not including center)
+      if (horizontal > 55 && horizontal <= 60) {
+        return 'thighs';
+      }
+    }
+    return 'invalid';
+  }
 
+  // Lower region: 70-90% vertical (lower legs)
+  if (vertical >= 70 && vertical < 90) {
+    // Lower legs: center area, 40-60% horizontal
+    if (horizontal >= 40 && horizontal <= 60) {
+      return 'lower legs';
+    }
+    return 'invalid';
+  }
+
+  // Bottom region: 90-97% vertical (foot)
+  if (vertical >= 90 && vertical <= 97) {
+    // Foot: center area, 40-60% horizontal
+    if (horizontal >= 40 && horizontal <= 60) {
+      return 'foot';
+    }
     return 'invalid';
   }
 

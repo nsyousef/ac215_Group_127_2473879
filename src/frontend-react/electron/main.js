@@ -215,7 +215,19 @@ function spawnPythonForCase(caseId) {
           continue;
         }
 
-        const { resolve, reject, onChunk } = pendingReq;
+        const { resolve, reject, onChunk, eventSender } = pendingReq;
+
+        // If Python sends predictionText metadata, forward it as a special event
+        if (Object.prototype.hasOwnProperty.call(msg, 'predictionText')) {
+          // Send predictionText as a special event before streaming starts
+          if (eventSender) {
+            eventSender.send('ml:predictionText', { 
+              predictionText: msg.predictionText,
+              reqId: id 
+            });
+          }
+          return; // Don't treat this as final, continue waiting for chunks/result
+        }
 
         // If Python sends streaming chunks, we expect a field like `chunk`
         if (typeof onChunk === 'function' && Object.prototype.hasOwnProperty.call(msg, 'chunk')) {
@@ -329,7 +341,7 @@ ipcMain.handle('ml:getInitialPrediction', async (event, { caseId, imagePath, tex
   }, (chunk) => {
     // Emit chunk event to renderer
     event.sender.send('ml:streamChunk', { chunk });
-  });
+  }, event.sender);  // Pass event sender for predictionText forwarding
 });
 
 const activeInitialStreams = new Map();
@@ -376,7 +388,8 @@ ipcMain.on(
             done: false,
             chunk,          // string or partial object, frontend normalizes
           });
-        }
+        },
+        sender  // Pass event sender for predictionText forwarding
       );
 
       // final message
@@ -537,6 +550,13 @@ ipcMain.handle('data:addTimelineEntry', async (event, caseId, imagePath, note, d
     note: note || '',
     date: date
   });
+});
+
+ipcMain.handle('data:deleteCases', async (event, caseIds) => {
+  if (!caseIds || !Array.isArray(caseIds) || caseIds.length === 0) {
+    throw new Error('caseIds must be a non-empty array');
+  }
+  return await pyRequest('static', 'delete_cases', { case_ids: caseIds });
 });
 
 // Save uploaded image to temp directory

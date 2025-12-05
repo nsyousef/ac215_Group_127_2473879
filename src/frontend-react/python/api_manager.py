@@ -13,6 +13,7 @@ from inference_local.vision_encoder import VisionEncoder
 from typing import Any, Dict, List, Tuple, Optional, Callable
 import json
 import requests
+from prediction_texts import get_prediction_text
 
 # Shared vision encoder instance (lazy-loaded)
 _VISION_ENCODER = None
@@ -245,6 +246,7 @@ class APIManager:
 
             description = ""
             confidenceLevel = 0
+            predictionText = ""
             if earliest_date:
                 entry = dates[earliest_date]
                 # Get description from text_summary
@@ -253,6 +255,9 @@ class APIManager:
                 predictions = entry.get("predictions", {})
                 if predictions:
                     confidenceLevel = int(max(predictions.values()) * 100)
+                    # Get top prediction label and look up predefined text
+                    top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0]
+                    predictionText = get_prediction_text(top_prediction_label)
 
             # Get body part from location
             location = case_history.get("location", {})
@@ -263,7 +268,9 @@ class APIManager:
                 mapPosition = {"leftPct": coordinates[0], "topPct": coordinates[1]}
 
             # Get LLM response from conversation history (first LLM message)
+            # Also get last message timestamp for sorting
             llmResponse = ""
+            lastMessageTimestamp = ""
             conversation_file = SAVE_DIR / folder_id / "conversation_history.json"
             if conversation_file.exists():
                 try:
@@ -273,6 +280,14 @@ class APIManager:
                         if conversation and len(conversation) > 0:
                             first_entry = conversation[0]
                             llmResponse = first_entry.get("llm", {}).get("message", "")
+                            
+                            # Get last message timestamp (from last entry, prefer LLM timestamp, fallback to user)
+                            last_entry = conversation[-1]
+                            lastMessageTimestamp = (
+                                last_entry.get("llm", {}).get("timestamp") or 
+                                last_entry.get("user", {}).get("timestamp") or 
+                                ""
+                            )
                 except Exception as e:
                     debug_log(f"Warning: Could not load conversation for case {case_id}: {e}")
 
@@ -289,6 +304,8 @@ class APIManager:
                 "confidenceLevel": confidenceLevel,
                 "date": earliest_date or "",
                 "llmResponse": llmResponse,  # Initial LLM explanation
+                "predictionText": predictionText,  # Predefined text based on prediction
+                "lastMessageTimestamp": lastMessageTimestamp,  # Timestamp of last message for sorting
                 # Add timeline data from dates
                 "timelineData": (
                     [
@@ -428,6 +445,56 @@ class APIManager:
         debug_log(f"Added timeline entry for case {case_id} on date {date}")
 
     @staticmethod
+    def delete_cases(case_ids: List[str]) -> None:
+        """
+        Delete specified cases by removing their folders and updating diseases.json.
+        
+        Args:
+            case_ids: List of case IDs (with or without 'case_' prefix) to delete
+        """
+        diseases_file = SAVE_DIR / "diseases.json"
+        
+        # Load current diseases list
+        diseases = []
+        if diseases_file.exists():
+            try:
+                with open(diseases_file, "r") as f:
+                    diseases = json.load(f)
+            except json.JSONDecodeError:
+                debug_log(f"Warning: Could not parse diseases file")
+                diseases = []
+        
+        # Normalize case IDs (ensure they have 'case_' prefix for folder lookup)
+        normalized_case_ids = []
+        for case_id in case_ids:
+            if case_id.startswith("case_"):
+                normalized_case_ids.append(case_id)
+            else:
+                normalized_case_ids.append(f"case_{case_id}")
+        
+        # Delete case folders
+        deleted_count = 0
+        for case_id in normalized_case_ids:
+            case_dir = SAVE_DIR / case_id
+            if case_dir.exists() and case_dir.is_dir():
+                shutil.rmtree(case_dir)
+                debug_log(f"Deleted case directory: {case_dir}")
+                deleted_count += 1
+            else:
+                debug_log(f"Warning: Case directory not found: {case_dir}")
+        
+        # Remove deleted cases from diseases list
+        # Extract clean IDs (without 'case_' prefix) for comparison
+        clean_case_ids = {cid.replace("case_", "") if cid.startswith("case_") else cid for cid in case_ids}
+        diseases = [d for d in diseases if d.get("id") not in clean_case_ids]
+        
+        # Save updated diseases list
+        with open(diseases_file, "w") as f:
+            json.dump(diseases, f, indent=2)
+        
+        debug_log(f"Deleted {deleted_count} case(s) and updated diseases.json")
+    
+    @staticmethod
     def reset_all_data() -> None:
         """
         Clear all Python-managed data including demographics, diseases list, and all case directories.
@@ -475,6 +542,7 @@ class APIManager:
         description = ""
         confidenceLevel = 0
         image_path = ""
+        predictionText = ""
         if earliest_date:
             entry = dates[earliest_date]
             # Get description from text_summary
@@ -484,6 +552,9 @@ class APIManager:
             predictions = entry.get("predictions", {})
             if predictions:
                 confidenceLevel = int(max(predictions.values()) * 100)
+                # Get top prediction label and look up predefined text
+                top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0]
+                predictionText = get_prediction_text(top_prediction_label)
             # Get image path
             image_path = entry.get("image_path", "")
 
@@ -496,10 +567,20 @@ class APIManager:
             mapPosition = {"leftPct": coordinates[0], "topPct": coordinates[1]}
 
         # Get LLM response from conversation history (first LLM message)
+        # Also get last message timestamp for sorting
         llmResponse = ""
+        lastMessageTimestamp = ""
         if self.conversation_history and len(self.conversation_history) > 0:
             first_entry = self.conversation_history[0]
             llmResponse = first_entry.get("llm", {}).get("message", "")
+            
+            # Get last message timestamp (from last entry, prefer LLM timestamp, fallback to user)
+            last_entry = self.conversation_history[-1]
+            lastMessageTimestamp = (
+                last_entry.get("llm", {}).get("timestamp") or 
+                last_entry.get("user", {}).get("timestamp") or 
+                ""
+            )
 
         # Read image as base64 for thumbnail (if it exists)
         image_base64 = ""
@@ -524,6 +605,8 @@ class APIManager:
             "confidenceLevel": confidenceLevel,
             "date": earliest_date or "",
             "llmResponse": llmResponse,
+            "predictionText": predictionText,
+            "lastMessageTimestamp": lastMessageTimestamp,  # Timestamp of last message for sorting
             "timelineData": (
                 [
                     {

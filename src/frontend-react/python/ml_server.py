@@ -2,6 +2,7 @@
 import sys
 import json
 import traceback
+from datetime import datetime
 from api_manager import APIManager
 
 manager = None
@@ -85,6 +86,13 @@ def handle_message(msg):
             APIManager.add_timeline_entry(case_id, image_path, note, date)
             send({"id": req_id, "ok": True, "result": {"success": True}})
             return
+        elif cmd == "delete_cases":
+            case_ids = data.get("case_ids", [])
+            if not case_ids:
+                raise ValueError("Missing case_ids")
+            APIManager.delete_cases(case_ids)
+            send({"id": req_id, "ok": True, "result": {"success": True}})
+            return
 
         # Commands that need case_id and manager instance
         case_id = data.get("case_id")
@@ -103,18 +111,77 @@ def handle_message(msg):
             if not image_path:
                 raise ValueError("Missing image_path")
 
+            # Get predictions first (before LLM streaming) to send predictionText early
+            # This allows frontend to show predefined text immediately
+            from prediction_texts import get_prediction_text
+            
+            # Run initial steps to get predictions
+            from PIL import Image
+            from pathlib import Path
+            image = Image.open(image_path)
+            saved_image_path = manager._save_image(image)
+            embedding = manager._run_local_ml_model(image)
+            cv_analysis = manager._run_cv_analysis(saved_image_path)
+            updated_text_description = manager.update_text_input(text)
+            predictions_raw = manager._run_cloud_ml_model(embedding, updated_text_description)
+            predictions = {item["class"]: item["probability"] for item in predictions_raw}
+            
+            # Get predictionText immediately after predictions are available
+            predictionText = ""
+            if predictions:
+                top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0]
+                predictionText = get_prediction_text(top_prediction_label)
+            
+            # Send predictionText metadata before streaming starts
+            if predictionText:
+                send({"id": req_id, "predictionText": predictionText})
+
             # Create streaming callback for explanation chunks
             def on_stream_chunk(text: str):
                 # Each call becomes one "chunk" event up to Node
                 send({"id": req_id, "chunk": text})
 
-            # Run prediction (this will stream explanation chunks)
-            result = manager.get_initial_prediction(
-                image_path=image_path,
-                text_description=text,
-                user_timestamp=user_timestamp,
-                on_chunk=on_stream_chunk,  # ← IMPORTANT: Pass streaming callback
+            # Continue with LLM call (streaming if on_chunk provided)
+            metadata = {
+                "user_input": updated_text_description,
+                "cv_analysis": cv_analysis,
+                "history": manager.case_history["dates"],
+            }
+            llm_response_dict, llm_timestamp = manager._call_llm_explain(
+                predictions=predictions,
+                metadata=metadata,
+                on_chunk=on_stream_chunk,
             )
+            llm_response = (
+                llm_response_dict.get("answer", "") if isinstance(llm_response_dict, dict) else str(llm_response_dict)
+            )
+
+            # Save conversation and history
+            manager._save_conversation_entry(
+                user_message=updated_text_description,
+                llm_response=llm_response,
+                user_timestamp=user_timestamp,
+                llm_timestamp=llm_timestamp,
+            )
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            manager._save_history_entry(
+                date=current_date,
+                cv_analysis=cv_analysis,
+                predictions=predictions,
+                image_path=saved_image_path,
+                text_summary=updated_text_description,
+            )
+
+            # Build enriched disease and return complete result
+            enriched_disease = manager._build_enriched_disease()
+            result = {
+                "llm_response": llm_response,
+                "predictions": predictions,
+                "cv_analysis": cv_analysis,
+                "embedding": embedding,
+                "text_description": text,
+                "enriched_disease": enriched_disease,
+            }
 
             # After streaming, send final combined response
             send({"id": req_id, "ok": True, "result": result})
@@ -137,6 +204,10 @@ def handle_message(msg):
 
             # Final message with the full structured result
             send({"id": req_id, "ok": True, "result": result})
+        elif cmd == "load_conversation_history":
+            # Return the conversation history for this case
+            conversation_history = manager.conversation_history or []
+            send({"id": req_id, "ok": True, "result": conversation_history})
 
     except Exception as e:
         err = {

@@ -38,6 +38,7 @@ export default function PageContent({ initialView }) {
     const viewParam = searchParams.get('view') || initialView || 'home';
 
     const [selectedCondition, setSelectedCondition] = useState(null);
+    const [chatRefreshKey, setChatRefreshKey] = useState(0); // Key to force ChatPanel reload
     const [mobileView, setMobileView] = useState(viewParam);
     const [previousMobileView, setPreviousMobileView] = useState('home'); // Track previous view for back navigation
 
@@ -55,6 +56,8 @@ export default function PageContent({ initialView }) {
 
     const handleSelectCondition = (condition) => {
         setSelectedCondition(condition);
+        // Force ChatPanel to reload conversation history
+        setChatRefreshKey((k) => k + 1);
         // On mobile, when selecting from list, show results
         if (isMobile) {
             router.push('/?view=results');
@@ -67,12 +70,16 @@ export default function PageContent({ initialView }) {
         const condition = (diseases || []).find((c) => c.id === conditionId);
         if (condition) {
             setSelectedCondition(condition);
+            // Force ChatPanel to reload conversation history
+            setChatRefreshKey((k) => k + 1);
         }
     };
 
     const handlePopoverViewResults = (condition) => {
         // When user clicks "View Results" in the popover (mobile only)
         setSelectedCondition(condition);
+        // Force ChatPanel to reload conversation history
+        setChatRefreshKey((k) => k + 1);
         router.push('/?view=results');
     };
 
@@ -142,6 +149,9 @@ export default function PageContent({ initialView }) {
         // AND it's already been added to the diseases array by AddDiseaseFlow's addDisease() call
         // So just set it as selected and navigate!
         setSelectedCondition(newDisease);
+
+        // Trigger refresh of TimeTrackingPanel to show initial image
+        setTimeEntriesVersion((v) => v + 1);
 
         // Navigate to results view
         router.push('/?view=results');
@@ -257,7 +267,7 @@ export default function PageContent({ initialView }) {
                     {/* Chat View */}
                     {mobileView === 'chat' && (
                         <>
-                            <ChatPanel conditionId={selectedCondition?.id} />
+                            <ChatPanel conditionId={selectedCondition?.id} refreshKey={chatRefreshKey} />
                         </>
                     )}
 
@@ -369,14 +379,14 @@ export default function PageContent({ initialView }) {
                         />
                     </Grid>
 
-                    {/* Center Column: Time Tracking */}
+                    {/* Center Column: Chat */}
                     <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
-                        <TimeTrackingPanel conditionId={selectedCondition?.id} onAddImage={handleOpenAddTime} refreshKey={timeEntriesVersion} />
+                        <ChatPanel conditionId={selectedCondition?.id} refreshKey={chatRefreshKey} />
                     </Grid>
 
-                    {/* Right Column: Chat */}
+                    {/* Right Column: Time Tracking */}
                     <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
-                        <ChatPanel conditionId={selectedCondition?.id} />
+                        <TimeTrackingPanel conditionId={selectedCondition?.id} onAddImage={handleOpenAddTime} refreshKey={timeEntriesVersion} />
                     </Grid>
                 </Grid>
             </Container>
