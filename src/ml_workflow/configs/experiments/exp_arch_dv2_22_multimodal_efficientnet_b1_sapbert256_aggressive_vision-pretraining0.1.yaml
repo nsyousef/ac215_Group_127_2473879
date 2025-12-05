@@ -1,0 +1,147 @@
+# Multimodal: EfficientNet-B1 + SapBERT 256 with Vision-Only Pre-training
+# Training strategy:
+#   - Epochs 0-9: Vision-only pre-training (10 epochs)
+#   - Epochs 10-29: Multimodal training with vision-focused auxiliary loss
+#   - Vision aux: constant 0.4 (epochs 10-29)
+#   - Text aux: constant 0.1 (epochs 10-29)
+
+data:
+  use_local: True
+  dataset: dataset_v2
+  min_samples_per_label: 100
+  datasets:
+    - fitzpatrick17k
+    - ddi
+    - isic
+    - derm1m
+  derm1m_sources:
+    - IIYI
+    - edu
+    - note
+    - public
+    - pubmed
+    - reddit
+    - twitter
+    - youtube
+  has_text: True
+  test_size: 0.1
+  val_size: 0.1
+  img_size: [240, 240]  # EfficientNet-B1 native size
+  seed: 42
+
+training:
+  batch_size: 128
+  num_workers: 16
+  prefetch_factor: 8
+  num_epochs: 30  # 10 vision-only + 20 multimodal
+  patience: 10  # Increased patience for longer training
+  validation_interval: 1
+  n_warmup_epochs: 1
+  compute_stats: False
+  weighted_sampling: True
+
+  # Vision-only pre-training for 10 epochs
+  vision_only_pretraining:
+    enabled: true
+    epochs: 10  # Epochs 0-9 (10 epochs total)
+
+  # Auxiliary loss scheduling (starts AFTER vision-only pre-training)
+  auxiliary_loss_schedule:
+    vision:
+      schedule_type: "constant"
+      start_epoch: 10  # Start when multimodal training begins
+      end_epoch: 30    # End of training
+      start_weight: 0.4
+      end_weight: 0.4  # Constant at 0.4
+
+    text:
+      schedule_type: "constant"
+      start_epoch: 10   # Start when multimodal training begins
+      end_epoch: 30     # End of training
+      start_weight: 0.1
+      end_weight: 0.1
+
+  scheduler:
+    use_cosine_annealing: False
+    vision_eta_min: 0.0000001
+    multimodal_classifier_eta_min: 0.0000001
+
+augmentation:
+  brightness_jitter: 0.2
+  contrast_jitter: 0.2
+  saturation_jitter: 0.2
+  hue_jitter: 0.05
+  rotation_degrees: 30
+  translate: [0.1, 0.1]
+  scale: [0.8, 1.2]
+  grayscale_prob: null
+  horizontal_flip_prob: 0.5
+  vertical_flip_prob: null
+
+vision_model:
+  name: "efficientnet_b1"
+  pretrained: true
+  pooling_type: "avg"
+  unfreeze_layers: -1  # -1 = unfreeze all layers
+
+multimodal_classifier:
+  projection_dim: 256
+  use_l2_normalization: false
+  image_projection_hidden: [512]
+  projection_activation: "relu"
+  projection_dropout: 0.3
+  text_projection_hidden: [512]
+  final_hidden_sizes: [128]
+  final_activation: "relu"
+  final_dropout: 0.3
+  fusion_strategy: "concat_mlp"
+  use_auxiliary_loss: true
+  auxiliary_vision_loss_weight: 0.4  # Default (overridden by schedule)
+  auxiliary_text_loss_weight: 0.0   # Default (overridden by schedule)
+  loss_fn: "cross_entropy"
+  label_smoothing: 0.05
+  use_class_weights_from_data: false
+
+masking:
+  mask_complete: null
+
+  random_mask:
+    enabled: false
+    image_prob: 0.0
+    text_prob: 0.0
+
+  epoch_schedule:
+    enabled: false
+
+encoder:
+  embedding_filename: "sapbert_256_cls.parquet"
+  model_name: "sapbert"
+  max_length: 256
+  pooling_type: "cls"
+  batch_size: 32
+  qwen_instr: ""
+
+optimizer:
+  vision_model:
+    name: "adamw"
+    learning_rate: 0.0001
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+  multimodal_classifier:
+    name: "adamw"
+    learning_rate: 0.0005
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+
+output:
+  save_dir: "/checkpoints"
+  log_dir: "./logs"
+  experiment_name: "exp_arch_dv2_22_multimodal_efficientnet_b1_sapbert256_10epoch_vision_pretraining0.1"
+  wandb_project: "APCOMP215"
+
+checkpoint:
+  save_frequency: 5  # Save more frequently (every 5 epochs)
+  keep_last: 2       # Keep last 2 checkpoints
+  load_from: null
