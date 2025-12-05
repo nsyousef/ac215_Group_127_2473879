@@ -67,6 +67,23 @@ class Trainer:
         self.image_mask_prob = self.random_mask_config.get("image_prob", 0.0) if self.random_mask_enabled else 0.0
         self.text_mask_prob = self.random_mask_config.get("text_prob", 0.0) if self.random_mask_enabled else 0.0
 
+        # Initialize epoch-based masking schedule
+        self.masking_schedule_config = self.masking_config.get("epoch_schedule", {})
+        self.masking_schedule_enabled = self.masking_schedule_config.get("enabled", False)
+        self.vision_mask_schedule = self.masking_schedule_config.get("vision", {"mask_epochs": []})
+        self.text_mask_schedule = self.masking_schedule_config.get("text", {"mask_epochs": []})
+
+        # Initialize vision-only pre-training configuration
+        self.vision_only_config = self.training_config.get("vision_only_pretraining", {})
+        self.vision_only_enabled = self.vision_only_config.get("enabled", False)
+        self.vision_only_epochs = self.vision_only_config.get("epochs", 0)
+
+        # Vision-only classifier and optimizer (initialized later)
+        self.vision_only_classifier = None
+        self.optimizer_vision_only = None
+        self.vision_only_criterion = None
+
+        # Initialize main optimizers and schedulers
         self.optimizer_vision, self.optimizer_multimodal = self._initialize_optimizers()
         self.scheduler_vision, self.scheduler_multimodal = self._initialize_schedulers()
 
@@ -78,6 +95,33 @@ class Trainer:
         self.n_warmup_epochs = self.training_config["n_warmup_epochs"]
         self.vision_frozen = False
         self.accuracy_history = {}
+
+        # Initialize auxiliary loss scheduling
+        self.aux_loss_schedule_config = self.training_config.get("auxiliary_loss_schedule", {})
+
+        # Vision auxiliary loss schedule
+        self.vision_aux_schedule = self.aux_loss_schedule_config.get(
+            "vision",
+            {
+                "schedule_type": "constant",
+                "start_epoch": 0,
+                "end_epoch": 100,
+                "start_weight": self.config["multimodal_classifier"].get("auxiliary_vision_loss_weight", 0.3),
+                "end_weight": self.config["multimodal_classifier"].get("auxiliary_vision_loss_weight", 0.3),
+            },
+        )
+
+        # Text auxiliary loss schedule
+        self.text_aux_schedule = self.aux_loss_schedule_config.get(
+            "text",
+            {
+                "schedule_type": "constant",
+                "start_epoch": 0,
+                "end_epoch": 100,
+                "start_weight": self.config["multimodal_classifier"].get("auxiliary_text_loss_weight", 0.3),
+                "end_weight": self.config["multimodal_classifier"].get("auxiliary_text_loss_weight", 0.3),
+            },
+        )
 
     @staticmethod
     def _make_optimizer(name_cfg, lr, wd, betas, eps, momentum, params):
@@ -153,11 +197,126 @@ class Trainer:
                 eta_min=scheduler_config.get("multimodal_classifier_eta_min", 0.0),
             )
         else:
-            # No schedulers (step function that does nothing)
+            # No schedulers
             scheduler_vision = None
             scheduler_multimodal = None
 
         return scheduler_vision, scheduler_multimodal
+
+    def _initialize_vision_only_classifier(self):
+        """
+        Initialize vision pathway for pre-training by reusing multimodal components
+        This is more efficient than creating a separate classifier
+        """
+        if not self.vision_only_enabled or self.vision_only_epochs == 0:
+            logger.info("Vision-only pre-training disabled")
+            return
+
+        # SAFETY CHECK: Vision-only pre-training requires auxiliary loss to be enabled
+        if not self.multimodal_classifier.use_auxiliary_loss:
+            raise ValueError(
+                "Vision-only pre-training requires use_auxiliary_loss=True in multimodal_classifier config. "
+                "The vision auxiliary classifier is needed for vision-only classification."
+            )
+
+        # We'll reuse the vision projection + aux classifier from multimodal_classifier
+        # No need to create separate components!
+        self.vision_only_classifier = None  # Set to None to signal we're reusing
+        self.optimizer_vision_only = None  # Will use optimizer_multimodal for projection
+        self.vision_only_criterion = None  # Will use same loss as multimodal
+
+        logger.info("Vision-only pre-training will use Vision Projection + Aux Classifier")
+        logger.info("  This allows the vision pathway to be pre-trained before multimodal fusion")
+        logger.info("  Vision Projection parameters: ~329k")
+        logger.info("  Vision Aux Classifier parameters: ~15k")
+
+    def _compute_auxiliary_weight(self, schedule_config: dict, current_epoch: int) -> float:
+        """
+        Compute auxiliary loss weight based on schedule configuration
+
+        Args:
+            schedule_config: Dict with schedule parameters
+            current_epoch: Current training epoch
+
+        Returns:
+            Computed weight for current epoch
+        """
+        start_weight = schedule_config.get("start_weight", 0.3)
+        end_weight = schedule_config.get("end_weight", 0.3)
+        start_epoch = schedule_config.get("start_epoch", 0)
+        end_epoch = schedule_config.get("end_epoch", 100)
+        schedule_type = schedule_config.get("schedule_type", "constant")
+
+        # Before start_epoch, return 0.0 (disabled)
+        if current_epoch < start_epoch:
+            return 0.0
+
+        # After end_epoch, use end_weight
+        if current_epoch >= end_epoch:
+            return end_weight
+
+        # If constant schedule, return start_weight
+        if schedule_type == "constant":
+            return start_weight
+
+        # Compute progress between start and end epochs
+        progress = (current_epoch - start_epoch) / (end_epoch - start_epoch)
+
+        # Apply schedule
+        if schedule_type == "linear":
+            weight = start_weight + (end_weight - start_weight) * progress
+
+        elif schedule_type == "exponential":
+            import math
+
+            if start_weight > 0:
+                weight = start_weight * ((end_weight / start_weight) ** progress)
+            else:
+                weight = end_weight * progress
+
+        elif schedule_type == "cosine":
+            import math
+
+            weight = start_weight + (end_weight - start_weight) * (1 - math.cos(progress * math.pi)) / 2
+
+        elif schedule_type == "step":
+            weight = start_weight if progress < 0.5 else end_weight
+
+        else:
+            raise ValueError(f"Unknown schedule type: {schedule_type}")
+
+        return weight
+
+    def _get_auxiliary_weights(self, epoch: int) -> tuple:
+        """Get the current auxiliary loss weights for both modalities"""
+        vision_weight = self._compute_auxiliary_weight(self.vision_aux_schedule, epoch)
+        text_weight = self._compute_auxiliary_weight(self.text_aux_schedule, epoch)
+        return vision_weight, text_weight
+
+    def _should_mask_modality(self, modality: str, epoch: int) -> bool:
+        """Check if a modality should be completely masked in the current epoch"""
+        if not self.masking_schedule_enabled:
+            return False
+
+        if modality == "vision":
+            mask_ranges = self.vision_mask_schedule.get("mask_epochs", [])
+        elif modality == "text":
+            mask_ranges = self.text_mask_schedule.get("mask_epochs", [])
+        else:
+            raise ValueError(f"Unknown modality: {modality}")
+
+        # Check if current epoch falls within any mask range
+        for start_epoch, end_epoch in mask_ranges:
+            if start_epoch <= epoch < end_epoch:
+                return True
+
+        return False
+
+    def _is_vision_only_epoch(self, epoch: int) -> bool:
+        """Check if current epoch is in vision-only pre-training phase"""
+        if not self.vision_only_enabled:
+            return False
+        return epoch < self.vision_only_epochs
 
     def train(self):
         """Main training loop"""
@@ -167,6 +326,8 @@ class Trainer:
 
         logger.info(f"Starting training for {num_epochs} epochs...")
         logger.info(f"Starting from epoch: {self.start_epoch}")
+
+        # Log optimizer configuration
         vision_optimizer_cfg = self.config["optimizer"]["vision_model"]
         multimodal_optimizer_cfg = self.config["optimizer"]["multimodal_classifier"]
         logger.info(
@@ -186,64 +347,159 @@ class Trainer:
                 f"alpha_text: {multimodal_info['fusion_weights']['alpha_text']:.3f}"
             )
 
-        # Use config filename for wandb run name if available, otherwise fall back to experiment_name
+        # Log vision-only pre-training
+        if self.vision_only_enabled:
+            logger.info("Vision-Only Pre-training:")
+            logger.info(f"  Epochs: 0-{self.vision_only_epochs-1} (vision-only)")
+            logger.info(f"  Epochs: {self.vision_only_epochs}+ (multimodal)")
+
+        # Log auxiliary loss schedules
+        logger.info("Auxiliary Loss Schedules:")
+        logger.info(f"  Vision: {self.vision_aux_schedule['schedule_type']}")
+        logger.info(
+            f"    Weight: {self.vision_aux_schedule['start_weight']:.3f} → {self.vision_aux_schedule['end_weight']:.3f}"
+        )
+        logger.info(f"    Epochs: {self.vision_aux_schedule['start_epoch']} → {self.vision_aux_schedule['end_epoch']}")
+        logger.info(f"  Text: {self.text_aux_schedule['schedule_type']}")
+        logger.info(
+            f"    Weight: {self.text_aux_schedule['start_weight']:.3f} → {self.text_aux_schedule['end_weight']:.3f}"
+        )
+        logger.info(f"    Epochs: {self.text_aux_schedule['start_epoch']} → {self.text_aux_schedule['end_epoch']}")
+
+        # Log masking schedule (if not using vision-only pretraining)
+        if not self.vision_only_enabled:
+            if self.masking_schedule_enabled:
+                logger.info("Epoch-Based Masking Schedule:")
+                vision_mask_epochs = self.vision_mask_schedule.get("mask_epochs", [])
+                text_mask_epochs = self.text_mask_schedule.get("mask_epochs", [])
+                if vision_mask_epochs:
+                    logger.info(f"  Vision masked during epochs: {vision_mask_epochs}")
+                if text_mask_epochs:
+                    logger.info(f"  Text masked during epochs: {text_mask_epochs}")
+            elif self.mask_complete:
+                logger.info(f"Complete masking enabled: {self.mask_complete}")
+            elif self.random_mask_enabled:
+                logger.info(
+                    f"Random masking enabled - image_prob: {self.image_mask_prob}, text_prob: {self.text_mask_prob}"
+                )
+
+        # Use config filename for wandb run name if available
         run_name = self.config_filename if self.config_filename else self.output_config["experiment_name"]
         with wandb.init(project=self.output_config["wandb_project"], name=run_name, config=self.config) as run:
 
             for epoch in range(self.start_epoch, num_epochs):
                 self.current_epoch = epoch
 
+                # Check if in vision-only pre-training phase
+                is_vision_only = self._is_vision_only_epoch(epoch)
+
+                if is_vision_only:
+                    # Vision-only pre-training mode
+                    training_stage = "vision_only_pretraining"
+                    logger.info(f"\nEpoch {epoch+1}/{num_epochs} - Stage: {training_stage}")
+                    logger.info("  Mode: Training ONLY vision encoder (no multimodal classifier)")
+
+                    vision_aux_weight = 0.0
+                    text_aux_weight = 0.0
+                    vision_masked = False
+                    text_masked = False
+                else:
+                    # Multimodal training mode
+                    # Update auxiliary loss weights for current epoch
+                    vision_aux_weight, text_aux_weight = self._get_auxiliary_weights(epoch)
+                    self.multimodal_classifier.auxiliary_vision_loss_weight = vision_aux_weight
+                    self.multimodal_classifier.auxiliary_text_loss_weight = text_aux_weight
+
+                    # Check masking state for current epoch
+                    vision_masked = (
+                        self._should_mask_modality("vision", epoch) if self.masking_schedule_enabled else False
+                    )
+                    text_masked = self._should_mask_modality("text", epoch) if self.masking_schedule_enabled else False
+
+                    # Determine training stage
+                    if text_masked or (text_aux_weight == 0.0 and vision_aux_weight > 0.0):
+                        training_stage = "vision_only"
+                    elif vision_masked or (vision_aux_weight == 0.0 and text_aux_weight > 0.0):
+                        training_stage = "text_only"
+                    elif vision_aux_weight > 0.0 and text_aux_weight > 0.0 and not vision_masked and not text_masked:
+                        training_stage = "multimodal"
+                    else:
+                        training_stage = "fusion_only"
+
+                    logger.info(f"\nEpoch {epoch+1}/{num_epochs} - Stage: {training_stage}")
+                    logger.info(f"  Vision aux weight: {vision_aux_weight:.4f} | Masked: {vision_masked}")
+                    logger.info(f"  Text aux weight: {text_aux_weight:.4f} | Masked: {text_masked}")
+
                 # Update vision freeze state
                 if epoch < self.n_warmup_epochs:
-                    # Freeze all layers during warmup
                     self.vision_model._freeze_layers(warmup_mode=True)
                     self.vision_frozen = True
                 elif epoch == self.n_warmup_epochs:
-                    # Apply unfreeze_layers setting once after warmup
                     self.vision_model._freeze_layers(warmup_mode=False)
                     self.vision_frozen = False
-                # After warmup, freeze state remains constant (no need to re-apply)
-                # Training phase
-                train_loss, train_acc, train_f1 = self._train_epoch()
 
-                # Get current learning rates from optimizers (after scheduler updates)
+                # Training phase
+                if is_vision_only:
+                    train_loss, train_acc, train_f1 = self._train_epoch_vision_only()
+                else:
+                    train_loss, train_acc, train_f1 = self._train_epoch()
+
+                # Get current learning rates
                 current_lr_vision = self.optimizer_vision.param_groups[0]["lr"]
                 current_lr_multimodal = self.optimizer_multimodal.param_groups[0]["lr"]
 
-                run.log(
-                    {
-                        "train/loss": train_loss,
-                        "train/acc": train_acc,
-                        "train/f1": train_f1,
-                        "epoch": epoch,
-                        "params/learning_rate_vision": current_lr_vision,
-                        "params/learning_rate_multimodal_classifier": current_lr_multimodal,
-                    }
-                )
+                # Prepare logging dict
+                log_dict = {
+                    "train/loss": train_loss,
+                    "train/acc": train_acc,
+                    "train/f1": train_f1,
+                    "epoch": epoch,
+                    "params/learning_rate_vision": current_lr_vision,
+                    "params/training_stage": training_stage,
+                    "params/is_vision_only_pretraining": is_vision_only,
+                }
+
+                # Add multimodal-specific metrics if not in vision-only mode
+                if not is_vision_only:
+                    log_dict.update(
+                        {
+                            "params/learning_rate_multimodal_classifier": current_lr_multimodal,
+                            "params/aux_vision_weight": vision_aux_weight,
+                            "params/aux_text_weight": text_aux_weight,
+                            "params/vision_masked": vision_masked,
+                            "params/text_masked": text_masked,
+                        }
+                    )
+
+                run.log(log_dict)
 
                 ran_validation = False
                 val_loss = None
                 val_acc = None
                 val_f1 = None
 
-                # Validation phase only on interval
+                # Validation phase
                 if self.val_loader is not None and ((epoch + 1) % validation_interval == 0):
                     ran_validation = True
-                    val_loss, val_acc, val_f1, confusion_matrix = self.validate()
+                    if is_vision_only:
+                        val_loss, val_acc, val_f1, confusion_matrix = self.validate_vision_only()
+                    else:
+                        val_loss, val_acc, val_f1, confusion_matrix = self.validate()
+
                     logger.info(
                         f"Epoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.4f}, "
                         f"Train Acc: {train_acc:.4f}, Train F1: {train_f1:.4f}, "
                         f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val F1: {val_f1:.4f}"
                     )
 
-                    # Create and log confusion analysis table
-                    if confusion_matrix is not None:
+                    # Create and log confusion analysis table (only in multimodal mode)
+                    if confusion_matrix is not None and not is_vision_only:
                         class_names = self.info["classes"]
                         confusion_table, accuracy_history_table = self._make_wandb_tables(confusion_matrix, class_names)
                         run.log({"val/confusion_analysis": confusion_table})
                         run.log({"val/accuracy_history": accuracy_history_table})
 
-                    # Early stopping only when validation runs
+                    # Early stopping
                     if val_loss < self.best_val_loss:
                         self.best_val_loss = val_loss
                         self.patience_counter = 0
@@ -285,36 +541,43 @@ class Trainer:
 
             logger.info("Training completed!")
 
-    def _apply_masking(self, images: torch.Tensor, text_embeddings: torch.Tensor):
-        """
-        Apply modality masking to images and/or text embeddings (zero masking)
-
-        Args:
-            images: Image tensor (batch_size, channels, height, width)
-            text_embeddings: Text embedding tensor (batch_size, text_embedding_dim)
-
-        Returns:
-            Tuple of (masked_images, masked_text_embeddings, modality_mask_info)
-        """
+    def _apply_masking(self, images: torch.Tensor, text_embeddings: torch.Tensor, epoch: int = None):
+        """Apply modality masking to images and/or text embeddings (zero masking)"""
         batch_size = images.size(0)
         vision_valid = torch.ones(batch_size, dtype=torch.bool, device=images.device)
         text_valid = torch.ones(batch_size, dtype=torch.bool, device=text_embeddings.device)
         mask_applied = False
 
-        # Complete masking: mask entire modality for whole run
+        # PRIORITY 1: Epoch-based masking schedule
+        if epoch is not None and self.masking_schedule_enabled:
+            should_mask_vision = self._should_mask_modality("vision", epoch)
+            should_mask_text = self._should_mask_modality("text", epoch)
+
+            if should_mask_vision:
+                images = torch.zeros_like(images)
+                vision_valid.zero_()
+                mask_applied = True
+
+            if should_mask_text:
+                text_embeddings = torch.zeros_like(text_embeddings)
+                text_valid.zero_()
+                mask_applied = True
+
+            if should_mask_vision or should_mask_text:
+                mask_info = {"vision_valid_mask": vision_valid, "text_valid_mask": text_valid} if mask_applied else None
+                return images, text_embeddings, mask_info
+
+        # PRIORITY 2: Complete masking
         if self.mask_complete == "image":
-            # Mask all images with zeros
             images = torch.zeros_like(images)
             vision_valid.zero_()
             mask_applied = True
-
         elif self.mask_complete == "text":
-            # Mask all text embeddings with zeros
             text_embeddings = torch.zeros_like(text_embeddings)
             text_valid.zero_()
             mask_applied = True
 
-        # Random masking (only if complete masking is not enabled)
+        # PRIORITY 3: Random masking
         elif self.random_mask_enabled:
             images = images.clone()
             text_embeddings = text_embeddings.clone()
@@ -334,7 +597,6 @@ class Trainer:
             both_masked = image_mask & text_mask
 
             if both_masked.any():
-                # probability based on complement masking rates
                 p_keep_image = 1 - self.image_mask_prob
                 p_keep_text = 1 - self.text_mask_prob
                 p_keep_image = p_keep_image / (p_keep_image + p_keep_text)
@@ -343,7 +605,6 @@ class Trainer:
                 image_mask[both_masked] = ~keep_image
                 text_mask[both_masked] = keep_image
 
-            # APPLY MASKS
             if image_mask.any():
                 images[image_mask] = 0.0
             vision_valid = ~image_mask
@@ -359,6 +620,95 @@ class Trainer:
             mask_info = {"vision_valid_mask": vision_valid, "text_valid_mask": text_valid}
 
         return images, text_embeddings, mask_info
+
+    def _train_epoch_vision_only(self):
+        """
+        Train for one epoch using vision pathway of multimodal classifier
+        This reuses Vision Projection + Vision Aux Classifier
+        """
+        self.vision_model.train()
+        self.multimodal_classifier.train()  # Only vision pathway will be used
+
+        total_loss = 0.0
+        correct = 0
+        total = 0
+        all_preds = []
+        all_targets = []
+
+        pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Vision-Only Pre-training")
+
+        for batch_idx, (images, targets, text_embeddings) in enumerate(pbar):
+            # Move data to device (ignore text_embeddings)
+            images = images.to(self.device, non_blocking=True)
+            targets = targets.to(self.device, non_blocking=True)
+
+            # Zero gradients for vision pathway only
+            if not self.vision_frozen:
+                self.optimizer_vision.zero_grad(set_to_none=True)
+            # Use multimodal optimizer for vision projection + aux classifier
+            self.optimizer_multimodal.zero_grad(set_to_none=True)
+
+            # Forward pass: vision model → projection → aux classifier
+            vision_embeddings = self.vision_model(images)
+            projected_vision = self.multimodal_classifier.vision_projection(vision_embeddings)
+            logits = self.multimodal_classifier.aux_vision_classifier(projected_vision)
+
+            # Compute loss
+            loss_fn = self.multimodal_classifier.criterion
+            loss = loss_fn(logits, targets)
+
+            # Backward pass
+            loss.backward()
+            if not self.vision_frozen:
+                self.optimizer_vision.step()
+            self.optimizer_multimodal.step()
+
+            # Statistics
+            total_loss += loss.detach().item()
+            pred = logits.argmax(dim=1, keepdim=True)
+            batch_correct = pred.eq(targets.view_as(pred)).sum().item()
+            batch_total = targets.size(0)
+            correct += batch_correct
+            total += batch_total
+
+            # Accumulate predictions
+            all_preds.append(pred.view(-1).detach())
+            all_targets.append(targets.view(-1).detach())
+
+            avg_running_loss = total_loss / (batch_idx + 1)
+            running_accuracy = 100.0 * correct / total
+
+            # Update progress bar
+            pbar.set_postfix({"Loss": f"{avg_running_loss:.4f}", "Acc": f"{running_accuracy:.2f}%"})
+
+            # Periodic CUDA cache cleanup
+            if batch_idx % 50 == 0 and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        avg_loss = total_loss / len(self.train_loader)
+        accuracy = 100.0 * correct / total
+
+        # Compute macro-F1 (same as before)
+        all_preds_tensor = torch.cat(all_preds)
+        all_targets_tensor = torch.cat(all_targets)
+        pred_np = all_preds_tensor.cpu().numpy()
+        target_np = all_targets_tensor.cpu().numpy()
+
+        num_classes = self.info["num_classes"]
+        confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
+        for t, p in zip(target_np, pred_np):
+            confusion[t, p] += 1
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            tp = np.diag(confusion).astype(np.float64)
+            fp = confusion.sum(axis=0) - tp
+            fn = confusion.sum(axis=1) - tp
+            precision = np.where(tp + fp > 0, tp / (tp + fp), 0.0)
+            recall = np.where(tp + fn > 0, tp / (tp + fn), 0.0)
+            f1_per_class = np.where(precision + recall > 0, 2 * precision * recall / (precision + recall), 0.0)
+            macro_f1 = float(np.mean(f1_per_class))
+
+        return avg_loss, accuracy, macro_f1
 
     def _train_epoch(self):
         """Train for one epoch"""
@@ -382,7 +732,9 @@ class Trainer:
             text_embeddings = text_embeddings.to(self.device, non_blocking=True)
 
             # Apply masking (if enabled)
-            images, text_embeddings, modality_mask_info = self._apply_masking(images, text_embeddings)
+            images, text_embeddings, modality_mask_info = self._apply_masking(
+                images, text_embeddings, self.current_epoch
+            )
 
             # Zero gradients (set_to_none=True for better memory efficiency)
             if not self.vision_frozen:
@@ -481,10 +833,10 @@ class Trainer:
                     text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
                 text_embeddings = text_embeddings.to(self.device, non_blocking=True)
 
-                modality_mask_info = None
-                # Apply complete masking (if enabled) - no random masking in validation
-                if self.mask_complete is not None:
-                    images, text_embeddings, modality_mask_info = self._apply_masking(images, text_embeddings)
+                # Apply masking (epoch-based or complete) - no random masking in validation
+                images, text_embeddings, modality_mask_info = self._apply_masking(
+                    images, text_embeddings, self.current_epoch
+                )
 
                 # Forward pass through vision model
                 vision_embeddings = self.vision_model(images)
@@ -513,6 +865,66 @@ class Trainer:
 
         avg_loss = total_loss / len(self.val_loader)
         accuracy = 100.0 * correct / total
+        with np.errstate(divide="ignore", invalid="ignore"):
+            tp = np.diag(confusion).astype(np.float64)
+            fp = confusion.sum(axis=0) - tp
+            fn = confusion.sum(axis=1) - tp
+            precision = np.where(tp + fp > 0, tp / (tp + fp), 0.0)
+            recall = np.where(tp + fn > 0, tp / (tp + fn), 0.0)
+            f1_per_class = np.where(precision + recall > 0, 2 * precision * recall / (precision + recall), 0.0)
+            macro_f1 = float(np.mean(f1_per_class))
+
+        return avg_loss, accuracy, macro_f1, confusion
+
+    def validate_vision_only(self):
+        """Validation loop for vision-only pre-training using reused components"""
+        if self.val_loader is None:
+            logger.warning("No validation loader available")
+            return None, None, None, None
+
+        self.vision_model.eval()
+        self.multimodal_classifier.eval()
+
+        total_loss = 0.0
+        correct = 0
+        total = 0
+        num_classes = self.info["num_classes"]
+        confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
+
+        with torch.no_grad():
+            pbar = tqdm(self.val_loader, desc="Validation (Vision-Only)", leave=False)
+            for images, targets, text_embeddings in pbar:
+                # Move data to device (ignore text_embeddings)
+                images = images.to(self.device, non_blocking=True)
+                targets = targets.to(self.device, non_blocking=True)
+
+                # Forward pass: vision → projection → aux classifier
+                vision_embeddings = self.vision_model(images)
+                projected_vision = self.multimodal_classifier.vision_projection(vision_embeddings)
+                logits = self.multimodal_classifier.aux_vision_classifier(projected_vision)
+
+                # Compute loss
+                loss = self.multimodal_classifier.criterion(logits, targets)
+
+                # Statistics
+                total_loss += loss.item()
+                pred = logits.argmax(dim=1, keepdim=True)
+                batch_correct = pred.eq(targets.view_as(pred)).sum().item()
+                batch_total = targets.size(0)
+                correct += batch_correct
+                total += batch_total
+
+                pred_flat = pred.view(-1).detach().cpu().numpy()
+                target_flat = targets.view(-1).detach().cpu().numpy()
+                for t, p in zip(target_flat, pred_flat):
+                    confusion[t, p] += 1
+
+                # Update progress bar
+                pbar.set_postfix({"Loss": f"{loss.item():.4f}", "Acc": f"{100. * correct / total:.2f}%"})
+
+        avg_loss = total_loss / len(self.val_loader)
+        accuracy = 100.0 * correct / total
+
         with np.errstate(divide="ignore", invalid="ignore"):
             tp = np.diag(confusion).astype(np.float64)
             fp = confusion.sum(axis=0) - tp
@@ -643,10 +1055,11 @@ class Trainer:
                     text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
                 text_embeddings = text_embeddings.to(self.device, non_blocking=True)
 
-                modality_mask_info = None
-                # Apply complete masking (if enabled) - no random masking in test
-                if self.mask_complete is not None:
-                    images, text_embeddings, modality_mask_info = self._apply_masking(images, text_embeddings)
+                # Apply masking (epoch-based or complete) - no random masking in test
+                # Note: For test, we use the last epoch's masking state
+                images, text_embeddings, modality_mask_info = self._apply_masking(
+                    images, text_embeddings, self.current_epoch
+                )
 
                 # Forward pass through vision model
                 vision_embeddings = self.vision_model(images)
@@ -792,6 +1205,9 @@ class Trainer:
             "classes": self.info["classes"],
             "class_to_idx": self.info["class_to_idx"],
             "num_classes": self.info["num_classes"],
+            # Add current auxiliary loss weights for proper resuming
+            "current_aux_vision_weight": self.multimodal_classifier.auxiliary_vision_loss_weight,
+            "current_aux_text_weight": self.multimodal_classifier.auxiliary_text_loss_weight,
         }
 
         # Include optimizer states (for resuming training)

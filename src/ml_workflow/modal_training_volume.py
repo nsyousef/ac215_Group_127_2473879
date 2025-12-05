@@ -53,13 +53,12 @@ image = (
 
 app = modal.App("skin-disease-training-volume", image=image)
 
+
 # ============================================================================
 # STEP 1: Sync data from GCS to Modal Volume (run once)
 # ============================================================================
-
-
 @app.function(
-    cpu=16.0,  # Increased CPU for faster parallel downloads
+    cpu=16.0,
     timeout=7200,
     secrets=[
         modal.Secret.from_name("gcs-secret"),
@@ -72,21 +71,19 @@ app = modal.App("skin-disease-training-volume", image=image)
 def sync_data_from_gcs():
     """
     One-time sync of data from GCS to Modal Volume
-
-    This copies the dataset from gs://apcomp215-datasets/dataset_v1/ to a persistent
-    Modal Volume for fast local access during training.
-    Data is stored in /data/dataset_v2/ on the Modal Volume.
-
-    Usage:
-        modal run modal_training_volume.py::sync_data_from_gcs
     """
     import os
     import json
+    from pathlib import Path
     from google.cloud import storage
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from tqdm import tqdm
+    from requests.adapters import HTTPAdapter
+    from urllib3.util import Retry
 
-    # Set up GCS credentials
+    # --------------------------
+    # GCS credential setup
+    # --------------------------
     if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
         creds_path = "/tmp/gcs_credentials.json"
         try:
@@ -99,7 +96,6 @@ def sync_data_from_gcs():
             logger.error(f"❌ Error setting up GCS credentials: {e}")
             raise
 
-    # Setup paths
     bucket_name = "apcomp215-datasets"
     gcs_prefix = "dataset_v1/"
     data_dir = "/data/dataset_v2"
@@ -109,80 +105,112 @@ def sync_data_from_gcs():
     logger.info(f"Target: {data_dir}")
     logger.info("Starting parallel transfer (128 workers)...")
 
+    # --------------------------
+    # Initialize GCS client
+    # --------------------------
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+
+    # ----------------------------------------------------
+    # Increase connection pool size (POOL_SIZE = 128)
+    # ----------------------------------------------------
+    POOL_SIZE = 128
+
+    retry = Retry(
+        total=3,
+        backoff_factor=0.2,
+        status_forcelist=(500, 502, 503, 504),
+    )
+
+    adapter = HTTPAdapter(
+        pool_connections=POOL_SIZE,
+        pool_maxsize=POOL_SIZE,
+        max_retries=retry,
+        pool_block=True,  # avoid discarding connection warnings
+    )
+
+    # Mount adapter on primary GCS HTTP session
     try:
-        # Initialize GCS client
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-
-        # List all blobs
-        logger.info("Scanning GCS bucket...")
-        blobs = [b for b in bucket.list_blobs(prefix=gcs_prefix) if not b.name.endswith("/")]
-        logger.info(f"Found {len(blobs):,} files to download")
-
-        # Download function for parallel execution
-        def download_blob(blob):
-            relative_path = blob.name[len(gcs_prefix) :]
-            if not relative_path:
-                return 0
-
-            local_path = os.path.join(data_dir, relative_path)
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-
-            # Skip if file already exists and size matches
-            if os.path.exists(local_path) and os.path.getsize(local_path) == blob.size:
-                return 0
-
-            blob.download_to_filename(local_path)
-            return blob.size
-
-        # Parallel download with progress bar
-        total_bytes = 0
-        with ThreadPoolExecutor(max_workers=128) as executor:
-            futures = {executor.submit(download_blob, blob): blob for blob in blobs}
-            with tqdm(total=len(blobs), desc="Downloading", unit="file") as pbar:
-                for future in as_completed(futures):
-                    try:
-                        size = future.result()
-                        total_bytes += size
-                        pbar.update(1)
-                    except Exception as e:
-                        logger.warning(f"Failed to download {futures[future].name}: {e}")
-
-        # Verify data
-        logger.info("Verifying transferred data...")
-        file_count = sum(1 for _ in Path(data_dir).rglob("*") if _.is_file())
-        total_size_gb = total_bytes / (1024**3)
-
-        logger.info("=" * 70)
-        logger.info("✓ SYNC COMPLETE!")
-        logger.info("=" * 70)
-        logger.info(f"  Files transferred: {file_count:,}")
-        logger.info(f"  Total size: {total_size_gb:.2f} GB")
-        logger.info(f"  Location: {data_dir}")
-
-        # Commit the volume to persist changes
-        logger.info("Committing volume to persist data...")
-        from modal import Volume
-
-        volume = Volume.from_name("training-data")
-        volume.commit()
-        logger.info("✓ Volume committed - data persisted!")
-
-        return f"Data sync successful: {file_count:,} files, {total_size_gb:.2f} GB"
-
+        client._http.mount("https://", adapter)
+        logger.info(f"✓ Increased HTTP pool size to {POOL_SIZE}")
     except Exception as e:
-        logger.error("=" * 70)
-        logger.error("❌ SYNC FAILED")
-        logger.error("=" * 70)
-        logger.error(f"Error: {e}")
-        raise
+        logger.warning(f"Could not mount adapter on client._http: {e}")
+
+    # Mount adapter on internal auth session (AuthorizedSession)
+    try:
+        auth_sess = client._http._auth_request.session
+        auth_sess.mount("https://", adapter)
+        logger.info("✓ Mounted adapter on internal auth session")
+    except Exception:
+        pass
+
+    # --------------------------
+    # List all blobs
+    # --------------------------
+    logger.info("Scanning GCS bucket...")
+    blobs = [b for b in bucket.list_blobs(prefix=gcs_prefix) if not b.name.endswith("/")]
+    logger.info(f"Found {len(blobs):,} files to download")
+
+    # --------------------------
+    # Parallel download function
+    # --------------------------
+    def download_blob(blob):
+        relative_path = blob.name[len(gcs_prefix) :]
+        if not relative_path:
+            return 0
+
+        local_path = os.path.join(data_dir, relative_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+        # Skip if file exists & size matches
+        if os.path.exists(local_path) and os.path.getsize(local_path) == blob.size:
+            return 0
+
+        blob.download_to_filename(local_path)
+        return blob.size
+
+    # --------------------------
+    # Parallel download execution
+    # --------------------------
+    total_bytes = 0
+    with ThreadPoolExecutor(max_workers=128) as executor:
+        futures = {executor.submit(download_blob, blob): blob for blob in blobs}
+        with tqdm(total=len(blobs), desc="Downloading", unit="file") as pbar:
+            for future in as_completed(futures):
+                try:
+                    size = future.result()
+                    total_bytes += size
+                    pbar.update(1)
+                except Exception as e:
+                    logger.warning(f"Failed to download {futures[future].name}: {e}")
+
+    # --------------------------
+    # Verification & commit
+    # --------------------------
+    logger.info("Verifying transferred data...")
+    file_count = sum(1 for _ in Path(data_dir).rglob("*") if _.is_file())
+    total_size_gb = total_bytes / (1024**3)
+
+    logger.info("=" * 70)
+    logger.info("✓ SYNC COMPLETE!")
+    logger.info("=" * 70)
+    logger.info(f"  Files transferred: {file_count:,}")
+    logger.info(f"  Total size: {total_size_gb:.2f} GB")
+    logger.info(f"  Location: {data_dir}")
+
+    logger.info("Committing volume to persist data...")
+    from modal import Volume
+
+    volume = Volume.from_name("training-data")
+    volume.commit()
+    logger.info("✓ Volume committed - data persisted!")
+
+    return f"Data sync successful: {file_count:,} files, {total_size_gb:.2f} GB"
 
 
 # ============================================================================
 # STEP 2: Training with volume data (fast local I/O)
 # ============================================================================
-
-
 @app.function(
     gpu="A100-80GB",
     cpu=20.0,

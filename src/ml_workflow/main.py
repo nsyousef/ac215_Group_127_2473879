@@ -200,6 +200,9 @@ def initialize_model(config_path):
         config_filename=config_filename,
     )
 
+    # Initialize vision-only classifier if pre-training is enabled
+    trainer._initialize_vision_only_classifier()
+
     # Load checkpoint if specified
     checkpoint_config = config.get("checkpoint", {})
     if checkpoint_config.get("load_from") is not None:
@@ -231,6 +234,14 @@ def initialize_model(config_path):
             # Load vision freeze state
             trainer.vision_frozen = checkpoint.get("vision_frozen", False)
             trainer.n_warmup_epochs = checkpoint.get("n_warmup_epochs", 0)
+
+            # Restore auxiliary loss weights if resuming
+            if "current_aux_vision_weight" in checkpoint:
+                trainer.multimodal_classifier.auxiliary_vision_loss_weight = checkpoint["current_aux_vision_weight"]
+                logger.info(f"Restored vision aux weight: {checkpoint['current_aux_vision_weight']:.4f}")
+            if "current_aux_text_weight" in checkpoint:
+                trainer.multimodal_classifier.auxiliary_text_loss_weight = checkpoint["current_aux_text_weight"]
+                logger.info(f"Restored text aux weight: {checkpoint['current_aux_text_weight']:.4f}")
 
         except Exception as e:
             logger.error(f"Error loading checkpoint: {e}")
