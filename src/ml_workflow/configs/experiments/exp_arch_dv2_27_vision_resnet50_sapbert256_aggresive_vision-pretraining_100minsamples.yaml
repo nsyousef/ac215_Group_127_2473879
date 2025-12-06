@@ -1,9 +1,9 @@
-# Multimodal: EfficientNet-B4 + SapBERT 256 with Vision-Only Pre-training
+# Multimodal: ResNet50 + SapBERT 256 with Vision-Only Pre-training
 # Training strategy:
 #   - Epochs 0-9: Vision-only pre-training (10 epochs)
 #   - Epochs 10-29: Multimodal training with vision-focused auxiliary loss
 #   - Vision aux: constant 0.4 (epochs 10-29)
-#   - Text aux: constant 0.1 (epochs 10-29)
+#   - Text aux: constant 0.2 (epochs 10-29)
 
 data:
   use_local: True
@@ -26,7 +26,7 @@ data:
   has_text: True
   test_size: 0.1
   val_size: 0.1
-  img_size: [380, 380]  # EfficientNet-B4 native size
+  img_size: [224, 224]
   seed: 42
 
 training:
@@ -58,8 +58,8 @@ training:
       schedule_type: "constant"
       start_epoch: 10   # Start when multimodal training begins
       end_epoch: 30     # End of training
-      start_weight: 0.1
-      end_weight: 0.1
+      start_weight: 0.2
+      end_weight: 0.2
 
   scheduler:
     use_cosine_annealing: False
@@ -79,7 +79,7 @@ augmentation:
   vertical_flip_prob: null
 
 vision_model:
-  name: "efficientnet_b4"
+  name: "resnet50"
   pretrained: true
   pooling_type: "avg"
   unfreeze_layers: -1  # -1 = unfreeze all layers
@@ -138,7 +138,7 @@ optimizer:
 output:
   save_dir: "/checkpoints"
   log_dir: "./logs"
-  experiment_name: "exp_arch_dv2_25_vision_efficientnet_b4_sapbert256_aggresive_vision-pretraining"
+  experiment_name: "exp_arch_dv2_27_vision_resnet50_sapbert256_aggresive_vision-pretraining_100minsamples"
   wandb_project: "APCOMP215"
 
 checkpoint:

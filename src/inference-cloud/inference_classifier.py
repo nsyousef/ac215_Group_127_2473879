@@ -214,8 +214,15 @@ class InferenceClassifier:
 
     @torch.no_grad()
     def predict(
-        self, vision_embedding: np.ndarray, text_embedding: np.ndarray, return_probs: bool = True, top_k: int = 5
-    ) -> Dict[str, Union[str, float, List[tuple]]]:
+        self,
+        vision_embedding: np.ndarray,
+        text_embedding: np.ndarray,
+        return_probs: bool = True,
+        top_k: int = 5,
+        confidence_threshold: float = 0.5,
+        min_gap_threshold: float = 0.1,
+        max_entropy_threshold: float = 0.8,
+    ) -> Dict[str, Union[str, float, List[tuple], bool]]:
         """
         Predict skin condition from embeddings.
 
@@ -224,12 +231,17 @@ class InferenceClassifier:
             text_embedding: Text embedding vector (embedding_dim,)
             return_probs: Whether to return probabilities
             top_k: Number of top predictions to return
+            confidence_threshold: Minimum confidence to consider prediction reliable (0-1)
+            min_gap_threshold: Minimum probability gap between top 2 predictions (0-1)
+            max_entropy_threshold: Maximum normalized entropy allowed (0-1). Higher = more uniform allowed
 
         Returns:
             Dictionary with:
-                - 'predicted_class': Most likely class name
-                - 'predicted_idx': Class index
+                - 'predicted_class': Most likely class name (or "UNCERTAIN" if not confident)
+                - 'predicted_idx': Class index (or -1 if uncertain)
                 - 'confidence': Confidence score (0-1)
+                - 'is_confident': Boolean indicating if prediction meets confidence criteria
+                - 'uncertainty_reason': Reason for uncertainty (if applicable)
                 - 'top_k': List of (class_name, probability) tuples (if return_probs=True)
         """
         # Convert to tensors and add batch dimension
@@ -249,7 +261,43 @@ class InferenceClassifier:
         predicted_class = self.idx_to_class[predicted_idx]
         confidence = top_prob.item()
 
-        result = {"predicted_class": predicted_class, "predicted_idx": predicted_idx, "confidence": confidence}
+        # Check confidence criteria
+        is_confident = True
+        uncertainty_reasons = []
+
+        # Check 1: Maximum probability threshold
+        if confidence < confidence_threshold:
+            is_confident = False
+            uncertainty_reasons.append(f"max_probability_too_low ({confidence:.3f} < {confidence_threshold})")
+
+        # Check 2: Gap between top 2 predictions (ambiguity check)
+        if len(self.classes) > 1:
+            top2_probs, top2_indices = probs.topk(2, dim=1)
+            prob_gap = (top2_probs[0, 0] - top2_probs[0, 1]).item()
+
+            if prob_gap < min_gap_threshold:
+                is_confident = False
+                uncertainty_reasons.append(f"predictions_too_close (gap={prob_gap:.3f} < {min_gap_threshold})")
+
+        # Check 3: High entropy (uniform distribution indicates uncertainty)
+        entropy = -(probs * torch.log(probs.clamp(min=1e-10))).sum(dim=1).item()  # Fixed epsilon
+        max_entropy = np.log(len(self.classes))  # Maximum possible entropy
+        normalized_entropy = entropy / max_entropy if max_entropy > 0 else 0
+
+        # Check if entropy exceeds threshold (configurable now!)
+        if normalized_entropy > max_entropy_threshold:
+            is_confident = False
+            uncertainty_reasons.append(f"high_entropy (normalized={normalized_entropy:.3f} > {max_entropy_threshold})")
+
+        result = {
+            "predicted_class": predicted_class if is_confident else "UNCERTAIN",
+            "predicted_idx": predicted_idx if is_confident else -1,
+            "confidence": confidence,
+            "is_confident": is_confident,
+            "uncertainty_reason": "; ".join(uncertainty_reasons) if uncertainty_reasons else None,
+            "top_prediction": predicted_class,  # Always include actual top prediction
+            "entropy": normalized_entropy,
+        }
 
         if return_probs:
             # Get top-k predictions

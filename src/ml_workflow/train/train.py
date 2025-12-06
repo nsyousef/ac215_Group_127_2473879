@@ -88,9 +88,17 @@ class Trainer:
         self.scheduler_vision, self.scheduler_multimodal = self._initialize_schedulers()
 
         self.current_epoch = 0
+        self.start_epoch = 0
+
+        # Separate early stopping tracking for vision-only and multimodal phases
+        self.best_val_loss_vision_only = float("inf")
+        self.best_val_loss_multimodal = float("inf")
+        self.patience_counter_vision_only = 0
+        self.patience_counter_multimodal = 0
+
+        # For backward compatibility (used in checkpointing)
         self.best_val_loss = float("inf")
         self.patience_counter = 0
-        self.start_epoch = 0
 
         self.n_warmup_epochs = self.training_config["n_warmup_epochs"]
         self.vision_frozen = False
@@ -499,17 +507,37 @@ class Trainer:
                         run.log({"val/confusion_analysis": confusion_table})
                         run.log({"val/accuracy_history": accuracy_history_table})
 
-                    # Early stopping
-                    if val_loss < self.best_val_loss:
-                        self.best_val_loss = val_loss
-                        self.patience_counter = 0
-                        self._save_checkpoint(epoch, val_loss, is_best=True)
-                    else:
-                        self.patience_counter += 1
+                    # Early stopping (separate tracking for vision-only vs multimodal)
+                    if is_vision_only:
+                        # Vision-only phase early stopping
+                        if val_loss < self.best_val_loss_vision_only:
+                            self.best_val_loss_vision_only = val_loss
+                            self.patience_counter_vision_only = 0
+                            self.best_val_loss = val_loss  # For checkpointing
+                            self._save_checkpoint(epoch, val_loss, is_best=True)
+                            logger.info(f"  New best vision-only val loss: {val_loss:.4f}")
+                        else:
+                            self.patience_counter_vision_only += 1
+                            logger.info(f"  Vision-only patience: {self.patience_counter_vision_only}/{patience}")
 
-                    if self.patience_counter >= patience:
-                        logger.info(f"Early stopping at epoch {epoch+1}")
-                        break
+                        if self.patience_counter_vision_only >= patience:
+                            logger.info(f"Early stopping in vision-only phase at epoch {epoch+1}")
+                            break
+                    else:
+                        # Multimodal phase early stopping
+                        if val_loss < self.best_val_loss_multimodal:
+                            self.best_val_loss_multimodal = val_loss
+                            self.patience_counter_multimodal = 0
+                            self.best_val_loss = val_loss  # For checkpointing
+                            self._save_checkpoint(epoch, val_loss, is_best=True)
+                            logger.info(f"  New best multimodal val loss: {val_loss:.4f}")
+                        else:
+                            self.patience_counter_multimodal += 1
+                            logger.info(f"  Multimodal patience: {self.patience_counter_multimodal}/{patience}")
+
+                        if self.patience_counter_multimodal >= patience:
+                            logger.info(f"Early stopping in multimodal phase at epoch {epoch+1}")
+                            break
 
                 # If validation did not run, still log training metrics
                 if not ran_validation:

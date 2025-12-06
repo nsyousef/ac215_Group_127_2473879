@@ -44,6 +44,9 @@ class EmbeddingInput(BaseModel):
     vision_embedding: List[float]
     text_embedding: List[float]
     top_k: Optional[int] = 5
+    confidence_threshold: Optional[float] = 0.5
+    min_gap_threshold: Optional[float] = 0.1
+    max_entropy_threshold: Optional[float] = 0.8
 
 
 class TextInput(BaseModel):
@@ -54,6 +57,10 @@ class PredictionResponse(BaseModel):
     predicted_class: str
     predicted_idx: int
     confidence: float
+    is_confident: bool
+    uncertainty_reason: Optional[str]
+    top_prediction: str
+    entropy: float
     top_k: List[Dict[str, Union[str, float]]]
 
 
@@ -102,7 +109,13 @@ async def predict(input_data: EmbeddingInput):
         text_emb = np.array(input_data.text_embedding, dtype=np.float32)
 
         result = model.predict(
-            vision_embedding=vision_emb, text_embedding=text_emb, return_probs=True, top_k=input_data.top_k
+            vision_embedding=vision_emb,
+            text_embedding=text_emb,
+            return_probs=True,
+            top_k=input_data.top_k,
+            confidence_threshold=input_data.confidence_threshold,
+            min_gap_threshold=input_data.min_gap_threshold,
+            max_entropy_threshold=input_data.max_entropy_threshold,
         )
 
         # Format top_k as list of dicts
@@ -112,6 +125,10 @@ async def predict(input_data: EmbeddingInput):
             "predicted_class": result["predicted_class"],
             "predicted_idx": result["predicted_idx"],
             "confidence": result["confidence"],
+            "is_confident": result["is_confident"],
+            "uncertainty_reason": result["uncertainty_reason"],
+            "top_prediction": result["top_prediction"],
+            "entropy": result["entropy"],
             "top_k": top_k_formatted,
         }
     except Exception as e:
