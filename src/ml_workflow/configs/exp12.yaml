@@ -3,7 +3,7 @@
 # Data source configuration
 data:
   use_local: True
-  metadata_path: "/orcd/data/omarabu/001/tanush20/derma/data/metadata_all_harmonized.csv"  # Override default if needed
+  metadata_path: "/orcd/data/omarabu/001/tanush20/derma/data/dataset_v1_metadata_all_harmonized.csv"  # Override default if needed
   img_prefix: "/orcd/data/omarabu/001/tanush20/derma/data/imgs/"  # Override default if needed
   min_samples_per_label: 10
   datasets:
@@ -30,7 +30,7 @@ training:
 
 # Data splits
 splits:
-  test_size: 0.2
+  test_size: 0.1
   val_size: 0.1  # Set to 0.15 for train/val/test split
 
 # Image configuration

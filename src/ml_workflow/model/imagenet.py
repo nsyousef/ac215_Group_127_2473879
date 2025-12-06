@@ -113,7 +113,7 @@ class ImageNetModel(nn.Module):
         """
         Freeze layers in the backbone based on unfreeze_layers parameter
         unfreeze_layers: 0 means all layers frozen, -1 means all unfrozen,
-                        positive number means unfreeze that many layers from the end
+                        positive number means unfreeze that many individual layers from the end
         """
         if self.unfreeze_layers == -1:
             # Unfreeze all layers
@@ -129,31 +129,30 @@ class ImageNetModel(nn.Module):
             # Keep all layers frozen
             return
         
-        # Get all modules/layers in the backbone
-        all_modules = list(self.backbone.modules())
+        # Get all modules/layers in the backbone (excluding the Sequential wrapper itself)
+        all_modules = list(self.backbone.modules())[1:]  # Skip the Sequential wrapper
         
-        # For Sequential models, get direct children
-        if isinstance(self.backbone, nn.Sequential):
-            layers = list(self.backbone.children())
-        else:
-            layers = list(self.backbone.children())
+        # Filter to only modules that have parameters (learnable layers)
+        # This excludes things like ReLU, pooling layers without params, etc.
+        learnable_modules = [m for m in all_modules if len(list(m.parameters())) > 0]
         
         # Calculate number of layers to unfreeze
-        num_layers = len(layers)
-        if self.unfreeze_layers > num_layers:
-            print(f"Warning: unfreeze_layers ({self.unfreeze_layers}) is greater than total layers ({num_layers}). Unfreezing all layers.")
-            layers_to_unfreeze = layers
+        num_learnable_layers = len(learnable_modules)
+        if self.unfreeze_layers > num_learnable_layers:
+            print(f"Warning: unfreeze_layers ({self.unfreeze_layers}) is greater than total learnable layers ({num_learnable_layers}). Unfreezing all layers.")
+            modules_to_unfreeze = learnable_modules
         else:
-            layers_to_unfreeze = layers[-self.unfreeze_layers:]
+            modules_to_unfreeze = learnable_modules[-self.unfreeze_layers:]
         
         # Unfreeze the specified layers
-        for layer in layers_to_unfreeze:
-            for param in layer.parameters():
+        for module in modules_to_unfreeze:
+            for param in module.parameters():
                 param.requires_grad = True
         
         # Print freeze status
-        trainable_layers = sum(1 for layer in layers if any(p.requires_grad for p in layer.parameters()))
-        print(f"Backbone: {num_layers} total layers, {trainable_layers} unfrozen layers")
+        trainable_count = sum(1 for p in self.backbone.parameters() if p.requires_grad)
+        total_count = sum(1 for p in self.backbone.parameters())
+        print(f"Backbone: {num_learnable_layers} learnable layers, {len(modules_to_unfreeze)} unfrozen layers ({trainable_count}/{total_count} parameters trainable)")
     
     def _get_num_features(self) -> int:
         """Get the number of output features from the backbone"""
