@@ -9,7 +9,7 @@ import multiprocessing
 # Try relative imports (package mode), fall back to absolute (script mode)
 try:
     from ..constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
-    from ..utils import logger, stratified_split
+    from ..utils import logger, stratified_split, per_dataset_split_with_ratios
     from .transform_utils import (
         get_basic_transform,
         get_train_transform,
@@ -19,7 +19,7 @@ try:
     from .embedding_utils import embedding_to_array
 except ImportError:
     from ml_workflow.constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
-    from ml_workflow.utils import logger, stratified_split
+    from ml_workflow.utils import logger, stratified_split, per_dataset_split_with_ratios
     from ml_workflow.dataloader.transform_utils import (
         get_basic_transform,
         get_train_transform,
@@ -231,58 +231,34 @@ def create_dataloaders(
     batch_size = training_config["batch_size"]
     num_workers = training_config["num_workers"]
     prefetch_factor = training_config["prefetch_factor"]
-    test_size = data_config["test_size"]
-    val_size = data_config["val_size"]
     seed = data_config["seed"]
     compute_stats = training_config["compute_stats"]
     img_size = tuple(data_config["img_size"])
     weighted_sampling = training_config["weighted_sampling"]
     use_local = data_config["use_local"]
 
-    # Keep persistent workers enabled
     use_persistent_workers = num_workers > 0
-    split_result = stratified_split(metadata_df, LABEL_COL, test_size, val_size, seed)
 
-    if val_size is not None:
-        train_df, val_df, test_df = split_result
+    # Check for per-dataset split ratios
+    if "per_dataset_split_ratios" in data_config:
+        logger.info("Using per-dataset split ratios (custom control)")
+        split_ratios = data_config["per_dataset_split_ratios"]
+        train_df, val_df, test_df = per_dataset_split_with_ratios(
+            metadata_df, split_ratios=split_ratios, dataset_col="dataset", label_col=LABEL_COL, seed=seed
+        )
     else:
-        train_df, test_df = split_result
-        val_df = None
+        # Fall back to ORIGINAL method: global split + exclusions
+        test_size = data_config["test_size"]
+        val_size = data_config["val_size"]
 
-    # Filter validation and test sets to exclude specified datasets
-    validation_exclude = data_config.get("validation_exclude_datasets", [])
-    test_exclude = data_config.get("test_exclude_datasets", [])
+        logger.info("Using global stratified split")
+        split_result = stratified_split(metadata_df, LABEL_COL, test_size, val_size, seed)
 
-    # Check if metadata has a 'dataset' column to identify source
-    if "dataset" not in metadata_df.columns:
-        if validation_exclude or test_exclude:
-            logger.warning(
-                "validation_exclude_datasets or test_exclude_datasets specified, "
-                "but metadata does not have a 'dataset' column. Ignoring exclusions."
-            )
-    else:
-        # Filter validation set
-        if val_df is not None and validation_exclude:
-            original_val_size = len(val_df)
-            val_df = val_df[~val_df["dataset"].isin(validation_exclude)].copy()
-            removed_val = original_val_size - len(val_df)
-            logger.info(f"Excluded {removed_val} validation samples from datasets: {validation_exclude}")
-            logger.info(f"Validation set size: {original_val_size} → {len(val_df)}")
-
-            if len(val_df) == 0:
-                logger.warning("Validation set is empty after exclusions! Setting val_loader to None")
-                val_df = None
-
-        # Filter test set
-        if test_exclude:
-            original_test_size = len(test_df)
-            test_df = test_df[~test_df["dataset"].isin(test_exclude)].copy()
-            removed_test = original_test_size - len(test_df)
-            logger.info(f"Excluded {removed_test} test samples from datasets: {test_exclude}")
-            logger.info(f"Test set size: {original_test_size} → {len(test_df)}")
-
-            if len(test_df) == 0:
-                raise ValueError("Test set is empty after exclusions!")
+        if val_size is not None:
+            train_df, val_df, test_df = split_result
+        else:
+            train_df, test_df = split_result
+            val_df = None
 
     all_classes = sorted(metadata_df[LABEL_COL].astype(str).unique().tolist())
     num_classes = len(all_classes)

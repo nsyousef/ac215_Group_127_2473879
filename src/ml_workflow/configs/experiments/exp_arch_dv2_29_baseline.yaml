@@ -9,10 +9,23 @@ data:
     - ddi
     - isic
     - derm1m
-  validation_exclude_datasets:  # Exclude datasets from validation/test
-    - derm1m
-  test_exclude_datasets:
-    - derm1m
+  per_dataset_split_ratios:
+    fitzpatrick17k:
+      train: 0.3
+      val: 0.4
+      test: 0.3
+    ddi:
+      train: 0.3
+      val: 0.4
+      test: 0.3
+    isic:
+      train: 0.3
+      val: 0.4
+      test: 0.3
+    derm1m:
+      train: 0.9
+      val: 0.0     # EXCLUDE from validation
+      test: 0.1
   derm1m_sources:
     - IIYI
     - edu
@@ -23,8 +36,6 @@ data:
     - twitter
     - youtube
   has_text: null
-  test_size: 0.1
-  val_size: 0.1
   img_size: [380, 380]  # EfficientNet-B4 native size
   seed: 42
 
