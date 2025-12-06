@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Script to create DMG for pibu_ai
-# Assumes electron-forge has already packaged the app
+# Script to create DMG for pibu_ai with drag-to-install interface
+# Shows: pibu_ai.app -> Applications symlink for easy installation
 
 set -e
 
@@ -25,16 +25,32 @@ echo "📦 Found packaged app at: $APP_DIR"
 # Create output directory if it doesn't exist
 mkdir -p ./dist
 
-# Create DMG
+# Create temporary DMG staging folder
+STAGING_DIR="./dist/pibu_ai_dmg_staging"
+rm -rf "$STAGING_DIR"
+mkdir -p "$STAGING_DIR"
+
+echo "🎬 Setting up DMG layout..."
+
+# Copy the app into staging folder
+cp -r "$APP_DIR/pibu_ai.app" "$STAGING_DIR/pibu_ai.app"
+
+# Create symbolic link to Applications folder
+ln -s /Applications "$STAGING_DIR/Applications"
+
+# Create DMG from staging folder
 DMG_FILE="./dist/pibu_ai.dmg"
 echo "🎬 Creating DMG: $DMG_FILE"
-echo "   Volume name: pibu_ai"
 
 hdiutil create \
-  -srcfolder "$APP_DIR" \
+  -srcfolder "$STAGING_DIR" \
   -volname "pibu_ai" \
   -format UDZO \
+  -imagekey zlib-level=9 \
   "$DMG_FILE"
+
+# Clean up staging folder
+rm -rf "$STAGING_DIR"
 
 if [ -f "$DMG_FILE" ]; then
   DMG_SIZE=$(du -h "$DMG_FILE" | cut -f1)
@@ -42,9 +58,9 @@ if [ -f "$DMG_FILE" ]; then
   echo "   File: $DMG_FILE"
   echo "   Size: $DMG_SIZE"
   echo ""
-  echo "📦 To install:"
-  echo "   1. Open the DMG file"
-  echo "   2. Drag 'pibu_ai.app' to the Applications folder"
+  echo "📦 Installation instructions:"
+  echo "   1. Open pibu_ai.dmg"
+  echo "   2. Drag pibu_ai.app to Applications (shown in the DMG window)"
   echo "   3. Launch from Applications"
 else
   echo "❌ Error: DMG file was not created"

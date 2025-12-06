@@ -39,7 +39,13 @@ npm run make-dmg
 
 **Output:** `dist/pibu_ai.dmg`
 
-Then open the DMG file to install the app on your Mac.
+The DMG will have a drag-to-install interface with the app and an Applications folder symlink for easy installation.
+
+### Installing from DMG
+
+1. Open the DMG file
+2. Drag `pibu_ai.app` to the `Applications` folder (shown in the DMG window)
+3. Launch the app from Applications or use Spotlight Search
 
 ---
 
@@ -123,31 +129,25 @@ Compiles the React/Next.js frontend to static assets.
 npm run make-dmg
 ```
 
-Creates the macOS DMG installer file using `electron-forge` for packaging and manual `hdiutil` for DMG creation.
+Creates the macOS DMG installer file using `electron-forge` for packaging and `hdiutil` for DMG creation.
 
-**Output:** `dist/pibu_ai.dmg`
-
-#### What Happens:
-1. Builds Next.js frontend (if not already built)
-2. Bundles Python virtual environment with all dependencies
-3. Packages Electron app using electron-forge
-4. Creates a compressed DMG file from the packaged app
-
-### Step 4: Create DMG Installer
-
-```bash
-npm run make-dmg
-```
-
-Creates the macOS DMG installer file using `electron-forge` for packaging and manual `hdiutil` for DMG creation.
-
-**Output:** `dist/pibu_ai.dmg`
+**Output:** `dist/pibu_ai.dmg` (drag-to-install format with Applications symlink)
 
 #### What Happens:
 1. Builds Next.js frontend (if not already built)
 2. Bundles Python virtual environment with all dependencies
 3. Packages Electron app using electron-forge
-4. Creates a compressed DMG file from the packaged app
+4. Creates a temporary staging folder with:
+   - `pibu_ai.app` (the application)
+   - `Applications` (symbolic link to /Applications)
+5. Creates a compressed, user-friendly DMG file
+
+#### DMG Format:
+The generated DMG uses the standard macOS drag-to-install interface that users are familiar with:
+- Opens with a Finder window showing two items
+- Left side: `pibu_ai.app` (the application to drag)
+- Right side: `Applications` folder (destination to drag to)
+- Users simply drag the app to Applications to install
 
 ### One-Command Build
 
