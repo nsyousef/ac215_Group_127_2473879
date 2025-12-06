@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import InitializingScreen from '../components/InitializingScreen';
 import PageWrapper from './PageWrapper';
 
 function LoadingFallback() {
@@ -7,8 +8,11 @@ function LoadingFallback() {
 
 export default function Home() {
     return (
-        <Suspense fallback={<LoadingFallback />}>
-            <PageWrapper />
-        </Suspense>
+        <>
+            <InitializingScreen />
+            <Suspense fallback={<LoadingFallback />}>
+                <PageWrapper />
+            </Suspense>
+        </>
     );
 }

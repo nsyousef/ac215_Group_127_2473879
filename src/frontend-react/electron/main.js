@@ -61,6 +61,87 @@ const http = require('http');
 
 let mainWindow;
 let productionServer = null;  // Local server for serving static files in production
+let pythonProcess = null;  // Global Python process reference
+
+// ============================================================================
+// Splash Screen
+// ============================================================================
+
+function createSplashScreen() {
+  const splash = new BrowserWindow({
+    width: 500,
+    height: 350,
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
+    show: false,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: false,
+    movable: false,
+  });
+
+  const splashHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          background: #0891b2;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          color: white;
+        }
+        .container {
+          text-align: center;
+          animation: fadeIn 0.5s ease-in;
+        }
+        h1 {
+          font-size: 48px;
+          font-weight: 600;
+          margin-bottom: 30px;
+          letter-spacing: -0.5px;
+        }
+        .spinner {
+          width: 60px;
+          height: 60px;
+          margin: 0 auto 30px;
+          border: 4px solid rgba(255,255,255,0.2);
+          border-top: 4px solid white;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        .status {
+          font-size: 14px;
+          opacity: 0.9;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>pibu.ai</h1>
+        <div class="spinner"></div>
+        <div class="status">Initializing App...</div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  splash.loadURL(`data:text/html,${encodeURIComponent(splashHTML)}`);
+  splash.show();
+  return splash;
+}
 
 // Path to app data directory where diseases, chat, and time tracking data are stored
 const getDataDir = () => {
@@ -221,9 +302,9 @@ function spawnPythonForCase(caseId) {
         if (Object.prototype.hasOwnProperty.call(msg, 'predictionText')) {
           // Send predictionText as a special event before streaming starts
           if (eventSender) {
-            eventSender.send('ml:predictionText', { 
+            eventSender.send('ml:predictionText', {
               predictionText: msg.predictionText,
-              reqId: id 
+              reqId: id
             });
           }
           return; // Don't treat this as final, continue waiting for chunks/result
@@ -707,6 +788,7 @@ function createWindow() {
     width: 1200,
     height: 800,
     title: 'pibu.ai',
+    show: false,  // Don't show until ready
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -727,6 +809,12 @@ function createWindow() {
   debugLog(`📱 Loading URL: ${startURL}`);
   mainWindow.loadURL(startURL);
 
+  // Show window when ready to prevent visual flash
+  mainWindow.once('ready-to-show', () => {
+    debugLog('✅ Main window ready to show');
+    mainWindow.show();
+  });
+
   // Never open dev tools automatically - users can use Cmd+Option+I if needed
   // if (isDev) {
   //   mainWindow.webContents.openDevTools();
@@ -743,6 +831,11 @@ function createWindow() {
 
 app.on('ready', async () => {
   debugLog('📍 app.on(ready) event triggered');
+
+  // 1. Show splash screen immediately
+  const splash = createSplashScreen();
+  debugLog('✅ Splash screen shown');
+
   await ensureDataDirExists();
   debugLog('📍 Data directory ensured');
 
@@ -774,8 +867,15 @@ app.on('ready', async () => {
       debugLog('Failed to set macOS Dock icon:', e);
     }
   }
-  debugLog('📍 Creating window');
+
+  debugLog('📍 Creating main window');
   createWindow();
+
+  // 2. Close splash screen once main window is ready
+  mainWindow.once('ready-to-show', () => {
+    debugLog('✅ Main window ready, closing splash screen');
+    splash.destroy();
+  });
 });
 
 app.on('window-all-closed', () => {
