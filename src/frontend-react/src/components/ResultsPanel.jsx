@@ -35,6 +35,12 @@ export default function ResultsPanel({
   const primary = theme.palette.primary.main;
   const primaryHover = '#067891';
 
+  // Refs must be declared before useState initialization that references them
+  const contentRef = useRef(null);
+  const prevExplanationLengthRef = useRef(0);
+  const isStreamingRef = useRef(false);
+  const hasPredictionTextRef = useRef(false); // Track if we've received predictionText via event
+
   // Only show predictionText - never show llmResponse or streaming
   const [explanation, setExplanation] = useState(() => {
     if (!selectedCondition) return '';
@@ -46,12 +52,6 @@ export default function ResultsPanel({
     // If no predictionText, show empty or description (but never llmResponse)
     return selectedCondition.description || '';
   });
-
-  // Ref to auto-scroll the content
-  const contentRef = useRef(null);
-  const prevExplanationLengthRef = useRef(0);
-  const isStreamingRef = useRef(false);
-  const hasPredictionTextRef = useRef(false); // Track if we've received predictionText via event
 
   // Scroll to top when a new condition is selected
   useEffect(() => {
