@@ -124,6 +124,23 @@ def initialize_model(config_path):
     # combine embeddings with metadata
     metadata = metadata.merge(embeddings, how="left", on=IMG_ID_COL, validate="1:1")
 
+    # Check for missing embeddings
+    missing_embeddings = metadata[EMBEDDING_COL].isna().sum()
+    if missing_embeddings > 0:
+        logger.error(f"Found {missing_embeddings} samples with missing embeddings!")
+        logger.error("This should not happen - embeddings should be computed for all samples.")
+
+        # Show which images are missing embeddings
+        missing_samples = metadata[metadata[EMBEDDING_COL].isna()]
+        logger.error(f"Samples missing embeddings:\n{missing_samples[['image_id', 'text_desc']].head(10)}")
+
+        raise ValueError(
+            f"{missing_embeddings} samples are missing text embeddings. "
+            "Check that embedding computation succeeded for all samples."
+        )
+
+    logger.info(f"All {len(metadata)} samples have text embeddings")
+
     # Get text embedding dimension from first non-null embedding
     sample_embedding = metadata[EMBEDDING_COL].dropna().iloc[0]
     text_embedding_dim = len(embedding_to_array(sample_embedding))

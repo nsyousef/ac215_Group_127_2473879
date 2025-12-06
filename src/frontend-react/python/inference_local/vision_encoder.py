@@ -5,7 +5,7 @@ Loads trained checkpoint and extracts embeddings from images.
 
 import torch
 from PIL import Image
-from typing import Union, List
+from typing import Union
 import numpy as np
 
 from .dataloader.transform_utils import get_test_valid_transform
@@ -58,16 +58,27 @@ class VisionEncoder:
         mean = checkpoint.get("normalization_mean", [0.485, 0.456, 0.406])
         std = checkpoint.get("normalization_std", [0.229, 0.224, 0.225])
 
-        # Use img_size from config (not constructor param when loading checkpoint)
+        # Handle explicit None (when normalization was disabled during training)
+        if mean is None or std is None:
+            logger.info("Normalization was disabled during training - images will be in range [0, 1]")
+            mean = None
+            std = None
+        else:
+            logger.info(f"Using normalization from checkpoint: mean={mean}, std={std}")
+
+        # Use img_size from config
         self.img_size = tuple(vision_config.get("img_size", (224, 224)))
 
         self.transform = get_test_valid_transform(mean, std, self.img_size)
 
-        logger.info(f"Vision encoder loaded successfully from checkpoint")
+        logger.info("Vision encoder loaded successfully from checkpoint")
         logger.info(f"  Device: {self.device}")
         logger.info(f"  Embedding dim: {self.model.embedding_dim}")
         logger.info(f"  Image size: {self.img_size}")
-        logger.info(f"  Normalization: mean={mean}, std={std}")
+        if mean is not None and std is not None:
+            logger.info(f"  Normalization: mean={mean}, std={std}")
+        else:
+            logger.info("  Normalization: disabled (images in [0, 1])")
         logger.info(f"  Model: {vision_config['name']}")
 
     @torch.no_grad()

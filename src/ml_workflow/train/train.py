@@ -665,7 +665,7 @@ class Trainer:
 
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Vision-Only Pre-training")
 
-        for batch_idx, (images, targets, text_embeddings) in enumerate(pbar):
+        for batch_idx, (images, targets, text_embeddings, text_content_flags) in enumerate(pbar):
             # Move data to device (ignore text_embeddings)
             images = images.to(self.device, non_blocking=True)
             targets = targets.to(self.device, non_blocking=True)
@@ -709,10 +709,6 @@ class Trainer:
             # Update progress bar
             pbar.set_postfix({"Loss": f"{avg_running_loss:.4f}", "Acc": f"{running_accuracy:.2f}%"})
 
-            # Periodic CUDA cache cleanup
-            if batch_idx % 50 == 0 and torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
         avg_loss = total_loss / len(self.train_loader)
         accuracy = 100.0 * correct / total
 
@@ -745,26 +741,39 @@ class Trainer:
         total_loss = 0.0
         correct = 0
         total = 0
-        # Accumulate predictions/targets on GPU, transfer once at end (no blocking)
         all_preds = []
         all_targets = []
+
+        # Check if we need zero detection (optimization: skip if text aux is disabled)
+        text_aux_enabled = self.multimodal_classifier.auxiliary_text_loss_weight > 0
+
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Training")
 
-        for batch_idx, (images, targets, text_embeddings) in enumerate(pbar):
+        for batch_idx, (images, targets, text_embeddings, text_content_flags) in enumerate(pbar):  # ✅ Unpack 4 items
 
             # Move data to device
             images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
-            # Convert text_embeddings to tensor if needed (DataLoader may return numpy arrays)
             if not isinstance(text_embeddings, torch.Tensor):
                 text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
             text_embeddings = text_embeddings.to(self.device, non_blocking=True)
+            text_content_flags = text_content_flags.to(self.device, non_blocking=True)  # ✅ Boolean tensor
 
             # Apply masking (if enabled)
             images, text_embeddings, modality_mask_info = self._apply_masking(
                 images, text_embeddings, self.current_epoch
             )
 
-            # Zero gradients (set_to_none=True for better memory efficiency)
+            # Use pre-computed flag (only if text aux is enabled)
+            if text_aux_enabled:
+                if modality_mask_info is None:
+                    modality_mask_info = {"text_valid_mask": text_content_flags}
+                elif "text_valid_mask" in modality_mask_info:
+                    # Combine with masking schedule
+                    modality_mask_info["text_valid_mask"] &= text_content_flags
+                else:
+                    modality_mask_info["text_valid_mask"] = text_content_flags
+
+            # Zero gradients
             if not self.vision_frozen:
                 self.optimizer_vision.zero_grad(set_to_none=True)
             self.optimizer_multimodal.zero_grad(set_to_none=True)
@@ -772,7 +781,7 @@ class Trainer:
             # Forward pass through vision model
             vision_embeddings = self.vision_model(images)
 
-            # Forward pass through multimodal classifier (pass modality_mask_info for fusion-level masking)
+            # Forward pass through multimodal classifier
             outputs = self.multimodal_classifier(vision_embeddings, text_embeddings, modality_mask_info)
             logits = outputs["logits"]
 
@@ -805,10 +814,6 @@ class Trainer:
 
             # Update progress bar
             pbar.set_postfix({"Loss": f"{avg_running_loss:.4f}", "Acc": f"{running_accuracy:.2f}%"})
-
-            # Periodic CUDA cache cleanup to prevent fragmentation
-            if batch_idx % 50 == 0 and torch.cuda.is_available():
-                torch.cuda.empty_cache()
 
         avg_loss = total_loss / len(self.train_loader)
         accuracy = 100.0 * correct / total
@@ -852,19 +857,32 @@ class Trainer:
         num_classes = self.info["num_classes"]
         confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
 
+        # Check if we need zero detection
+        text_aux_enabled = self.multimodal_classifier.auxiliary_text_loss_weight > 0
+
         with torch.no_grad():
             pbar = tqdm(self.val_loader, desc="Validation", leave=False)
-            for images, targets, text_embeddings in pbar:
+            for images, targets, text_embeddings, text_content_flags in pbar:
                 # Move data to device
                 images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
                 if not isinstance(text_embeddings, torch.Tensor):
                     text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
                 text_embeddings = text_embeddings.to(self.device, non_blocking=True)
+                text_content_flags = text_content_flags.to(self.device, non_blocking=True)
 
                 # Apply masking (epoch-based or complete) - no random masking in validation
                 images, text_embeddings, modality_mask_info = self._apply_masking(
                     images, text_embeddings, self.current_epoch
                 )
+
+                # Use pre-computed flag (only if needed)
+                if text_aux_enabled:
+                    if modality_mask_info is None:
+                        modality_mask_info = {"text_valid_mask": text_content_flags}
+                    elif "text_valid_mask" in modality_mask_info:
+                        modality_mask_info["text_valid_mask"] &= text_content_flags
+                    else:
+                        modality_mask_info["text_valid_mask"] = text_content_flags
 
                 # Forward pass through vision model
                 vision_embeddings = self.vision_model(images)
@@ -921,7 +939,7 @@ class Trainer:
 
         with torch.no_grad():
             pbar = tqdm(self.val_loader, desc="Validation (Vision-Only)", leave=False)
-            for images, targets, text_embeddings in pbar:
+            for images, targets, text_embeddings, text_content_flags in pbar:
                 # Move data to device (ignore text_embeddings)
                 images = images.to(self.device, non_blocking=True)
                 targets = targets.to(self.device, non_blocking=True)
@@ -1074,20 +1092,33 @@ class Trainer:
         num_classes = self.info["num_classes"]
         confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
 
+        # Check if we need zero detection
+        text_aux_enabled = self.multimodal_classifier.auxiliary_text_loss_weight > 0
+
         with torch.no_grad():
             pbar = tqdm(self.test_loader, desc="Testing")
-            for images, targets, text_embeddings in pbar:
+            # ✅ Unpack 4 items now
+            for images, targets, text_embeddings, text_content_flags in pbar:
                 # Move data to device
                 images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
                 if not isinstance(text_embeddings, torch.Tensor):
                     text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
                 text_embeddings = text_embeddings.to(self.device, non_blocking=True)
+                text_content_flags = text_content_flags.to(self.device, non_blocking=True)  # ✅ Move to device
 
-                # Apply masking (epoch-based or complete) - no random masking in test
-                # Note: For test, we use the last epoch's masking state
+                # Apply masking
                 images, text_embeddings, modality_mask_info = self._apply_masking(
                     images, text_embeddings, self.current_epoch
                 )
+
+                # ✅ Use pre-computed flag (only if needed)
+                if text_aux_enabled:
+                    if modality_mask_info is None:
+                        modality_mask_info = {"text_valid_mask": text_content_flags}
+                    elif "text_valid_mask" in modality_mask_info:
+                        modality_mask_info["text_valid_mask"] &= text_content_flags
+                    else:
+                        modality_mask_info["text_valid_mask"] = text_content_flags
 
                 # Forward pass through vision model
                 vision_embeddings = self.vision_model(images)
