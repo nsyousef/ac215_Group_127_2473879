@@ -1,0 +1,13 @@
+config:
+  gcp:project: level-scheme-471117-i9  # Replace with your GCP project ID
+  gcp:region: us-east1
+
+  pibu-ai-deployment:llm_model_size: "27b"  # Options: "4b" or "27b"
+  pibu-ai-deployment:llm_gpu: H200          # GPU type for Modal
+  pibu-ai-deployment:modal_username: tanushkmr2001
+
+  # Optional: Override inference service settings
+  # pibu-ai-deployment:inference_memory: 4Gi
+  # pibu-ai-deployment:inference_cpu: "2"
+  # pibu-ai-deployment:inference_min_instances: 0
+  # pibu-ai-deployment:inference_max_instances: 10
