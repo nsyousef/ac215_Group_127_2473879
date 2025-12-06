@@ -26,7 +26,6 @@ import ProfilePage from '@/components/ProfilePage';
 import OnboardingFlow from '@/components/OnboardingFlow';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import { useProfile } from '@/contexts/ProfileContext';
-import DiseaseService from '@/services/diseaseService';
 
 export default function PageContent({ initialView }) {
     const theme = useTheme();

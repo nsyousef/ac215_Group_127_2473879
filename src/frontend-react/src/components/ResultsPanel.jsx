@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 import {
   Box,
   Card,
@@ -103,13 +102,13 @@ export default function ResultsPanel({
       hasPredictionTextRef.current = false;
       return;
     }
-    
+
     // If condition already has predictionText, set the flag immediately
     if (selectedCondition.predictionText) {
       hasPredictionTextRef.current = true;
       return;
     }
-    
+
     if (!isElectron()) return;
     if (typeof window === 'undefined') return;
     if (!window.electronAPI?.mlOnPredictionText) return;
@@ -125,7 +124,7 @@ export default function ResultsPanel({
       setExplanation(predictionText);
       isStreamingRef.current = false;
       prevExplanationLengthRef.current = predictionText.length;
-      
+
     });
 
     return () => {
@@ -154,10 +153,13 @@ export default function ResultsPanel({
                 position: 'relative',
                 width: '100%',
                 height: 200,
-                bgcolor: '#e0e0e0',
+                bgcolor: selectedCondition.image ? '#e0e0e0' : '#e0f2f1',
                 borderRadius: 1,
                 mb: 2,
                 overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               {selectedCondition.image ? (
@@ -171,12 +173,9 @@ export default function ResultsPanel({
                   }}
                 />
               ) : (
-                <Image
-                  src="/nasty_skin.jpg"
-                  alt={selectedCondition.name}
-                  fill
-                  style={{ objectFit: 'cover' }}
-                />
+                <Typography variant="body2" sx={{ color: '#4a6572' }}>
+                  No image provided
+                </Typography>
               )}
             </Box>
 

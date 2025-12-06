@@ -1,7 +1,6 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import FileAdapter from '@/services/adapters/fileAdapter';
 import { isElectron } from '@/utils/config';
 
 const ProfileContext = createContext();

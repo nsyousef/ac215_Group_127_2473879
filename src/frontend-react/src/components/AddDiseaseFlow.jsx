@@ -23,7 +23,6 @@ import {
   useTheme,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import FileAdapter from '@/services/adapters/fileAdapter';
 import { BODY_PART_DEFAULTS } from '@/lib/constants';
 import BodyMapPicker, { getBodyPartFromCoordinates } from '@/components/BodyMapPicker';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';

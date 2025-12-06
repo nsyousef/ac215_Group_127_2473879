@@ -12,7 +12,6 @@ import {
   CircularProgress,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
-import FileAdapter from '@/services/adapters/fileAdapter';
 import { isElectron } from '@/utils/config';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import mlClient from '@/services/mlClient';
@@ -40,7 +39,7 @@ export default function ChatPanel({ conditionId, refreshKey }) {
 
     let mounted = true;
     streamingInitialIdRef.current = null; // reset when condition changes
-    
+
     // Clear messages immediately when condition changes to show loading state
     setMessages([]);
 
@@ -230,7 +229,7 @@ export default function ChatPanel({ conditionId, refreshKey }) {
           )
         );
       }
-      
+
       // After message is successfully sent, reload diseases to update lastMessageTimestamp for sorting
       try {
         await reloadDiseases();
