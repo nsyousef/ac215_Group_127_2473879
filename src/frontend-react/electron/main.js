@@ -300,12 +300,17 @@ function spawnPythonForCase(caseId) {
 
         // If Python sends predictionText metadata, forward it as a special event
         if (Object.prototype.hasOwnProperty.call(msg, 'predictionText')) {
+          console.log('[EL] [main.js] Received predictionText from Python:', msg.predictionText.substring(0, 100) + '...');
           // Send predictionText as a special event before streaming starts
           if (eventSender) {
+            console.log('[EL] [main.js] Forwarding predictionText to renderer via ml:predictionText event');
             eventSender.send('ml:predictionText', {
               predictionText: msg.predictionText,
               reqId: id
             });
+            console.log('[EL] [main.js] predictionText event sent successfully');
+          } else {
+            console.warn('[EL] [main.js] No eventSender available to forward predictionText!');
           }
           return; // Don't treat this as final, continue waiting for chunks/result
         }
@@ -372,8 +377,9 @@ let reqSeq = 0;
  * @param {string} cmd
  * @param {Object} data
  * @param {(chunk: any, msg?: any) => void} [onChunk] optional streaming callback
+ * @param {object} [eventSender] optional Electron event.sender for IPC events (e.g., predictionText)
  */
-function pyRequest(caseId, cmd, data, onChunk) {
+function pyRequest(caseId, cmd, data, onChunk, eventSender) {
   const state = spawnPythonForCase(caseId);
   const id = `${Date.now()}_${reqSeq++}`;
 
@@ -387,7 +393,7 @@ function pyRequest(caseId, cmd, data, onChunk) {
   state.lastUsed = Date.now();
 
   return new Promise((resolve, reject) => {
-    state.pending.set(id, { resolve, reject, onChunk });
+    state.pending.set(id, { resolve, reject, onChunk, eventSender });
 
     try {
       state.child.stdin.write(JSON.stringify(payload) + '\n');

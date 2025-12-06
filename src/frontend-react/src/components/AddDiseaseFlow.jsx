@@ -132,6 +132,9 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     setAnalyzing(true);
     setError(null);
 
+    // Declare outside try block so error handler can access it
+    let predictionTextUnsubscribe = null;
+
     try {
       // Ensure we have map coordinates: if user picked from list only, set default based on label
       let finalMapPos = mapPos;
@@ -172,92 +175,84 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
       // Step 1: Save body location FIRST (before APIManager instantiation)
       await mlClient.saveBodyLocation(caseId, bodyLocation);
 
-      // Step 2: Show analyzing step
+      console.log('[AddDiseaseFlow] Body location saved, showing analyzing step');
+
+      // Step 2: Show analyzing step with spinner
+      setAnalyzing(true);
       setStep(5);
+      console.log('[AddDiseaseFlow] Set step to 5, analyzing=true');
+
       firstChunkReceivedRef.current = false;
       currentCaseIdRef.current = caseId;
-      let receivedPredictionText = null;
 
-      // Step 3: Subscribe to predictionText FIRST (before streaming)
-      // Navigate immediately when predictionText arrives - this happens before LLM starts
-      let predictionTextUnsubscribe = null;
+      // Step 3: Subscribe to predictionText event - this fires AFTER predictions but BEFORE streaming
       if (isElectron() && window.electronAPI?.mlOnPredictionText) {
+        console.log('[AddDiseaseFlow] Subscribing to predictionText event for caseId:', caseId);
         predictionTextUnsubscribe = window.electronAPI.mlOnPredictionText((predictionText) => {
-          if (predictionText && currentCaseIdRef.current === caseId) {
-            receivedPredictionText = predictionText;
-            // Navigate immediately with predictionText and timeline data
-            if (!firstChunkReceivedRef.current) {
-              firstChunkReceivedRef.current = true;
-              setAnalyzing(false);
-              setStep(null);
+          console.log('[AddDiseaseFlow] predictionText event received:', {
+            predictionText: predictionText?.substring(0, 100) + '...',
+            currentCaseId: currentCaseIdRef.current,
+            expectedCaseId: caseId,
+            alreadyNavigated: firstChunkReceivedRef.current
+          });
+          if (predictionText && currentCaseIdRef.current === caseId && !firstChunkReceivedRef.current) {
+            console.log('[AddDiseaseFlow] ✅ Conditions met, navigating to results now');
+            firstChunkReceivedRef.current = true;
 
-              // Create timeline entry with initial image
-              const currentDate = new Date().toISOString().split('T')[0];
-              const timelineEntry = {
-                id: 0,
-                date: currentDate,
-                image: imagePath, // Use the saved image path
-                note: note || '',
-              };
+            // Create timeline entry with initial image
+            const currentDate = new Date().toISOString().split('T')[0];
+            const timelineEntry = {
+              id: 0,
+              date: currentDate,
+              image: imagePath,
+              note: note || '',
+            };
 
-              const tempDisease = {
-                id: diseaseId,
-                name: 'Analyzing...', // Placeholder, will be updated
-                image: preview,
-                bodyPart: bodyPart || 'Unknown',
-                mapPosition: finalMapPos ? {
-                  leftPct: finalMapPos.leftPct,
-                  topPct: finalMapPos.topPct
-                } : null,
-                description: '',
-                confidenceLevel: 0,
-                date: currentDate,
-                llmResponse: '', // Will be populated later
-                predictionText: predictionText, // Set predictionText immediately
-                timelineData: [timelineEntry], // Include initial image in timeline
-                conversationHistory: [],
-                caseId: caseId,
-              };
+            const tempDisease = {
+              id: diseaseId,
+              name: 'Analyzing...', // Placeholder, will be updated
+              image: preview,
+              bodyPart: bodyPart || 'Unknown',
+              mapPosition: finalMapPos ? {
+                leftPct: finalMapPos.leftPct,
+                topPct: finalMapPos.topPct
+              } : null,
+              description: '',
+              confidenceLevel: 0,
+              date: currentDate,
+              llmResponse: '', // Will be populated by streaming
+              predictionText: predictionText, // Set predictionText from Python
+              timelineData: [timelineEntry],
+              conversationHistory: [],
+              caseId: caseId,
+            };
 
-              // Navigate to results view immediately
-              if (onStartAnalysis) {
-                onStartAnalysis(tempDisease);
-              }
+            // Clean up subscription
+            if (predictionTextUnsubscribe) {
+              predictionTextUnsubscribe();
+            }
 
-              close();
+            // Close the dialog immediately so navigation can take effect
+            console.log('[AddDiseaseFlow] Closing dialog before navigation');
+            setAnalyzing(false);
+            onClose && onClose();
 
-              // Clean up predictionText subscription (don't unsubscribe from chunks - let them go to chat)
-              if (predictionTextUnsubscribe) {
-                predictionTextUnsubscribe();
-              }
+            // Navigate to results - streaming will start shortly after this
+            if (onStartAnalysis) {
+              console.log('[AddDiseaseFlow] Calling onStartAnalysis');
+              onStartAnalysis(tempDisease);
+              console.log('[AddDiseaseFlow] onStartAnalysis completed');
             }
           }
         });
       }
 
-      // REMOVED: Chunk-based navigation - we navigate on predictionText instead
-      // This prevents consuming the first chunk, allowing it to go to the chat panel
-
-      // Step 4: Kick off prediction request (this will trigger LLM streaming on the backend)
-      // Navigation should already have happened via predictionText, so we just wait for results
-      const predictionPromise = mlClient.getInitialPrediction(
-        imagePath,      // file path
-        note || '',     // text description
-        caseId,
-        {},             // metadata
-      );
-
-      // Fallback: If predictionText doesn't arrive within 5 seconds, navigate anyway
-      // This handles edge cases where predictionText might not be sent
+      // Step 4: Set up fallback timeout in case predictionText doesn't arrive
       const fallbackTimeout = setTimeout(() => {
         if (!firstChunkReceivedRef.current && currentCaseIdRef.current === caseId) {
-          console.warn('No predictionText received, navigating anyway after timeout');
+          console.warn('[AddDiseaseFlow] predictionText timeout, navigating anyway');
           firstChunkReceivedRef.current = true;
 
-          setAnalyzing(false);
-          setStep(null);
-
-          // Create timeline entry with initial image
           const currentDate = new Date().toISOString().split('T')[0];
           const timelineEntry = {
             id: 0,
@@ -279,79 +274,100 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             confidenceLevel: 0,
             date: currentDate,
             llmResponse: '',
-            predictionText: '', // Will be updated when results arrive
-            timelineData: [timelineEntry], // Include initial image
+            predictionText: '',
+            timelineData: [timelineEntry],
             conversationHistory: [],
             caseId: caseId,
           };
 
-          if (onStartAnalysis) {
-            onStartAnalysis(tempDisease);
-          }
-
-          close();
-
           if (predictionTextUnsubscribe) {
             predictionTextUnsubscribe();
           }
+
+          // Close the dialog immediately so navigation can take effect
+          setAnalyzing(false);
+          onClose && onClose();
+
+          if (onStartAnalysis) {
+            onStartAnalysis(tempDisease);
+          }
         }
-      }, 5000); // 5 second timeout (predictionText should arrive much faster)
+      }, 30000); // 30 second timeout (vision encoder + cloud API can be slow)
 
-      // Wait for the full result in the background
-      const results = await predictionPromise;
+      // Step 5: Kick off prediction request
+      // This will trigger: vision encoder → cloud predictions → predictionText event → LLM streaming
+      // Don't await - let it run in background so dialog can close after navigation
+      mlClient.getInitialPrediction(
+        imagePath,      // file path
+        note || '',     // text description
+        caseId,
+        {},             // metadata
+      ).then((results) => {
+        // Clear fallback timeout since prediction completed
+        clearTimeout(fallbackTimeout);
 
-      // Clear fallback timeout if prediction completes
-      clearTimeout(fallbackTimeout);
+        // Clean up subscription if still active
+        if (predictionTextUnsubscribe) {
+          predictionTextUnsubscribe();
+        }
 
-      // Find disease with highest confidence from predictions
-      const predictions = results.predictions || {};
-      let topDisease = 'Unknown Condition';
-      let maxConfidence = 0;
+        // Find disease with highest confidence from predictions
+        const predictions = results.predictions || {};
+        let topDisease = 'Unknown Condition';
+        let maxConfidence = 0;
 
-      Object.entries(predictions).forEach(([disease, confidence]) => {
-        if (confidence > maxConfidence) {
-          maxConfidence = confidence;
-          topDisease = disease;
+        Object.entries(predictions).forEach(([disease, confidence]) => {
+          if (confidence > maxConfidence) {
+            maxConfidence = confidence;
+            topDisease = disease;
+          }
+        });
+
+        // Format disease name (capitalize first letter of each word)
+        const formattedName = topDisease
+          .split('_')
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+
+        // Get the enriched disease object from Python response
+        const enrichedDisease = results.enriched_disease || {};
+
+        const newDisease = {
+          id: diseaseId,
+          name: formattedName,
+          image: preview,
+          description: enrichedDisease.description || '',
+          bodyPart: enrichedDisease.bodyPart || bodyPart || 'Unknown',
+          mapPosition: enrichedDisease.mapPosition || null,
+          confidenceLevel: enrichedDisease.confidenceLevel || 0,
+          date: enrichedDisease.date || '',
+          llmResponse: enrichedDisease.llmResponse || '',
+          predictionText: enrichedDisease.predictionText || '',
+          timelineData: enrichedDisease.timelineData || [],
+          conversationHistory: enrichedDisease.conversationHistory || [],
+        };
+
+        // Update disease list in background
+        addDisease(newDisease).then(() => {
+          // Update the selected condition with full data (it was already set to tempDisease)
+          // The results view will re-render with the updated data
+          if (onSaved) onSaved(newDisease);
+        });
+
+        // Note: onStartAnalysis was already called earlier with tempDisease (via predictionText event)
+        // The selectedCondition will be updated when addDisease triggers a re-render
+      }).catch((e) => {
+        console.error('Background prediction processing failed:', e);
+        // Don't show error to user since they've already navigated away
+        // Clean up subscription on error
+        if (predictionTextUnsubscribe) {
+          predictionTextUnsubscribe();
         }
       });
 
-      // Format disease name (capitalize first letter of each word)
-      const formattedName = topDisease
-        .split('_')
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-
-      // Get the enriched disease object from Python response
-      const enrichedDisease = results.enriched_disease || {};
-
-      const newDisease = {
-        id: diseaseId,
-        name: formattedName,
-        image: preview,
-        description: enrichedDisease.description || '',
-        bodyPart: enrichedDisease.bodyPart || bodyPart || 'Unknown',
-        mapPosition: enrichedDisease.mapPosition || null,
-        confidenceLevel: enrichedDisease.confidenceLevel || 0,
-        date: enrichedDisease.date || '',
-        llmResponse: enrichedDisease.llmResponse || '',
-        predictionText: enrichedDisease.predictionText || '',
-        timelineData: enrichedDisease.timelineData || [],
-        conversationHistory: enrichedDisease.conversationHistory || [],
-      };
-
-      await addDisease(newDisease);
-
-      // Update the selected condition with full data (it was already set to tempDisease)
-      // The results view will re-render with the updated data
-      if (onSaved) onSaved(newDisease);
-
-      // Clean up predictionText subscription if still active
-      if (predictionTextUnsubscribe) {
-        predictionTextUnsubscribe();
-      }
-
-      // Note: onStartAnalysis was already called earlier with tempDisease (when predictionText arrived)
-      // The selectedCondition will be updated when addDisease triggers a re-render
+      // Don't await the prediction - return immediately after starting it
+      // This allows the dialog to close and navigation to happen
+      // The predictionText event will trigger navigation before LLM finishes
     } catch (e) {
       console.error('Analysis failed:', e);
       console.error('Error details:', {
@@ -360,10 +376,11 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         name: e.name,
       });
 
-      // Clean up predictionText subscription on error
+      // Clean up subscription on error
       if (predictionTextUnsubscribe) {
         predictionTextUnsubscribe();
       }
+
       firstChunkReceivedRef.current = false;
       currentCaseIdRef.current = null;
 

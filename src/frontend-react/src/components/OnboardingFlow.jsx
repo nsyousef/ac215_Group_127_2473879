@@ -42,6 +42,16 @@ export default function OnboardingFlow({ onComplete }) {
     setShowAddFlow(true);
   };
 
+  const handleStartAnalysis = (tempDisease) => {
+    // Called when analysis starts - immediately navigate to results
+    console.log('[OnboardingFlow] handleStartAnalysis called, completing onboarding');
+    // Mark onboarding complete and pass disease to parent
+    updateProfile({ hasCompletedOnboarding: true }).then(() => {
+      setShowAddFlow(false);
+      if (onComplete) onComplete(tempDisease);
+    });
+  };
+
   const handleAddSaved = async (newDisease) => {
     // mark onboarding complete
     await updateProfile({ hasCompletedOnboarding: true });
@@ -101,6 +111,7 @@ export default function OnboardingFlow({ onComplete }) {
         open={showAddFlow}
         onClose={() => { /* ignore close during onboarding */ }}
         onSaved={handleAddSaved}
+        onStartAnalysis={handleStartAnalysis}
         canCancel={false}
         onboardingBack={() => {
           // Close the add flow and return to profile step during onboarding

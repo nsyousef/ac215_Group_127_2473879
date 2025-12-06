@@ -8,6 +8,11 @@ from api_manager import APIManager
 manager = None
 
 
+def debug_log(msg: str):
+    """Print to stderr so it doesn't interfere with stdout JSON protocol"""
+    print(msg, file=sys.stderr, flush=True)
+
+
 def send(resp):
     sys.stdout.write(json.dumps(resp) + "\n")
     sys.stdout.flush()
@@ -114,10 +119,10 @@ def handle_message(msg):
             # Get predictions first (before LLM streaming) to send predictionText early
             # This allows frontend to show predefined text immediately
             from prediction_texts import get_prediction_text
-            
+
             # Run initial steps to get predictions
             from PIL import Image
-            from pathlib import Path
+
             image = Image.open(image_path)
             saved_image_path = manager._save_image(image)
             embedding = manager._run_local_ml_model(image)
@@ -125,16 +130,19 @@ def handle_message(msg):
             updated_text_description = manager.update_text_input(text)
             predictions_raw = manager._run_cloud_ml_model(embedding, updated_text_description)
             predictions = {item["class"]: item["probability"] for item in predictions_raw}
-            
+
             # Get predictionText immediately after predictions are available
             predictionText = ""
             if predictions:
                 top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0]
                 predictionText = get_prediction_text(top_prediction_label)
-            
+                debug_log(f"[ml_server] Generated predictionText for {top_prediction_label}: {predictionText[:100]}...")
+
             # Send predictionText metadata before streaming starts
             if predictionText:
+                debug_log(f"[ml_server] Sending predictionText to frontend (req_id={req_id})")
                 send({"id": req_id, "predictionText": predictionText})
+                debug_log("[ml_server] predictionText sent successfully")
 
             # Create streaming callback for explanation chunks
             def on_stream_chunk(text: str):

@@ -18,8 +18,8 @@
   * add ability to turn body around to show back
   * remove distinction between left and right
 * fix user demographics showing in chat
-* fix error messages when navigating between pages (`Cannot access 'hasPredictionTextRef' before initialization`)
-* In the startup flow, when you add the first disease, the UI goes to the body map picker while analyzing
+* ~~fix error messages when navigating between pages (`Cannot access 'hasPredictionTextRef' before initialization`)~~
+* ~~In the startup flow, when you add the first disease, the UI goes to the body map picker while analyzing~~
 
 ## Frontend performance - N
 
@@ -27,7 +27,7 @@
 * ~~lazy import PyTorch when running an ML model~~
 * ~~try to optimize Python bundle~~
 * app takes long to start up on first start
-* app is still 2.4 GB even with optimized Python and without the model
+* ~~app is still 2.4 GB even with optimized Python and without the model~~
 
 ## Training
 
