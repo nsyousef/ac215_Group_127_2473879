@@ -15,8 +15,9 @@
 * ~~When navigating to the results/track/chat page, make sure all cards are scrolled to the top (or bottom for the chat)~~
 * For body map selection:
   * add more options to list (e.g. ear, armpit, etc.)
+    * options are there but need to fix bounding boxes
   * add ability to turn body around to show back
-  * remove distinction between left and right
+  * ~~remove distinction between left and right~~
 * fix user demographics showing in chat
 * ~~fix error messages when navigating between pages (`Cannot access 'hasPredictionTextRef' before initialization`)~~
 * ~~In the startup flow, when you add the first disease, the UI goes to the body map picker while analyzing~~
@@ -36,6 +37,7 @@
 ## Inference
 
 * if the model is not confident about anything, return "unknown" - R
+  * backend is done; implement in frontend
 
 ## Deployment
 
