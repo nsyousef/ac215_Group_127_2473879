@@ -114,7 +114,7 @@ export SECRETS_PATH=/absolute/path/to/secrets
 cd src/deployment
 
 # Run interactive shell (secrets folder is automatically mounted)
-./docker-shell.sh
+sudo sh docker-shell.sh
 
 # Inside container:
 pulumi stack select dev

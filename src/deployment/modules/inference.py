@@ -51,13 +51,13 @@ class InferenceService(pulumi.ComponentResource):
         # Build and push Docker image to GCR
         image_name = f"gcr.io/{project_id}/inference-cloud:{environment}"
 
-        # Use absolute path mounted in container
-        # inference-cloud is mounted at /inference-cloud in the deployment container
+        # Use the src directory as context so Dockerfile can access both inference-cloud and ml_workflow
+        # The Dockerfile expects to copy from ac215_Group_127_2473879/src/...
         self.image = docker.Image(
             f"{name}-image",
             build=docker.DockerBuildArgs(
-                context="/inference-cloud",
-                dockerfile="/inference-cloud/Dockerfile",
+                context="/ac215_Group_127_2473879/src",
+                dockerfile="inference-cloud/Dockerfile",  # Relative to context (src directory)
                 platform="linux/amd64",  # Cloud Run requirement
             ),
             image_name=image_name,

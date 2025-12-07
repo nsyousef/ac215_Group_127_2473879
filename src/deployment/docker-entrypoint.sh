@@ -5,6 +5,10 @@ echo "Architecture: $(uname -m)"
 echo "Python version: $(python --version)"
 echo "UV version: $(uv --version)"
 
+# Clean up any empty mount directories in /app that might shadow root-level mounts
+echo "Cleaning up empty mount directories..."
+rm -rf /app/inference-cloud /app/llm /app/ml_workflow 2>/dev/null || true
+
 # Activate virtual environment (created by uv sync)
 # This ensures Python can find Pulumi SDK packages (pulumi-gcp, pulumi-docker, etc.)
 echo "Checking for environment..."
