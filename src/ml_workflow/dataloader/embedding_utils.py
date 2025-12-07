@@ -54,15 +54,19 @@ def last_token_pool(last_hidden_states: torch.Tensor, attention_mask: torch.Tens
 
 def embedding_to_array(emb_val, dtype=np.float32):
     """
-    Convert a DataFrame embedding value (string or list) to a NumPy array.
+    Convert a DataFrame embedding value (string, list, or NaN) to a NumPy array.
 
     Args:
-        emb_val: List or string representing embedding.
+        emb_val: List, string representing embedding, or NaN/None.
         dtype: Numpy dtype.
 
     Returns:
-        1D np.ndarray
+        1D np.ndarray, or None if emb_val is NaN/None
     """
+    # Handle NaN/None values
+    if emb_val is None or (isinstance(emb_val, float) and np.isnan(emb_val)):
+        return None
+
     if isinstance(emb_val, str):
         emb_val = ast.literal_eval(emb_val)
     return np.array(emb_val, dtype=dtype)
@@ -98,7 +102,7 @@ def encode_with_transformers(
 ) -> np.ndarray:
     """Encode texts using transformers with specified pooling strategy
 
-    If the text description is missing (null or empty string), this function replaces it with a [MISSING] token and generates a corresponding embedding.
+    If the text description is missing (null or empty string), returns a zero embedding.
 
     Args:
         model_name: HuggingFace model name
@@ -107,7 +111,8 @@ def encode_with_transformers(
         max_length: Maximum sequence length
         device: Device to use (cpu/cuda/mps)
         pooling_strategy: One of 'mean', 'cls', 'last_token'
-        qwen_instr: The instructions for the QWEN model to use when generating an embedding (ignored if model is not QWEN).
+        qwen_instr: The instructions for the QWEN model to use
+        when generating an embedding (ignored if model is not QWEN).
     """
     # validate inputs
     if "qwen" in model_name.lower():
@@ -117,8 +122,18 @@ def encode_with_transformers(
         if pooling_strategy == "last_token":
             raise ValueError("'last_token' pooling is only intended for QWEN models.")
 
-    # replace nulls or empty strings with [MISSING] token
-    texts = ["[MISSING]" if pd.isna(text) or text == "" else text for text in texts]
+    # Identify missing texts and their indices
+    missing_mask = [pd.isna(text) or text == "" for text in texts]
+    missing_indices = [i for i, is_missing in enumerate(missing_mask) if is_missing]
+    valid_indices = [i for i, is_missing in enumerate(missing_mask) if not is_missing]
+    valid_texts = [texts[i] for i in valid_indices]
+
+    # Log statistics about missing text
+    if missing_indices:
+        logger.info(
+            f"Found {len(missing_indices)} samples without text "
+            f"({len(missing_indices)/len(texts)*100:.1f}%) - using zero embeddings"
+        )
 
     # if a simple model name is passed in (e.g. qwen, pubmedbert), convert to full name
     if model_name in MODELS.keys():
@@ -136,13 +151,26 @@ def encode_with_transformers(
 
     tokenizer, model = _MODEL_CACHE[cache_key]
 
+    # Get embedding dimension from model config
+    embedding_dim = model.config.hidden_size
+
+    # Initialize result array with zeros
+    result = np.zeros((len(texts), embedding_dim), dtype=np.float32)
+
+    # If all texts are missing, return zero embeddings
+    if not valid_texts:
+        logger.warning("All text descriptions are missing - returning all zero embeddings")
+        return result
+
+    # Apply QWEN instruction formatting only to valid texts
     if pooling_strategy == "last_token":
         task_description = qwen_instr
-        texts = [get_detailed_instruct(task_description, text) for text in texts]
+        valid_texts = [get_detailed_instruct(task_description, text) for text in valid_texts]
 
-    embs = []
-    for i in range(0, len(texts), batch_size):
-        chunk = texts[i : i + batch_size]
+    # Encode only valid (non-missing) texts
+    valid_embs = []
+    for i in range(0, len(valid_texts), batch_size):
+        chunk = valid_texts[i : i + batch_size]
         try:
             enc = tokenizer(chunk, padding=True, truncation=True, max_length=max_length, return_tensors="pt")
             for k in enc:
@@ -160,19 +188,25 @@ def encode_with_transformers(
                 raise ValueError(
                     f"Unknown pooling strategy: {pooling_strategy}. Choose from 'mean', 'cls', 'last_token'"
                 )
-            embs.append(pooled.detach().cpu().numpy())
+            valid_embs.append(pooled.detach().cpu().numpy())
         except Exception as e:
             logger.error("Error encoding batch %d: %s. Replacing batch with all zeros.", i // batch_size, e)
-            # append embeddings of all zeros if the batch fails, to ensure embeddings line up properly with images in the output
-            embs.append(np.zeros((len(chunk), model.config.hidden_size), dtype=np.float32))
+            # append embeddings of all zeros if the batch fails
+            valid_embs.append(np.zeros((len(chunk), embedding_dim), dtype=np.float32))
 
-    if not embs:
+    if not valid_embs:
         logger.error("All batches failed during encoding")
         raise ValueError("All batches failed during encoding")
 
-    # sanity check that every text was given an embedding (even if it failed) to ensure embeddings correspond with the right images
-    result = np.vstack(embs)
-    assert result.shape[0] == len(texts), f"Shape mismatch: got {result.shape[0]}, expected {len(texts)}"
+    # Stack valid embeddings
+    valid_embs_array = np.vstack(valid_embs)
+
+    # Place valid embeddings back into their original positions
+    for i, valid_idx in enumerate(valid_indices):
+        result[valid_idx] = valid_embs_array[i]
+
+    # Missing texts already have zero embeddings in result array
+
     return result
 
 
@@ -193,14 +227,17 @@ def compute_embeddings_and_save(
     If the file(s) already exist, will recompute the embeddings and override it/them. Gives a warning in this case.
 
     Args:
-        data: A DataFrame with the columns `image_id` and `text_desc`, containing the image ID and text description, respectively.
-        path: The path of the file to write the data to. Begin with gs:// if it is a path in GCP. Relative paths will be saved locally to disk.
+        data: A DataFrame with the columns `image_id` and `text_desc`,
+        containing the image ID and text description, respectively.
+        path: The path of the file to write the data to.
+        Begin with gs:// if it is a path in GCP. Relative paths will be saved locally to disk.
         model_name: HuggingFace model name
         batch_size: Batch size for encoding
         max_length: Maximum sequence length
         device: Device to use (cpu/cuda/mps)
         pooling_strategy: One of 'mean', 'cls', 'last_token'
-        qwen_instr: The instructions for the QWEN model to use when generating an embedding (ignored if model is not QWEN).
+        qwen_instr: The instructions for the QWEN model
+        to use when generating an embedding (ignored if model is not QWEN).
     Returns:
         The stored embeddings as a DataFrame with columns image_id, text_desc, embedding
     """
@@ -239,7 +276,8 @@ def load_embeddings(
     Args:
         file: The file from which to load embeddings (can be on local machine or in GCS bucket).
         image_ids: The image IDs for which to load embeddings. If left blank, loads all image_ids in the file
-        text_descs: The text descriptions for which to load embeddings. If left blank, loads embeddings for all text descriptions.
+        text_descs: The text descriptions for which to load embeddings.
+        If left blank, loads embeddings for all text descriptions.
         on_not_found: One of `'warn'` or `'error'`. Whether to warn or error if an embedding is not found.
     Returns:
         A DataFrame with the columns image_id, text_desc, embedding
@@ -301,21 +339,26 @@ def load_or_compute_embeddings(
 
     - checks if the file contains embeddings for all the provided descriptions
         - if it does, this function simply returns them
-    - if not, this function recomputes all the embeddings for the current list of images and overrides the file with the newly computed embeddings.
+    - if not, this function recomputes all the embeddings
+    for the current list of images and overrides the file with the newly computed embeddings.
       It also returns the newly computed embeddings.
 
-    NOTE: we recompute all embeddings in case the configuration of the embedder is different from when the file was first generated. This way, the
+    NOTE: we recompute all embeddings in case the configuration of the
+    embedder is different from when the file was first generated. This way, the
     file has consistent embeddings.
 
     Args:
-        data: A DataFrame with the columns `image_id` and `text_desc`, containing the image ID and text description, respectively.
-        path: The path of the file to write the data to. Begin with gs:// if it is a path in GCP. Relative paths will be saved locally to disk.
+        data: A DataFrame with the columns `image_id` and `text_desc`,
+        containing the image ID and text description, respectively.
+        path: The path of the file to write the data to.
+        Begin with gs:// if it is a path in GCP. Relative paths will be saved locally to disk.
         model_name: HuggingFace model name
         batch_size: Batch size for encoding
         max_length: Maximum sequence length
         device: Device to use (cpu/cuda/mps)
         pooling_strategy: One of 'mean', 'cls', 'last_token'
-        qwen_instr: The instructions for the QWEN model to use when generating an embedding (ignored if model is not QWEN).
+        qwen_instr: The instructions for the QWEN model to
+        use when generating an embedding (ignored if model is not QWEN).
     Returns:
         The stored embeddings as a DataFrame with columns image_id, text_desc, embedding
     """
@@ -336,7 +379,8 @@ def load_or_compute_embeddings(
         except MissingEmbeddingError:
             # ... if it does not, recompute all embeddings
             logger.warning(
-                "Failed to load image embeddings from file. Some embeddings do not exist. Recomputing embeddings from scratch."
+                "Failed to load image embeddings from file. "
+                "Some embeddings do not exist. Recomputing embeddings from scratch."
             )
             return compute_embeddings_and_save(
                 data, path, model_name, batch_size, max_length, device, pooling_strategy, qwen_instr

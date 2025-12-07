@@ -2,13 +2,14 @@ import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from typing import Optional, List, Callable, Tuple, Dict, Any
+import numpy as np
 import torch
 import multiprocessing
 
 # Try relative imports (package mode), fall back to absolute (script mode)
 try:
     from ..constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
-    from ..utils import logger, stratified_split
+    from ..utils import logger, stratified_split, per_dataset_split_with_ratios
     from .transform_utils import (
         get_basic_transform,
         get_train_transform,
@@ -18,7 +19,7 @@ try:
     from .embedding_utils import embedding_to_array
 except ImportError:
     from ml_workflow.constants import DEFAULT_IMAGE_MODE, IMG_COL, LABEL_COL, MAX_RETRIES, EMBEDDING_COL
-    from ml_workflow.utils import logger, stratified_split
+    from ml_workflow.utils import logger, stratified_split, per_dataset_split_with_ratios
     from ml_workflow.dataloader.transform_utils import (
         get_basic_transform,
         get_train_transform,
@@ -117,6 +118,26 @@ class ImageDataset(Dataset):
         self.labels_raw = df[label_col].astype(str).tolist()
         # Store embeddings as serialized arrays
         self.text_embeddings = df[embedding_col].tolist()
+
+        # PRE-COMPUTE zero-embedding detection (CPU, once)
+        self.text_has_content = []
+        for emb in self.text_embeddings:
+            emb_array = embedding_to_array(emb)
+            if emb_array is None:
+                self.text_has_content.append(False)
+            else:
+                # Check if max absolute value > threshold
+                has_content = np.abs(emb_array).max() > 1e-6
+                self.text_has_content.append(has_content)
+
+        # Log statistics
+        num_zero = sum(not x for x in self.text_has_content)
+        if num_zero > 0:
+            logger.info(
+                f"Dataset contains {num_zero} samples with zero embeddings "
+                f"({num_zero/len(self.text_has_content)*100:.1f}%)"
+            )
+
         self.max_retries = MAX_RETRIES
 
         self.img_prefix = img_prefix.rstrip("/")
@@ -153,7 +174,13 @@ class ImageDataset(Dataset):
                 path = f"{self.img_prefix}/{filename}" if self.img_prefix else filename
                 label = self.labels[current_idx]
                 # Convert embedding to tensor on-demand (avoids memory duplication in workers)
-                text_embd = torch.tensor(embedding_to_array(self.text_embeddings[current_idx]), dtype=torch.float32)
+                emb_array = embedding_to_array(self.text_embeddings[current_idx])
+                if emb_array is None:
+                    raise RuntimeError(
+                        f"Missing text embedding at index {current_idx}. "
+                        "Ensure embeddings are computed for all samples or filter has_text appropriately."
+                    )
+                text_embd = torch.tensor(emb_array, dtype=torch.float32)
 
                 # Load image from GCS or local
                 if not self.use_local:
@@ -174,9 +201,12 @@ class ImageDataset(Dataset):
                         img = img.convert(self.convert_mode)
                         img.load()
 
+                text_content_flag = self.text_has_content[current_idx]
+
                 if self.transform:
                     img = self.transform(img)
-                return img, label, text_embd
+
+                return img, label, text_embd, text_content_flag
 
             except Exception as e:
                 last_error = e
@@ -201,23 +231,34 @@ def create_dataloaders(
     batch_size = training_config["batch_size"]
     num_workers = training_config["num_workers"]
     prefetch_factor = training_config["prefetch_factor"]
-    test_size = data_config["test_size"]
-    val_size = data_config["val_size"]
     seed = data_config["seed"]
     compute_stats = training_config["compute_stats"]
     img_size = tuple(data_config["img_size"])
     weighted_sampling = training_config["weighted_sampling"]
     use_local = data_config["use_local"]
 
-    # Keep persistent workers enabled
     use_persistent_workers = num_workers > 0
-    split_result = stratified_split(metadata_df, LABEL_COL, test_size, val_size, seed)
 
-    if val_size is not None:
-        train_df, val_df, test_df = split_result
+    # Check for per-dataset split ratios
+    if "per_dataset_split_ratios" in data_config:
+        logger.info("Using per-dataset split ratios (custom control)")
+        split_ratios = data_config["per_dataset_split_ratios"]
+        train_df, val_df, test_df = per_dataset_split_with_ratios(
+            metadata_df, split_ratios=split_ratios, dataset_col="dataset", label_col=LABEL_COL, seed=seed
+        )
     else:
-        train_df, test_df = split_result
-        val_df = None
+        # Fall back to ORIGINAL method: global split + exclusions
+        test_size = data_config["test_size"]
+        val_size = data_config["val_size"]
+
+        logger.info("Using global stratified split")
+        split_result = stratified_split(metadata_df, LABEL_COL, test_size, val_size, seed)
+
+        if val_size is not None:
+            train_df, val_df, test_df = split_result
+        else:
+            train_df, test_df = split_result
+            val_df = None
 
     all_classes = sorted(metadata_df[LABEL_COL].astype(str).unique().tolist())
     num_classes = len(all_classes)
@@ -237,7 +278,13 @@ def create_dataloaders(
         dataloader_kwargs["worker_init_fn"] = _worker_init_fn
 
     # Compute or validate statistics
-    if compute_stats:
+    use_normalization = training_config.get("use_normalization", True)
+
+    if not use_normalization:
+        logger.info("Normalization disabled - images will be in range [0, 1]")
+        mean = None
+        std = None
+    elif compute_stats:
         logger.info("Computing dataset statistics from all training data")
 
         temp_dataset = ImageDataset(
@@ -250,13 +297,13 @@ def create_dataloaders(
             transform=get_basic_transform(img_size),
             classes=all_classes,
         )
-        # Reuse dataloader_kwargs, just add shuffle=False for stats computation
         temp_loader_kwargs = dataloader_kwargs.copy()
         temp_loader_kwargs["shuffle"] = False
         temp_loader = DataLoader(temp_dataset, **temp_loader_kwargs)
         mean, std = compute_dataset_stats(temp_loader)
     else:
         # Use default ImageNet statistics if not computing from data
+        logger.info("Using ImageNet normalization statistics")
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
 
