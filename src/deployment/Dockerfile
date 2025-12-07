@@ -6,14 +6,26 @@ ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/home/app/.venv
 ENV PULUMI_CONFIG_PASSPHRASE=""
 
-# Install system dependencies
+# Install system dependencies including Docker CLI
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     gnupg \
     ca-certificates \
     apt-transport-https \
+    lsb-release \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
+    $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+    tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    apt-get update && \
+    apt-get install -y docker-ce-cli docker-buildx-plugin && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install gcloud CLI
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | \
@@ -26,6 +38,8 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir uv && \
     useradd -ms /bin/bash app -d /home/app -u 1000 && \
+    groupadd -g 999 docker || true && \
+    usermod -aG docker app && \
     mkdir -p /app && \
     chown app:app /app
 

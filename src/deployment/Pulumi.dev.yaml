@@ -1,13 +1,17 @@
 config:
-  gcp:project: level-scheme-471117-i9  # Replace with your GCP project ID
+  gcp:project: level-scheme-471117-i9 # Replace with your GCP project ID
   gcp:region: us-east1
+  pibu-ai-deployment:llm_model_size: "27b" # Options: "4b" or "27b"
+  pibu-ai-deployment:llm_gpu: H200 # GPU type for Modal
+  pibu-ai-deployment:modal_username: nsyousef
+  pibu-ai-deployment:modal_token_id:
+    secure: v1:QxzfUb8YtWFi2lcz:jBwifDXsvnekxg3Ws68d8+Sz8MqYz+vWBUxMIvbHoKbgvSwjwegqQI4=
+  pibu-ai-deployment:modal_token_secret:
+    secure: v1:zhojlZiD34nS7nQJ:lgrhwIVpQlnvk+A9nDGrJ8hMPzXAYyF1zeAI6zl/oLKGQh4jMIqbgTU=
+encryptionsalt: v1:wjJrrbsev3g=:v1:qrFi2IVSZW+vful9:O7NsLz0V+fDUsJDzejjUqBZ8vER/aA==
 
-  pibu-ai-deployment:llm_model_size: "27b"  # Options: "4b" or "27b"
-  pibu-ai-deployment:llm_gpu: H200          # GPU type for Modal
-  pibu-ai-deployment:modal_username: tanushkmr2001
-
-  # Optional: Override inference service settings
-  # pibu-ai-deployment:inference_memory: 4Gi
-  # pibu-ai-deployment:inference_cpu: "2"
-  # pibu-ai-deployment:inference_min_instances: 0
-  # pibu-ai-deployment:inference_max_instances: 10
+# Optional: Override inference service settings
+# pibu-ai-deployment:inference_memory: 4Gi
+# pibu-ai-deployment:inference_cpu: "2"
+# pibu-ai-deployment:inference_min_instances: 0
+# pibu-ai-deployment:inference_max_instances: 10

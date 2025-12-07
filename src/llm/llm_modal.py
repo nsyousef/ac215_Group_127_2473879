@@ -2,7 +2,6 @@
 
 import os
 import modal
-from fastapi.responses import StreamingResponse
 import json
 import asyncio
 
@@ -79,6 +78,8 @@ class DermatologyLLM:
 
     @modal.fastapi_endpoint(method="POST")
     async def ask_followup_stream(self, json_data: dict):
+        from fastapi.responses import StreamingResponse
+
         initial_answer = json_data["initial_answer"]
         question = json_data["question"]
         history = json_data.get("conversation_history", [])
@@ -111,6 +112,8 @@ class DermatologyLLM:
             {"delta": "..."}\n
             ...
         """
+        from fastapi.responses import StreamingResponse
+
         predictions = json_data["predictions"]
         metadata = json_data["metadata"]
 

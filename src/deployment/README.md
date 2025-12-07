@@ -20,7 +20,7 @@ This deployment automates provisioning of:
 
 ### 1. Create Secrets Folder
 
-Create a `secret` folder **outside the project** (at the same level as the project directory) to store all credentials:
+Create a `secrets` folder **outside the project** (at the same level as the project directory) to store all credentials:
 
 **Project Structure**:
 ```
@@ -29,6 +29,7 @@ Project/
   │   └── src/deployment/          # Deployment code
   └── secrets/                     # Secrets folder (Project/secrets)
       ├── gcp-service.json
+      ├── deployment.json
       ├── modal-token-id.txt
       └── modal-token-secret.txt
 ```
@@ -37,33 +38,25 @@ Project/
 
 ### 2. Configure GCP
 
-**Create Service Account**:
-```bash
-# Set your project ID
-export GCP_PROJECT="your-project-id"
+**Create Service Accounts via GCP Console**:
+1. In the GCP Console, go to **IAM & Admin > Service accounts** and click **Create service account** named `deployment`.
+2. Assign roles:
+   - Compute Admin
+   - Compute OS Login
+   - Artifact Registry Administrator
+   - Kubernetes Engine Admin
+   - Service Account User
+   - Storage Admin
+   Then click **Done**.
+3. In the service accounts list, open the **Actions (⋮)** menu for `deployment` → **Create key** → select **JSON** → **Create**. Move the downloaded key into your `secrets` folder (three levels up from `src/deployment`) and rename it to `deployment.json`.
 
-# Create service account
-gcloud iam service-accounts create pulumi-deployment \
-  --display-name="Pulumi Deployment Service Account"
-
-# Grant necessary roles
-gcloud projects add-iam-policy-binding $GCP_PROJECT \
-  --member="serviceAccount:pulumi-deployment@$GCP_PROJECT.iam.gserviceaccount.com" \
-  --role="roles/run.admin"
-
-gcloud projects add-iam-policy-binding $GCP_PROJECT \
-  --member="serviceAccount:pulumi-deployment@$GCP_PROJECT.iam.gserviceaccount.com" \
-  --role="roles/storage.admin"
-
-gcloud projects add-iam-policy-binding $GCP_PROJECT \
-  --member="serviceAccount:pulumi-deployment@$GCP_PROJECT.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-
-# Create and download key to secrets folder (Project/secrets)
-# Adjust path to match your secrets folder location
-gcloud iam service-accounts keys create ../../../secrets/gcp-service.json \
-  --iam-account=pulumi-deployment@$GCP_PROJECT.iam.gserviceaccount.com
-```
+4. Repeat: create another service account named `gcp-service`.
+5. Assign roles:
+   - Storage Object Viewer
+   - Vertex AI Administrator
+   - Artifact Registry Reader
+   Then click **Done**.
+6. From the **Actions (⋮)** menu for `gcp-service`, choose **Create key** → **JSON** → **Create**. Move the downloaded key into the same `secrets` folder and rename it to `gcp-service.json`.
 
 **Enable Required APIs**:
 ```bash
@@ -72,32 +65,7 @@ gcloud services enable containerregistry.googleapis.com
 gcloud services enable cloudbuild.googleapis.com
 ```
 
-### 4. Configure Pulumi Backend (GCS - Recommended)
-
-**Use GCS Backend** - Store state in a GCS bucket using your existing GCP credentials (no Pulumi Cloud account needed):
-
-```bash
-cd src/deployment
-
-# Set your GCP project
-export GCP_PROJECT="your-project-id"
-
-# Create GCS bucket for Pulumi state
-gsutil mb -p $GCP_PROJECT gs://$GCP_PROJECT-pulumi-state
-
-# Enable versioning (recommended for state backups)
-gsutil versioning set on gs://$GCP_PROJECT-pulumi-state
-
-# Initialize Pulumi with GCS backend
-pulumi login gs://$GCP_PROJECT-pulumi-state
-
-# Verify backend
-pulumi whoami
-# Should show: gs://your-project-id-pulumi-state
-```
-
-
-### 5. Configure Modal
+### 3. Configure Modal
 
 **Get Modal Tokens**:
 1. Go to https://modal.com/settings
@@ -110,17 +78,12 @@ echo "YOUR_MODAL_TOKEN_ID" > ../../../secrets/modal-token-id.txt
 echo "YOUR_MODAL_TOKEN_SECRET" > ../../../secrets/modal-token-secret.txt
 ```
 
-**Set Modal credentials** (optional, for CLI usage):
-```bash
-# Adjust path to match your secrets folder location (Project/secrets)
-modal token set --token-id $(cat ../../../secrets/modal-token-id.txt) --token-secret $(cat ../../../secrets/modal-token-secret.txt)
-```
-
-### 6. Verify Secrets Folder Structure
+### 4. Verify Secrets Folder Structure
 
 Your `secrets/` folder (outside project) should contain:
 ```
 /secrets/                   # Outside project directory
+├── deployment.json         # GCP service account JSON key (required)
 ├── gcp-service.json        # GCP service account JSON key (required)
 ├── modal-token-id.txt      # Modal API token ID (required)
 └── modal-token-secret.txt  # Modal API token secret (required)
@@ -142,42 +105,6 @@ export SECRETS_PATH=/absolute/path/to/secrets
 ./docker-shell.sh
 ```
 
-### 7. Configure Pulumi Stack
-
-**Initialize stack**:
-```bash
-cd src/deployment
-
-# Create dev stack
-pulumi stack init dev
-
-# Set GCP project
-pulumi config set gcp:project YOUR_GCP_PROJECT_ID
-
-# Set region
-pulumi config set gcp:region us-east4
-
-# Set Modal username (if different from default)
-pulumi config set pibu-ai-deployment:modal_username YOUR_MODAL_USERNAME
-
-# Set LLM model size (optional, defaults to 27b)
-pulumi config set pibu-ai-deployment:llm_model_size "27b"
-
-# Set secrets (encrypted in Pulumi) - read from secrets folder (Project/secrets)
-# Adjust path to match your secrets folder location
-SECRETS_PATH=${SECRETS_PATH:-$(cd ../../.. && pwd)/secrets}
-pulumi config set --secret pibu-ai-deployment:modal_token_id $(cat "$SECRETS_PATH/modal-token-id.txt")
-pulumi config set --secret pibu-ai-deployment:modal_token_secret $(cat "$SECRETS_PATH/modal-token-secret.txt")
-```
-
-**Create prod stack** (optional):
-```bash
-pulumi stack init prod
-pulumi config set gcp:project YOUR_GCP_PROJECT_ID
-pulumi config set gcp:region us-east4
-# ... same config as dev
-```
-
 ## Local Testing
 
 ### Test Deployment (Local)
@@ -186,9 +113,6 @@ pulumi config set gcp:region us-east4
 ```bash
 cd src/deployment
 
-# Build container
-./docker-build.sh
-
 # Run interactive shell (secrets folder is automatically mounted)
 ./docker-shell.sh
 
@@ -196,30 +120,6 @@ cd src/deployment
 pulumi stack select dev
 pulumi preview
 pulumi up
-```
-
-**Option 2: Direct Local Execution**
-```bash
-cd src/deployment
-
-# Install dependencies
-uv sync
-
-# Activate venv
-source .venv/bin/activate
-
-# Set environment variables from secrets folder (Project/secrets)
-# Adjust path to match your secrets folder location
-SECRETS_PATH=${SECRETS_PATH:-$(cd ../../.. && pwd)/secrets}
-export GOOGLE_APPLICATION_CREDENTIALS="$SECRETS_PATH/gcp-service.json"
-export MODAL_TOKEN_ID=$(cat "$SECRETS_PATH/modal-token-id.txt")
-export MODAL_TOKEN_SECRET=$(cat "$SECRETS_PATH/modal-token-secret.txt")
-
-# Preview changes
-pulumi preview --stack dev
-
-# Deploy
-pulumi up --stack dev
 ```
 
 ### Test Export Config

@@ -51,14 +51,19 @@ class InferenceService(pulumi.ComponentResource):
         # Build and push Docker image to GCR
         image_name = f"gcr.io/{project_id}/inference-cloud:{environment}"
 
+        # Use absolute path mounted in container
+        # inference-cloud is mounted at /inference-cloud in the deployment container
         self.image = docker.Image(
             f"{name}-image",
             build=docker.DockerBuildArgs(
-                context="../../",  # Build from repo root
-                dockerfile="../../src/inference-cloud/Dockerfile",
+                context="/inference-cloud",
+                dockerfile="/inference-cloud/Dockerfile",
                 platform="linux/amd64",  # Cloud Run requirement
             ),
             image_name=image_name,
+            registry=docker.RegistryArgs(
+                server="gcr.io",
+            ),
             opts=pulumi.ResourceOptions(parent=self),
         )
 
