@@ -190,8 +190,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('data:loadCaseHistory', caseId),
   saveCaseHistoryToPython: (caseId, caseHistory) =>
     ipcRenderer.invoke('data:saveCaseHistory', caseId, caseHistory),
-  addTimelineEntry: (caseId, imagePath, note, date) =>
-    ipcRenderer.invoke('data:addTimelineEntry', caseId, imagePath, note, date),
+  addTimelineEntry: (caseId, imagePath, note, date, hasCoin) =>
+    ipcRenderer.invoke('data:addTimelineEntry', caseId, imagePath, note, date, hasCoin),
   deleteCases: (caseIds) =>
     ipcRenderer.invoke('data:deleteCases', caseIds),
 

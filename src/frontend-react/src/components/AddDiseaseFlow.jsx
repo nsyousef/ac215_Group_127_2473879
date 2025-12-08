@@ -24,13 +24,14 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { BODY_PART_DEFAULTS } from '@/lib/constants';
-import BodyMapPicker, { getBodyPartFromCoordinates } from '@/components/BodyMapPicker';
+import BodyMapPicker from '@/components/BodyMapPicker';
 import ImageCropper from '@/components/ImageCropper';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import mlClient from '@/services/mlClient';
 
 // All valid body parts in order
 const BODY_PARTS = [
+  // Front
   'ear',
   'hair',
   'face',
@@ -38,13 +39,22 @@ const BODY_PARTS = [
   'chest',
   'abdomen',
   'shoulders',
+  'armpit',
   'upper arm',
   'lower arm',
   'hands',
   'groin',
+  'hips',
   'thighs',
   'lower legs',
   'foot',
+  // Back
+  'back of head',
+  'upper back',
+  'mid back',
+  'lower back',
+  'buttocks',
+  'calves',
 ];
 
 // Format body part name for display (capitalize properly)
@@ -112,6 +122,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     };
     reader.readAsDataURL(f);
     setFile(f);
+    setError(null); // Clear any previous errors when new file is selected
   };
 
   const handleDrop = (e) => {
@@ -121,11 +132,11 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   };
 
   const handleMapChange = (coords) => {
-    // coords: { leftPct, topPct }
+    // coords: { leftPct, topPct, bodyPart, isFrontView }
     setMapPos(coords);
 
-    // Use bounding box detection to infer body part from coordinates
-    const detectedPart = getBodyPartFromCoordinates(coords.leftPct, coords.topPct);
+    // Use body part from coords (already detected by BodyMapPicker)
+    const detectedPart = coords?.bodyPart || 'invalid';
 
     if (detectedPart === 'invalid') {
       setMapError('Please select a valid body area');
@@ -140,7 +151,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     console.log('Crop completed:', { cropCoords });
     setCroppedPreview(croppedDataUrl);
     setCropData(cropCoords);
-    
+
     // Convert blob to File if available, otherwise use original file
     if (blob) {
       const croppedFile = new File([blob], file.name, { type: 'image/jpeg' });
@@ -148,15 +159,23 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     } else {
       setCroppedFile(file); // User skipped cropping
     }
-    
+
     // Move to next step (notes)
     setStep(4);
   };
 
   const analyzeImage = async () => {
     console.log('analyzeImage called', { file, croppedFile, bodyPart, note, mapPos, cropData, hasCoin });
+    console.log('[AddDiseaseFlow] hasCoin value:', hasCoin, 'type:', typeof hasCoin);
     setAnalyzing(true);
     setError(null);
+
+    // Helper to clean Electron IPC error prefix
+    const cleanErrorMessage = (msg) => {
+      if (!msg) return '';
+      // Remove "Error invoking remote method 'xxx': Error: " prefix
+      return msg.replace(/^Error invoking remote method '[^']+': Error: /, '');
+    };
 
     // Declare outside try block so error handler can access it
     let predictionTextUnsubscribe = null;
@@ -266,7 +285,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             console.log('[AddDiseaseFlow] Adding tempDisease to context');
             addDisease(tempDisease).then(() => {
               console.log('[AddDiseaseFlow] Disease added to context, now navigating');
-              
+
               // Close the dialog immediately so navigation can take effect
               console.log('[AddDiseaseFlow] Closing dialog before navigation');
               setAnalyzing(false);
@@ -333,86 +352,112 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         }
       }, 30000); // 30 second timeout (vision encoder + cloud API can be slow)
 
-      // Step 5: Kick off prediction request
-      // This will trigger: vision encoder → cloud predictions → predictionText event → LLM streaming
-      // Don't await - let it run in background so dialog can close after navigation
-      mlClient.getInitialPrediction(
-        imagePath,      // file path
-        note || '',     // text description
-        caseId,
-        { hasCoin },    // Pass hasCoin flag in metadata
-      ).then((results) => {
-        // Clear fallback timeout since prediction completed
+      // Step 5: Kick off prediction request and wait for initial validation
+      // Check for UNCERTAIN before proceeding to navigation
+      let results;
+      try {
+        results = await mlClient.getInitialPrediction(
+          imagePath,      // file path
+          note || '',     // text description
+          caseId,
+          { hasCoin },    // Pass hasCoin flag in metadata
+        );
+        
+        // Check if this is an UNCERTAIN result (not an error, so no console logging)
+        if (results && results.isUncertain) {
+          // Clear fallback timeout
+          clearTimeout(fallbackTimeout);
+          
+          // Clean up subscription
+          if (predictionTextUnsubscribe) {
+            predictionTextUnsubscribe();
+          }
+          
+          const errorMsg = results.message || 'Unable to determine the condition from this image. Please try again with better lighting, a clearer photo, or more descriptive text. It\'s also possible that there\'s nothing concerning to identify.';
+          setError(errorMsg);
+          setAnalyzing(false);
+          setStep(2); // Go back to image upload
+          return;
+        }
+      } catch (e) {
+        console.error('Prediction failed:', e);
+        
+        // Clear fallback timeout
         clearTimeout(fallbackTimeout);
-
-        // Clean up subscription if still active
+        
+        // Clean up subscription
         if (predictionTextUnsubscribe) {
           predictionTextUnsubscribe();
         }
+        
+        // Other errors (actual failures)
+        const errorMsg = cleanErrorMessage(e.message) || 'Analysis failed. Please try again.';
+        setError(errorMsg);
+        setAnalyzing(false);
+        setStep(2);
+        return;
+      }
+      
+      // Clear fallback timeout since prediction completed successfully
+      clearTimeout(fallbackTimeout);
 
-        // Find disease with highest confidence from predictions
-        const predictions = results.predictions || {};
-        let topDisease = 'Unknown Condition';
-        let maxConfidence = 0;
+      // Clean up subscription if still active
+      if (predictionTextUnsubscribe) {
+        predictionTextUnsubscribe();
+      }
 
-        Object.entries(predictions).forEach(([disease, confidence]) => {
-          if (confidence > maxConfidence) {
-            maxConfidence = confidence;
-            topDisease = disease;
-          }
-        });
+      // Find disease with highest confidence from predictions
+      const predictions = results.predictions || {};
+      let topDisease = 'Unknown Condition';
+      let maxConfidence = 0;
 
-        // Format disease name (capitalize first letter of each word)
-        const formattedName = topDisease
-          .split('_')
-          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-
-        // Get the enriched disease object from Python response
-        const enrichedDisease = results.enriched_disease || {};
-
-        const newDisease = {
-          id: diseaseId,
-          name: formattedName,
-          image: displayImage,
-          description: enrichedDisease.description || '',
-          bodyPart: enrichedDisease.bodyPart || bodyPart || 'Unknown',
-          mapPosition: enrichedDisease.mapPosition || null,
-          confidenceLevel: enrichedDisease.confidenceLevel || 0,
-          date: enrichedDisease.date || '',
-          llmResponse: enrichedDisease.llmResponse || '',
-          predictionText: enrichedDisease.predictionText || '',
-          timelineData: enrichedDisease.timelineData || [],
-          conversationHistory: enrichedDisease.conversationHistory || [],
-          caseId: caseId,
-        };
-
-        // Update the disease in context (it was already added as tempDisease)
-        addDisease(newDisease).then(() => {
-          // Notify parent that analysis is complete with full data
-          if (onSaved) onSaved(newDisease);
-        });
-
-        // Note: onStartAnalysis was already called earlier with tempDisease (via predictionText event)
-        // The selectedCondition will be updated when addDisease triggers a re-render
-      }).catch((e) => {
-        console.error('Background prediction processing failed:', e);
-        // Don't show error to user since they've already navigated away
-        // Clean up subscription on error
-        if (predictionTextUnsubscribe) {
-          predictionTextUnsubscribe();
+      Object.entries(predictions).forEach(([disease, confidence]) => {
+        if (confidence > maxConfidence) {
+          maxConfidence = confidence;
+          topDisease = disease;
         }
       });
 
-      // Don't await the prediction - return immediately after starting it
-      // This allows the dialog to close and navigation to happen
-      // The predictionText event will trigger navigation before LLM finishes
+      // Format disease name (capitalize first letter of each word)
+      const formattedName = topDisease
+        .split('_')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+      // Get the enriched disease object from Python response
+      const enrichedDisease = results.enriched_disease || {};
+
+      const newDisease = {
+        id: diseaseId,
+        name: formattedName,
+        image: displayImage,
+        description: enrichedDisease.description || '',
+        bodyPart: enrichedDisease.bodyPart || bodyPart || 'Unknown',
+        mapPosition: enrichedDisease.mapPosition || null,
+        confidenceLevel: enrichedDisease.confidenceLevel || 0,
+        date: enrichedDisease.date || '',
+        llmResponse: enrichedDisease.llmResponse || '',
+        predictionText: enrichedDisease.predictionText || '',
+        timelineData: enrichedDisease.timelineData || [],
+        conversationHistory: enrichedDisease.conversationHistory || [],
+        caseId: caseId,
+      };
+
+      // Update the disease in context (it was already added as tempDisease)
+      await addDisease(newDisease);
+      
+      // Notify parent that analysis is complete with full data
+      if (onSaved) onSaved(newDisease);
+
+      // Note: onStartAnalysis was already called earlier with tempDisease (via predictionText event)
+      // The selectedCondition will be updated when addDisease triggers a re-render
     } catch (e) {
       console.error('Analysis failed:', e);
       console.error('Error details:', {
         message: e.message,
         stack: e.stack,
         name: e.name,
+        code: e.code,
       });
 
       // Clean up subscription on error
@@ -423,8 +468,10 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
       firstChunkReceivedRef.current = false;
       currentCaseIdRef.current = null;
 
-      const errorMessage = e.message || 'Analysis failed. Please try again.';
-      setError(errorMessage);
+      // Handle error (UNCERTAIN is handled above, so this is for actual failures)
+      const errorMsg = cleanErrorMessage(e.message) || 'Analysis failed. Please try again.';
+      setError(errorMsg);
+      
       setAnalyzing(false);
       setStep(2); // Go back to photo step on error
     }
@@ -494,7 +541,11 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>Tap the body map to place the marker, or choose from the list below.</Typography>
 
             <Box sx={{ mb: 2 }}>
-              <BodyMapPicker value={mapPos} onChange={(coords) => handleMapChange(coords)} />
+              <BodyMapPicker 
+                value={mapPos} 
+                onChange={(coords) => handleMapChange(coords)} 
+                showBoundingBoxes={false}
+              />
             </Box>
             {mapError && (
               <Typography variant="body2" sx={{ color: 'error.main', mb: 2, textAlign: 'center' }}>
@@ -549,6 +600,20 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
               Use your camera or upload an image. You can drag & drop or use the file picker.
             </Typography>
 
+            {error && (
+              <Box sx={{ 
+                bgcolor: '#fff3e0', 
+                border: '1px solid #ff9800', 
+                borderRadius: 1, 
+                p: 2, 
+                mb: 2 
+              }}>
+                <Typography variant="body2" sx={{ color: '#e65100', fontWeight: 500 }}>
+                  {error}
+                </Typography>
+              </Box>
+            )}
+
             <Box
               onDragOver={(e) => {
                 // Only prevent default when files are being dragged to avoid interfering with touch scrolling
@@ -584,7 +649,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
                     <img src={preview} alt="preview" style={{ maxWidth: '100%', maxHeight: 360, borderRadius: 8 }} />
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
-                    <Button size="small" variant="text" onClick={() => { setFile(null); setPreview(null); }}>Clear image</Button>
+                    <Button size="small" variant="text" onClick={() => { setFile(null); setPreview(null); setError(null); }}>Clear image</Button>
                   </Box>
                 </Box>
               )}
@@ -608,7 +673,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             <Typography variant="subtitle1" sx={{ mb: 1 }}>Optional Notes</Typography>
             <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>Add any symptoms or context (optional, max 1000 characters).</Typography>
             <TextField value={note} onChange={(e) => setNote(e.target.value.slice(0, 1000))} placeholder="Describe symptoms, duration, etc." multiline minRows={4} fullWidth />
-            
+
             {/* Checkbox for coin presence */}
             <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
               <input

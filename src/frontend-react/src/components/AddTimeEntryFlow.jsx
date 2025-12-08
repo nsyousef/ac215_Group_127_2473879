@@ -68,7 +68,7 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
   const handleCropComplete = (croppedDataUrl, cropCoords, blob) => {
     console.log('Crop completed:', { cropCoords });
     setCroppedPreview(croppedDataUrl);
-    
+
     // Convert blob to File if available, otherwise use original file
     if (blob) {
       const croppedFile = new File([blob], file.name, { type: 'image/jpeg' });
@@ -76,7 +76,7 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
     } else {
       setCroppedFile(file); // User skipped cropping
     }
-    
+
     // Move to next step (notes)
     setStep(4);
   };
@@ -85,6 +85,7 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
     if (!conditionId) return setError('No condition selected');
     if (!file) return setError('No image selected');
 
+    console.log('[AddTimeEntryFlow] analyze called - hasCoin:', hasCoin, 'type:', typeof hasCoin);
     setAnalyzing(true);
     setError(null);
 
@@ -196,7 +197,7 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
           <Box>
             <Typography variant="subtitle1">Optional Notes</Typography>
             <TextField value={note} onChange={(e) => setNote(e.target.value.slice(0, 1000))} placeholder="Describe symptoms, duration, etc." multiline minRows={4} fullWidth sx={{ mt: 1 }} />
-            
+
             {/* Checkbox for coin presence */}
             <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
               <input

@@ -14,7 +14,7 @@ if [ "$MODEL" = "4b" ]; then
     GPU_DEFAULT="H200"
 elif [ "$MODEL" = "27b" ]; then
     MODEL_NAME="medgemma-27b"
-    MAX_TOKENS=700
+    MAX_TOKENS=400
     GPU_DEFAULT="H200"
 else
     echo "❌ Invalid model. Use '4b' or '27b'"

@@ -50,12 +50,12 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
     // Draw crop box if exists
     if (cropBox) {
       const { x, y, width, height } = cropBox;
-      
+
       // Darken everything outside crop box
       ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.clearRect(x, y, width, height);
-      ctx.drawImage(img, 
+      ctx.drawImage(img,
         x / scale, y / scale, width / scale, height / scale,
         x, y, width, height
       );
@@ -69,7 +69,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
       const handleSize = 10;
       ctx.fillStyle = '#0891B2';
       [
-        [x, y], [x + width, y], 
+        [x, y], [x + width, y],
         [x, y + height], [x + width, y + height]
       ].forEach(([hx, hy]) => {
         ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
@@ -82,7 +82,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    
+
     return {
       x: (e.clientX - rect.left) * scaleX,
       y: (e.clientY - rect.top) * scaleY,
@@ -101,12 +101,12 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
     if (!isDrawing) return;
     const pos = getMousePos(e);
     setCurrentPos(pos);
-    
+
     const x = Math.min(startPos.x, pos.x);
     const y = Math.min(startPos.y, pos.y);
     const width = Math.abs(pos.x - startPos.x);
     const height = Math.abs(pos.y - startPos.y);
-    
+
     setCropBox({ x, y, width, height });
   };
 
@@ -134,7 +134,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
     cropCanvas.width = cropData.width;
     cropCanvas.height = cropData.height;
     const cropCtx = cropCanvas.getContext('2d');
-    
+
     cropCtx.drawImage(
       img,
       cropData.x, cropData.y, cropData.width, cropData.height,
@@ -152,14 +152,14 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
     // User chose not to crop - use full image
     const img = imageRef.current;
     if (!img) return;
-    
+
     const cropData = {
       x: 0,
       y: 0,
       width: img.width,
       height: img.height,
     };
-    
+
     onCropComplete(imageSrc, cropData, null);
   };
 
@@ -217,4 +217,3 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
     </Box>
   );
 }
-
