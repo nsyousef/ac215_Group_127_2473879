@@ -1,5 +1,5 @@
 name: pibu-ai-deployment
-description: Deploy inference service (Cloud Run) and LLM service (Modal) for pibu.ai
+description: Deploy inference service (GKE/Kubernetes) and LLM service (Modal) for pibu.ai
 runtime:
   name: python
   options:
@@ -9,3 +9,5 @@ config:
     value:
       pulumi:template: python
       project: pibu-ai
+      infrastructure: kubernetes
+      platform: gke

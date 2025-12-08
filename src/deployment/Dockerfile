@@ -50,7 +50,7 @@ WORKDIR /app
 COPY --chown=app:app pyproject.toml uv.lock ./
 
 # Install dependencies
-RUN uv sync --frozen
+RUN uv sync --python python3.11
 
 # Install Pulumi (as app user)
 RUN curl -fsSL https://get.pulumi.com | sh
