@@ -67,7 +67,7 @@ MODEL_SOURCES = {
         # GitHub Release from PUBLIC model repo (no auth needed)
         # Update URL after creating public repo: github.com/nsyousef/pibu_ai_model_release
         {
-            "url": "https://github.com/nsyousef/pibu_ai_model_release/releases/download/v0.0.1/vision_model_v0.0.1.pth",
+            "url": "https://github.com/nsyousef/pibu_ai_model_release/releases/download/v0.0.2/vision_model_v0.0.2.pth",
             "backend": "github_release",
             "requires_auth": False,
         },
