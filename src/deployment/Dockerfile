@@ -47,7 +47,7 @@ USER app
 WORKDIR /app
 
 # Copy dependency files
-COPY --chown=app:app pyproject.toml uv.lock* ./
+COPY --chown=app:app pyproject.toml uv.lock ./
 
 # Install dependencies
 RUN uv sync --frozen

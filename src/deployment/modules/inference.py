@@ -48,13 +48,44 @@ class InferenceService(pulumi.ComponentResource):
             opts=pulumi.ResourceOptions(parent=self),
         )
 
-        # Build and push Docker image to GCR
-        image_name = f"gcr.io/{project_id}/inference-cloud:{environment}"
+        # Grant service account access to GCS bucket for model files
+        gcp.storage.BucketIAMMember(
+            f"{name}-gcs-access",
+            bucket="apcomp215-datasets",
+            role="roles/storage.objectViewer",
+            member=self.service_account.email.apply(lambda email: f"serviceAccount:{email}"),
+            opts=pulumi.ResourceOptions(parent=self),
+        )
+
+        # Enable Artifact Registry API
+        artifact_registry_api = gcp.projects.Service(
+            f"{name}-artifact-registry-api",
+            project=project_id,
+            service="artifactregistry.googleapis.com",
+            opts=pulumi.ResourceOptions(parent=self),
+        )
+
+        # Create Artifact Registry repository if it doesn't exist
+        repository = gcp.artifactregistry.Repository(
+            f"{name}-repository",
+            repository_id="pibu-ai-images",
+            location=region,
+            project=project_id,
+            format="DOCKER",
+            description="Docker images for Pibu.AI inference service",
+            opts=pulumi.ResourceOptions(
+                parent=self,
+                depends_on=[artifact_registry_api],
+            ),
+        )
+
+        # Build and push Docker image to Artifact Registry
+        image_name = f"{region}-docker.pkg.dev/{project_id}/pibu-ai-images/inference-cloud:{environment}"
 
         # Use the src directory as context (mounted to /ac215_Group_127_2473879/src in deployment container)
         # Dockerfile will copy from:
         #   - ml_workflow/ (local path in src)
-        #   - . (all of inference-cloud)
+        #   - inference-cloud/ (all of inference-cloud)
         self.image = docker.Image(
             f"{name}-image",
             build=docker.DockerBuildArgs(
@@ -65,9 +96,13 @@ class InferenceService(pulumi.ComponentResource):
             ),
             image_name=image_name,
             registry=docker.RegistryArgs(
-                server="gcr.io",
+                server=f"{region}-docker.pkg.dev",
             ),
-            opts=pulumi.ResourceOptions(parent=self),
+            # Ensure Artifact Registry repository exists before building
+            opts=pulumi.ResourceOptions(
+                parent=self,
+                depends_on=[repository],
+            ),
         )
 
         # Deploy to Cloud Run
@@ -92,7 +127,7 @@ class InferenceService(pulumi.ComponentResource):
                             startup_cpu_boost=True,  # Fast cold starts
                         ),
                         envs=[
-                            gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(name="PORT", value="8080"),
+                            # PORT is automatically set by Cloud Run based on container_port
                             gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
                                 name="MODEL_CHECKPOINT_PATH", value="/tmp/models/test_best.pth"
                             ),
@@ -109,12 +144,12 @@ class InferenceService(pulumi.ComponentResource):
                             period_seconds=30,
                         ),
                         # Startup probe (for model download and loading)
-                        # Model download from GCS can take time, so we allow 120 seconds (24 checks * 5 sec)
+                        # Model download from GCS can take time, so we allow 300 seconds (60 checks * 5 sec)
                         startup_probe=gcp.cloudrunv2.ServiceTemplateContainerStartupProbeArgs(
                             http_get=gcp.cloudrunv2.ServiceTemplateContainerStartupProbeHttpGetArgs(path="/health"),
                             initial_delay_seconds=0,
                             period_seconds=5,
-                            failure_threshold=24,  # 120 seconds total for model download
+                            failure_threshold=60,  # 300 seconds for app to start
                         ),
                     )
                 ],

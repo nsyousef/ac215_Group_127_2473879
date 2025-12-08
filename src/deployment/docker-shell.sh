@@ -36,7 +36,9 @@ echo "Mounting ml_workflow from: $ML_WORKFLOW_HOST"
 
 docker run --rm -it \
   -v "$BASE_DIR:/app" \
-  -v "$BASE_DIR/..:/ac215_Group_127_2473879/src" \
+  -v "$INFERENCE_CLOUD_HOST:/ac215_Group_127_2473879/src/inference-cloud" \
+  -v "$ML_WORKFLOW_HOST:/ac215_Group_127_2473879/src/ml_workflow" \
+  -v "$LLM_HOST:/llm" \
   -v "$HOME/.config/gcloud:/root/.config/gcloud" \
   -v "$HOME/.modal.toml:/root/.modal.toml" \
   -v "$SECRETS_PATH:/app/secrets:ro" \
