@@ -8,19 +8,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resetAppData: () => ipcRenderer.invoke('reset-app-data'),
 
   // ================= ML IPC =================
-  mlGetInitialPrediction: (caseId, imagePath, textDescription, userTimestamp) =>
+  mlGetInitialPrediction: (caseId, imagePath, textDescription, userTimestamp, hasCoin = false) =>
     ipcRenderer.invoke('ml:getInitialPrediction', {
       caseId,
       imagePath,
       textDescription,
       userTimestamp,
+      hasCoin,
     }),
 
   // Subscribe to streaming chunks produced during ml:getInitialPrediction
   // Usage in renderer:
   //   const unsubscribe = window.electronAPI.mlOnStreamChunk((chunk) => { ...append to UI... });
   //   // later: unsubscribe();
-  mlGetInitialPredictionStream: (caseId, imagePath, textDescription, userTimestamp) => {
+  mlGetInitialPredictionStream: (caseId, imagePath, textDescription, userTimestamp, hasCoin = false) => {
     const streamId = `ml-init-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     ipcRenderer.send('ml:getInitialPredictionStream:start', {
@@ -29,6 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       imagePath,
       textDescription,
       userTimestamp,
+      hasCoin,
     });
 
     const asyncIterator = {

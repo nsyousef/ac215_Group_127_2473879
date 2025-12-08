@@ -48,7 +48,27 @@ image = (
     .apt_install(["git"])
     # Mount src/ directory so ml_workflow package structure works
     # This creates /app/src/ml_workflow/ structure
-    .add_local_dir(str(SRC_DIR), "/app/src")
+    # Exclude large/unnecessary directories to reduce upload size
+    .add_local_dir(
+        str(SRC_DIR),
+        "/app/src",
+        ignore=[
+            "**/__pycache__/**",
+            "**/node_modules/**",
+            "**/out/**",
+            "**/.git/**",
+            "**/wandb/**",
+            "**/logs/**",
+            "**/.pytest_cache/**",
+            "**/.ruff_cache/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/*.pyc",
+            "**/.DS_Store",
+            "**/frontend-react/**",  # Exclude entire frontend (not needed for training)
+            "**/cv-analysis/**",  # Exclude if not needed
+        ],
+    )
 )
 
 app = modal.App("skin-disease-training-volume", image=image)
@@ -214,7 +234,7 @@ def sync_data_from_gcs():
 @app.function(
     gpu="H200",
     cpu=20.0,
-    timeout=14400,
+    timeout=50000,
     region="us-east",
     secrets=[
         modal.Secret.from_name("wandb-secret"),
@@ -317,6 +337,81 @@ def train_with_volume(config_path: str = "configs/modal_template.yaml"):
     trainer.train()
 
     return "Training completed successfully!"
+
+
+# ============================================================================
+# TEST FUNCTION: Verify credentials
+# ============================================================================
+@app.function(
+    secrets=[
+        modal.Secret.from_name("gcs-secret"),
+        modal.Secret.from_name("gcp-project-secret"),
+    ],
+)
+def test_gcs_credentials():
+    """
+    Test function to verify GCS credentials are set up correctly.
+    Run with: modal run modal_training_volume.py::test_gcs_credentials
+    """
+    import os
+    import json
+    from google.cloud import storage
+
+    logger.info("=" * 70)
+    logger.info("Testing GCS Credentials")
+    logger.info("=" * 70)
+
+    # Check if secret is set
+    if "GOOGLE_APPLICATION_CREDENTIALS_JSON" not in os.environ:
+        logger.error("❌ GOOGLE_APPLICATION_CREDENTIALS_JSON not found in environment")
+        return {"status": "error", "message": "Secret not found"}
+
+    creds_json = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"]
+    logger.info(f"✓ Secret found (length: {len(creds_json)} chars)")
+
+    # Check if it's empty
+    if not creds_json or creds_json.strip() == "":
+        logger.error("❌ GOOGLE_APPLICATION_CREDENTIALS_JSON is empty")
+        return {"status": "error", "message": "Secret is empty"}
+
+    # Try to parse JSON
+    try:
+        creds_data = json.loads(creds_json)
+        logger.info("✓ JSON is valid")
+        logger.info(f"  Project ID: {creds_data.get('project_id', 'N/A')}")
+        logger.info(f"  Client Email: {creds_data.get('client_email', 'N/A')}")
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON parse error: {e}")
+        logger.error(f"  First 100 chars: {creds_json[:100]}")
+        return {"status": "error", "message": f"JSON parse error: {e}"}
+
+    # Write to temp file and test GCS access
+    creds_path = "/tmp/gcs_credentials.json"
+    try:
+        with open(creds_path, "w") as f:
+            json.dump(creds_data, f)
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
+        logger.info(f"✓ Credentials written to {creds_path}")
+
+        # Test GCS client
+        client = storage.Client()
+        bucket_name = "apcomp215-datasets"
+        bucket = client.bucket(bucket_name)
+
+        # Try to list a few blobs to verify access
+        logger.info(f"✓ Testing access to bucket: {bucket_name}")
+        blobs = list(bucket.list_blobs(prefix="dataset_v1/", max_results=5))
+        logger.info(f"✓ Successfully accessed bucket! Found {len(blobs)} sample blobs")
+
+        return {
+            "status": "success",
+            "project_id": creds_data.get("project_id"),
+            "bucket_accessible": True,
+            "sample_blobs": len(blobs),
+        }
+    except Exception as e:
+        logger.error(f"❌ GCS access error: {e}")
+        return {"status": "error", "message": f"GCS access error: {e}"}
 
 
 # ============================================================================

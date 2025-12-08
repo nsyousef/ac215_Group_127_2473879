@@ -17,16 +17,20 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
+import ImageCropper from '@/components/ImageCropper';
 
 export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }) {
   const { diseases } = useDiseaseContext();
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'));
 
-  const [step, setStep] = useState(1); // 1: instructions, 2: photo, 4: notes, 5: analyzing
+  const [step, setStep] = useState(1); // 1: instructions, 2: photo, 3: crop, 4: notes, 5: analyzing
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [croppedPreview, setCroppedPreview] = useState(null);
+  const [croppedFile, setCroppedFile] = useState(null);
   const [note, setNote] = useState('');
+  const [hasCoin, setHasCoin] = useState(false); // Checkbox: image contains a coin (default: false)
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState(null);
 
@@ -34,7 +38,10 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
     setStep(1);
     setFile(null);
     setPreview(null);
+    setCroppedPreview(null);
+    setCroppedFile(null);
     setNote('');
+    setHasCoin(false); // Reset checkbox to default (unchecked)
     setAnalyzing(false);
     setError(null);
   };
@@ -58,6 +65,22 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
     if (f) onFileSelected(f);
   };
 
+  const handleCropComplete = (croppedDataUrl, cropCoords, blob) => {
+    console.log('Crop completed:', { cropCoords });
+    setCroppedPreview(croppedDataUrl);
+    
+    // Convert blob to File if available, otherwise use original file
+    if (blob) {
+      const croppedFile = new File([blob], file.name, { type: 'image/jpeg' });
+      setCroppedFile(croppedFile);
+    } else {
+      setCroppedFile(file); // User skipped cropping
+    }
+    
+    // Move to next step (notes)
+    setStep(4);
+  };
+
   const analyze = async () => {
     if (!conditionId) return setError('No condition selected');
     if (!file) return setError('No image selected');
@@ -70,13 +93,16 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
       const condition = diseases.find(d => d.id === conditionId);
       const caseId = condition?.caseId || `case_${conditionId}`;
 
+      // Use cropped file if available, otherwise original file
+      const fileToUpload = croppedFile || file;
+
       // Step 1: Save the image file to disk via IPC
       let imagePath;
       if (window.electronAPI?.saveUploadedImage) {
-        const buffer = await file.arrayBuffer();
+        const buffer = await fileToUpload.arrayBuffer();
         const uint8Array = new Uint8Array(buffer);
         const timestamp = Date.now();
-        imagePath = await window.electronAPI.saveUploadedImage(caseId, `timeline_${timestamp}_${file.name}`, uint8Array);
+        imagePath = await window.electronAPI.saveUploadedImage(caseId, `timeline_${timestamp}_${fileToUpload.name || file.name}`, uint8Array);
       } else {
         throw new Error('Image upload is only available in Electron runtime.');
       }
@@ -87,7 +113,7 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
       const dateKey = `${now.toISOString().split('T')[0]}_${Date.now()}`; // "2025-11-21_1763762693117"
 
       if (window.electronAPI?.addTimelineEntry) {
-        await window.electronAPI.addTimelineEntry(caseId, imagePath, note || '', dateKey);
+        await window.electronAPI.addTimelineEntry(caseId, imagePath, note || '', dateKey, hasCoin);
       } else {
         throw new Error('Timeline entry save is only available in Electron runtime.');
       }
@@ -158,10 +184,32 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
           </Box>
         )}
 
+        {step === 3 && preview && (
+          <ImageCropper
+            imageSrc={preview}
+            onCropComplete={handleCropComplete}
+            onCancel={() => setStep(2)}
+          />
+        )}
+
         {step === 4 && (
           <Box>
             <Typography variant="subtitle1">Optional Notes</Typography>
             <TextField value={note} onChange={(e) => setNote(e.target.value.slice(0, 1000))} placeholder="Describe symptoms, duration, etc." multiline minRows={4} fullWidth sx={{ mt: 1 }} />
+            
+            {/* Checkbox for coin presence */}
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+              <input
+                type="checkbox"
+                id="has-coin-timeline-checkbox"
+                checked={hasCoin}
+                onChange={(e) => setHasCoin(e.target.checked)}
+                style={{ marginRight: 8 }}
+              />
+              <label htmlFor="has-coin-timeline-checkbox" style={{ cursor: 'pointer', fontSize: '0.875rem' }}>
+                This image contains a coin (for size reference)
+              </label>
+            </Box>
           </Box>
         )}
 
@@ -190,14 +238,16 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
             <Button variant="text" onClick={() => setStep(1)}>Back</Button>
             <Box>
               <Button variant="text" onClick={close}>Cancel</Button>
-              <Button variant="contained" onClick={() => setStep(4)} disabled={!preview} sx={{ ml: 1 }}>Continue</Button>
+              <Button variant="contained" onClick={() => setStep(3)} disabled={!preview} sx={{ ml: 1 }}>Next</Button>
             </Box>
           </Box>
         )}
 
+        {/* Step 3: Cropping - handled by ImageCropper component with its own buttons */}
+
         {step === 4 && (
           <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between' }}>
-            <Button variant="text" onClick={() => setStep(2)}>Back</Button>
+            <Button variant="text" onClick={() => setStep(3)}>Back</Button>
             <Box>
               <Button variant="text" onClick={close}>Cancel</Button>
               <Button variant="contained" onClick={() => { setStep(5); analyze(); }} sx={{ ml: 1 }}>Save</Button>

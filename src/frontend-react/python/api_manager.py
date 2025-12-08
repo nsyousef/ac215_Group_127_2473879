@@ -6,6 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Callable
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from prediction_texts import get_prediction_text
@@ -28,13 +29,25 @@ TEXT_EMBEDDING_URL = os.getenv("TEXT_EMBEDDING_URL", f"{BASE_URL}/embed-text")
 PREDICTION_URL = os.getenv("PREDICTION_URL", f"{BASE_URL}/predict")
 
 # LLM API URLs (can be overridden with environment variables for testing)
+DEFAULT_LLM_FOLLOWUP_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-fo-8013b2.modal.run"
 DEFAULT_LLM_EXPLAIN_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explai-0d573f.modal.run"
-DEFAULT_LLM_FOLLOWUP_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-fo-8013b2.modal.run/"
+LLM_TIME_TRACKING_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-time-t-f8b7ef.modal.run"
 
 
 def debug_log(msg: str):
     """Print to stderr so it doesn't interfere with stdout JSON protocol"""
     print(msg, file=sys.stderr, flush=True)
+
+
+# Import CV analysis module (after debug_log is defined)
+try:
+    sys.path.insert(0, str(Path(__file__).parent / "cv-analysis"))
+    from module import run_cv_analysis as cv_run_analysis
+    CV_ANALYSIS_AVAILABLE = True
+    debug_log("✓ CV analysis module loaded successfully")
+except ImportError as e:
+    debug_log(f"⚠ Warning: CV analysis module not available: {e}")
+    CV_ANALYSIS_AVAILABLE = False
 
 
 def _timestamp() -> str:
@@ -419,37 +432,73 @@ class APIManager:
         debug_log(f"Updated disease name for case {case_id}: {name}")
 
     @staticmethod
-    def add_timeline_entry(case_id: str, image_path: str, note: str, date: str) -> None:
+    def add_timeline_entry(case_id: str, image_path: str, note: str, date: str, has_coin: bool = False) -> None:
         """
         Add a new timeline entry (manually uploaded image) to case_history.json.
+        Conditionally includes CV analysis and time tracking summary generation.
 
         Args:
             case_id: Case ID (with or without 'case_' prefix)
             image_path: Path to the saved image file
             note: User's notes/description for this entry
             date: ISO date string (YYYY-MM-DD) for when this entry was added
+            has_coin: Whether the image contains a coin for size reference
         """
         # Ensure case_id has 'case_' prefix for folder lookup
         if not case_id.startswith("case_"):
             case_id = f"case_{case_id}"
 
-        # Load existing case history
-        case_history = APIManager.load_case_history(case_id)
+        # Create temporary APIManager instance to use its methods
+        api = APIManager(case_id, dummy=False)
+        
+        debug_log(f"Adding timeline entry for case {case_id} (has_coin={has_coin})")
+        
+        # Get predictions from the earliest date entry (initial diagnosis)
+        predictions = {}
+        top_prediction_label = ""
+        if api.case_history.get("dates"):
+            earliest_date = min(api.case_history["dates"].keys())
+            earliest_entry = api.case_history["dates"][earliest_date]
+            predictions = earliest_entry.get("predictions", {})
+            if predictions:
+                top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0]
+        
+        # Determine if we should run CV analysis
+        should_run_cv = has_coin
 
+        cv_analysis = {}
+        tracking_summary = ""
+        
+        if should_run_cv:
+            # Run CV analysis on the uploaded image
+            debug_log("  → Running CV analysis...")
+            cv_analysis = api._run_cv_analysis(image_path)
+            
+            # Generate time tracking summary
+            debug_log("  → Generating time tracking summary...")
+            tracking_summary = api._get_time_tracking_summary(
+                predictions=predictions,
+                text_description=note,
+                cv_analysis=cv_analysis
+            )
+        else:
+            debug_log(f"  → Skipping CV analysis (has_coin={has_coin}, top_prediction={top_prediction_label})")
+        
         # Add new entry to dates using the provided date as key
-        if "dates" not in case_history:
-            case_history["dates"] = {}
+        if "dates" not in api.case_history:
+            api.case_history["dates"] = {}
 
-        case_history["dates"][date] = {
+        api.case_history["dates"][date] = {
             "image_path": image_path,
             "text_summary": note or "",
-            "cv_analysis": {},  # Manual entries don't have CV analysis
-            "predictions": {},  # Manual entries don't have predictions
+            "cv_analysis": cv_analysis,
+            "predictions": predictions,  # Use predictions from initial entry
+            "tracking_summary": tracking_summary,
         }
 
         # Save updated case history
-        APIManager.save_case_history(case_id, case_history)
-        debug_log(f"Added timeline entry for case {case_id} on date {date}")
+        APIManager.save_case_history(case_id, api.case_history)
+        debug_log(f"✅ Added timeline entry for case {case_id} on date {date}")
 
     @staticmethod
     def delete_cases(case_ids: List[str]) -> None:
@@ -619,6 +668,7 @@ class APIManager:
                         "date": date,
                         "image": dates[date].get("image_path", ""),
                         "note": dates[date].get("text_summary", ""),
+                        "trackingSummary": dates[date].get("tracking_summary", ""),
                     }
                     for i, date in enumerate(sorted(dates.keys(), reverse=True))
                 ]
@@ -682,27 +732,37 @@ class APIManager:
         if saved_image_path and not Path(saved_image_path).exists():
             raise FileNotFoundError(f"Saved image not found at: {saved_image_path}")
 
-        # Step 1: Run local ML model for embeddings TODO
+        # Step 1: Run local ML model for embeddings
         debug_log("  → Running local ML model for embeddings...")
         embedding = self._run_local_ml_model(image)
 
-        # Step 2: Run CV analysis TODO
-        debug_log("  → Running CV analysis...")
-        cv_analysis = self._run_cv_analysis(saved_image_path)
-
-        # Step 3: Get predictions from cloud ML model TODO
-        debug_log("  → Getting cloud predictions...")
+        # Step 2: Get predictions from cloud ML model AND run CV analysis in parallel
+        debug_log("  → Getting cloud predictions and running CV analysis in parallel...")
         updated_text_description = self.update_text_input(text_description)
-        predictions_raw = self._run_cloud_ml_model(embedding, updated_text_description)
 
-        # Step 3.5: Reformat predictions for explain LLM
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            fut_preds = executor.submit(self._run_cloud_ml_model, embedding, updated_text_description)
+            fut_cv = executor.submit(self._run_cv_analysis, saved_image_path)
+
+            predictions_raw = fut_preds.result()
+            cv_analysis = fut_cv.result()
+
+        # Step 2.5: Reformat predictions for explain LLM
         predictions = {item["class"]: item["probability"] for item in predictions_raw}
 
-        # Step 4: Build metadata for LLM
+        # Step 3: Generate time tracking summary from CV + history (for both tracking panel and explain prompt)
+        debug_log("  → Generating time tracking summary...")
+        tracking_summary = self._get_time_tracking_summary(
+            predictions=predictions,
+            text_description=text_description,  # ORIGINAL user text
+            cv_analysis=cv_analysis,
+        )
+
+        # Step 4: Build metadata for LLM (include CV tracking summary text, not raw metrics)
         metadata = {
             "user_input": updated_text_description,
-            "cv_analysis": cv_analysis,
             "history": self.case_history["dates"],
+            "cv_tracking_summary": tracking_summary,
         }
 
         # Step 5: Call LLM API for explanation
@@ -726,7 +786,8 @@ class APIManager:
             llm_timestamp=llm_timestamp,
         )
 
-        # Step 7: Save to history (CV analysis, predictions, image path)
+        # Step 7: Save to history (CV analysis, predictions, image path, tracking summary)
+        # Use ORIGINAL text_description for text_summary, not the augmented version
         debug_log("  → Saving history...")
         current_date = datetime.now().strftime("%Y-%m-%d")
         self._save_history_entry(
@@ -734,7 +795,8 @@ class APIManager:
             cv_analysis=cv_analysis,
             predictions=predictions,
             image_path=saved_image_path,
-            text_summary=updated_text_description,
+            text_summary=text_description,  # Save ORIGINAL user input, not augmented
+            tracking_summary=tracking_summary,
         )
 
         # Step 8: Build enriched disease object for frontend
@@ -845,6 +907,7 @@ class APIManager:
         predictions: Dict[str, Any],
         image_path: Optional[str],
         text_summary: Optional[str] = None,
+        tracking_summary: Optional[str] = None,
     ) -> None:
         """
         Persist a history entry following the case history schema.
@@ -857,7 +920,14 @@ class APIManager:
             "predictions": predictions,
             "image_path": image_path,
             "text_summary": text_summary or "",
+            "tracking_summary": tracking_summary or "",
         }
+        
+        # Log what we're saving for debugging
+        debug_log(f"    Saved to history[{date}]:")
+        debug_log(f"      - text_summary: {(text_summary or '')[:80]}...")
+        debug_log(f"      - tracking_summary: {(tracking_summary or '')[:80]}...")
+        debug_log(f"      - cv_analysis keys: {list(cv_analysis.keys()) if cv_analysis else 'None'}")
 
         # If this is the first entry and no name exists, derive from top prediction
         if len(dates) == 1 and "name" not in self.case_history:
@@ -955,34 +1025,64 @@ class APIManager:
         """
         Run computer vision analysis on the image.
 
-        TODO: Integrate with actual CV analysis from src/ml_workflow/
-        TODO: Handle different image input formats (PIL, numpy, file path)
-        TODO: Add proper error handling
-
         Args:
             image_path: Path to the image file
 
         Returns:
-            Dictionary containing CV analysis:
-                - area: Lesion area
-                - color_profile: Color metrics (Lab values, redness, etc.)
-                - boundary_irregularity: Shape metrics
-                - symmetry_score: Symmetry metrics
+            Dictionary containing CV analysis metrics:
+                - compactness_index: Shape metric (circularity)
+                - color_stats_lab: LAB color space statistics
+                - area_cm2: Lesion area in cm² (if coin detected)
+                - tilt_correction_factor: Correction factor for tilted coins
         """
         if self.dummy:
             debug_log("    [DUMMY MODE] Returning dummy CV analysis...")
             return {
-                "area": 8.4,
-                "color_profile": {"average_Lab": [67.2, 18.4, 9.3], "redness_index": 0.34, "texture_contrast": 0.12},
-                "boundary_irregularity": 0.23,
-                "symmetry_score": 0.78,
+                "compactness_index": 1.2,
+                "color_stats_lab": {
+                    "mean_L": 67.2,
+                    "mean_A": 18.4,
+                    "mean_B": 9.3,
+                    "std_L": 12.1,
+                    "std_A": 5.3,
+                    "std_B": 4.2,
+                },
+                "area_cm2": 8.4,
+                "tilt_correction_factor": 1.0,
             }
 
-        # TODO: REAL IMPLEMENTATION
-        debug_log("    [TODO] Running CV analysis...")
+        # Use actual CV analysis if available
+        if CV_ANALYSIS_AVAILABLE:
+            try:
+                debug_log(f"    Running CV analysis on: {image_path}")
+                cv_results = cv_run_analysis(image_path, bbox=None)
+                
+                # Extract only the metrics dict (not the images/masks)
+                metrics = cv_results.get("metrics", {})
+                
+                debug_log(f"    CV analysis completed. Metrics: {json.dumps(metrics, indent=2)}")
+                return metrics
+                
+            except Exception as e:
+                debug_log(f"    ⚠ CV analysis failed: {e}")
+                import traceback
+                debug_log(traceback.format_exc())
+                # Fall through to dummy data
+        
+        # Fallback to dummy data if CV analysis not available or failed
+        debug_log("    [FALLBACK] Using dummy CV analysis...")
         return {
-            "area": 8.4,
-            "color_profile": {"average_Lab": [67.2, 18.4, 9.3], "redness_index": 0.34, "texture_contrast": 0.12},
+            "compactness_index": 1.2,
+            "color_stats_lab": {
+                "mean_L": 67.2,
+                "mean_A": 18.4,
+                "mean_B": 9.3,
+                "std_L": 12.1,
+                "std_A": 5.3,
+                "std_B": 4.2,
+            },
+            "area_cm2": None,  # No coin detected
+            "tilt_correction_factor": None,
         }
 
     def _run_cloud_ml_model(self, embedding: List[float], text_description: str) -> Dict[str, float]:
@@ -1046,12 +1146,19 @@ class APIManager:
         assembles the final response, and returns (response_dict, timestamp).
         """
 
-        debug_log(" Calling LLM explain API (streaming)...")
+        debug_log("Calling LLM explain API (streaming)...")
 
         payload = {
             "predictions": predictions,
             "metadata": metadata,
         }
+
+        # Log the full prompt/payload being sent to the LLM
+        debug_log("\n" + "="*80)
+        debug_log("📤 FULL PROMPT SENT TO LLM EXPLAIN API:")
+        debug_log("="*80)
+        debug_log(json.dumps(payload, indent=2, default=str))
+        debug_log("="*80 + "\n")
 
         try:
             full_answer_parts: List[str] = []
@@ -1141,7 +1248,14 @@ class APIManager:
             "conversation_history": history_questions,
         }
 
-        debug_log(" Calling LLM followup API (streaming only)...")
+        # Log the full prompt/payload being sent to the LLM
+        debug_log("\n" + "="*80)
+        debug_log("📤 FULL PROMPT SENT TO LLM FOLLOWUP API:")
+        debug_log("="*80)
+        debug_log(json.dumps(payload, indent=2, default=str))
+        debug_log("="*80 + "\n")
+
+        debug_log("Calling LLM followup API (streaming only)...")
 
         try:
             full_answer_parts: List[str] = []
@@ -1205,6 +1319,109 @@ class APIManager:
         except requests.exceptions.RequestException as e:
             debug_log(f"Error calling LLM API (streaming): {e}")
             raise
+
+    def _get_time_tracking_summary(
+        self,
+        predictions: Dict[str, float],
+        text_description: str,
+        cv_analysis: Dict[str, Any],
+    ) -> str:
+        """
+        Generate a brief tracking summary from CV analysis and predictions.
+        
+        Args:
+            predictions: Disease predictions from ML model
+            text_description: User's text description
+            cv_analysis: Current CV metrics
+            
+        Returns:
+            String summary (3-4 sentences)
+        """
+        if self.dummy:
+            debug_log("    [DUMMY MODE] Returning dummy tracking summary...")
+            return "The affected area measures roughly 2.5 cm² with moderate color variation. The shape appears fairly regular. These measurements align with the suspected condition based on the image."
+        
+        debug_log("Calling LLM time tracking summary API...")
+        
+        # Build CV analysis history from case history
+        cv_analysis_history = {}
+        for date, entry in self.case_history.get("dates", {}).items():
+            if "cv_analysis" in entry:
+                cv_analysis_history[date] = entry["cv_analysis"]
+        
+        # Add current analysis
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        cv_analysis_history[current_date] = cv_analysis
+        
+        payload = {
+            "predictions": predictions,
+            "user_demographics": self.demographics,
+            "user_input": text_description,
+            "cv_analysis_history": cv_analysis_history,
+        }
+        
+        # Log the full payload
+        debug_log("\n" + "="*80)
+        debug_log("📤 TIME TRACKING SUMMARY REQUEST:")
+        debug_log("="*80)
+        debug_log(json.dumps(payload, indent=2, default=str))
+        debug_log("="*80 + "\n")
+        
+        try:
+            # Call the time tracking summary endpoint
+            time_tracking_url = LLM_TIME_TRACKING_URL
+
+            response = requests.post(
+                time_tracking_url,
+                json=payload,
+                timeout=400,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            summary = result.get("summary", "") or ""
+
+            # Guard against empty/missing summaries – synthesize a simple one from CV metrics
+            if not summary.strip():
+                debug_log("⚠ LLM returned empty tracking summary; generating fallback from CV metrics")
+                area = cv_analysis.get("area_cm2") or cv_analysis.get("area_cm2_uncorrected")
+                compactness = cv_analysis.get("compactness_index")
+                color = (cv_analysis.get("color_stats_lab") or {})
+                mean_L = color.get("mean_L")
+                mean_A = color.get("mean_A")
+
+                sentences = []
+                if area:
+                    sentences.append(f"The affected area measures roughly {area:.1f} cm² based on the latest image.")
+                if mean_A is not None:
+                    sentences.append(
+                        "The redness level looks moderate and fairly consistent across the lesion."
+                        if mean_A < 25
+                        else "The redness level appears relatively high and should be monitored over time."
+                    )
+                if compactness:
+                    sentences.append(
+                        "The shape is reasonably regular for this type of spot."
+                        if compactness < 3.0
+                        else "The shape is a bit irregular, so changes in the edges should be watched."
+                    )
+                if not sentences:
+                    sentences.append(
+                        "We have recorded this image for tracking. Future images will help show whether the spot is getting larger, smaller, or staying stable."
+                    )
+
+                summary = " ".join(sentences[:3])
+
+            debug_log(f"✅ Time tracking summary received (or synthesized): {summary[:100]}...")
+            return summary
+
+        except requests.exceptions.RequestException as e:
+            debug_log(f"⚠ Error calling time tracking summary API: {e}")
+            # Return a generic fallback
+            return (
+                "We have recorded this image for tracking, but were unable to generate a detailed summary right now. "
+                "Future images will help show whether the spot is changing over time."
+            )
 
     def chat_message(
         self,

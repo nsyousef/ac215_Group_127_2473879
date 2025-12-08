@@ -1080,6 +1080,19 @@ class Trainer:
 
     def test(self):
         """Test loop"""
+        # Handle case where test_loader is None
+        if self.test_loader is None:
+            logger.warning("No test loader available (test_size=0.0). Skipping test evaluation.")
+            return {
+                "test_loss": None,
+                "test_accuracy": None,
+                "correct": 0,
+                "total": 0,
+                "predictions": [],
+                "targets": [],
+                "macro_f1": None,
+            }
+        
         logger.info("Starting test evaluation...")
 
         self.vision_model.eval()

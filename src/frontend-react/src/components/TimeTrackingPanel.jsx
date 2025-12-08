@@ -59,6 +59,7 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
                       timestamp: sortTimestamp, // Numeric timestamp for sorting
                       image: entry.image_path || '',
                       note: entry.text_summary || '', // Display text_summary as notes
+                      trackingSummary: entry.tracking_summary || '', // Tracking metrics summary
                       predictions: entry.predictions || {},
                       cv_analysis: entry.cv_analysis || {}
                     };
@@ -177,17 +178,45 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
             <Typography variant="body2" sx={{ color: '#999' }}>No tracking images for this condition</Typography>
           )}
 
-          {entries.map((entry) => (
-            <Box key={entry.id} sx={{ bgcolor: '#fff', borderRadius: 1, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <Box sx={{ width: '100%', height: 180, overflow: 'hidden' }}>
-                <img src={entry.image} alt={entry.id} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />
+          {entries.map((entry) => {
+            // For older cases, some entries have demographics text (\"The age is ...\")
+            // stored in text_summary. We never want to show that to the user here.
+            const isDemographicsNote =
+              typeof entry.note === 'string' &&
+              entry.note.includes('The age is ') &&
+              entry.note.includes('Sex is ') &&
+              entry.note.includes('Race is ') &&
+              entry.note.includes('Country is ') &&
+              entry.note.includes('body location of the affected area');
+
+            const showFallbackNote = !entry.trackingSummary && entry.note && !isDemographicsNote;
+
+            return (
+              <Box
+                key={entry.id}
+                sx={{ bgcolor: '#fff', borderRadius: 1, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+              >
+                <Box sx={{ width: '100%', height: 180, overflow: 'hidden' }}>
+                  <img src={entry.image} alt={entry.id} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />
+                </Box>
+                <CardContent>
+                  <Typography variant="caption" sx={{ color: '#666' }}>
+                    {new Date(entry.date).toDateString()}
+                  </Typography>
+                  {entry.trackingSummary && (
+                    <Typography variant="body2" sx={{ mt: 1.5, color: '#555', lineHeight: 1.6 }}>
+                      {entry.trackingSummary}
+                    </Typography>
+                  )}
+                  {showFallbackNote && (
+                    <Typography variant="body2" sx={{ mt: 1, color: '#999', fontStyle: 'italic' }}>
+                      {entry.note || 'No analysis available for this entry.'}
+                    </Typography>
+                  )}
+                </CardContent>
               </Box>
-              <CardContent>
-                <Typography variant="caption" sx={{ color: '#666' }}>{new Date(entry.date).toDateString()}</Typography>
-                <Typography variant="body2" sx={{ mt: 1 }}>{entry.note}</Typography>
-              </CardContent>
-            </Box>
-          ))}
+            );
+          })}
         </Stack>
       </CardContent>
 

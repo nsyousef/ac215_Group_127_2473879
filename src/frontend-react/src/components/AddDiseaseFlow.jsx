@@ -25,6 +25,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import { BODY_PART_DEFAULTS } from '@/lib/constants';
 import BodyMapPicker, { getBodyPartFromCoordinates } from '@/components/BodyMapPicker';
+import ImageCropper from '@/components/ImageCropper';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import mlClient from '@/services/mlClient';
 
@@ -65,7 +66,11 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
   const [mapError, setMapError] = useState(null); // Error message if invalid selection
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [croppedPreview, setCroppedPreview] = useState(null); // Cropped image data URL
+  const [cropData, setCropData] = useState(null); // Crop coordinates { x, y, width, height }
+  const [croppedFile, setCroppedFile] = useState(null); // Cropped file blob
   const [note, setNote] = useState('');
+  const [hasCoin, setHasCoin] = useState(false); // Checkbox: image contains a coin (default: false)
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState(null);
   const firstChunkReceivedRef = useRef(false);
@@ -87,7 +92,11 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     setBodyPart('');
     setFile(null);
     setPreview(null);
+    setCroppedPreview(null);
+    setCropData(null);
+    setCroppedFile(null);
     setNote('');
+    setHasCoin(false); // Reset checkbox to default (unchecked)
     setAnalyzing(false);
     setError(null);
     firstChunkReceivedRef.current = false;
@@ -127,8 +136,25 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
     }
   };
 
+  const handleCropComplete = (croppedDataUrl, cropCoords, blob) => {
+    console.log('Crop completed:', { cropCoords });
+    setCroppedPreview(croppedDataUrl);
+    setCropData(cropCoords);
+    
+    // Convert blob to File if available, otherwise use original file
+    if (blob) {
+      const croppedFile = new File([blob], file.name, { type: 'image/jpeg' });
+      setCroppedFile(croppedFile);
+    } else {
+      setCroppedFile(file); // User skipped cropping
+    }
+    
+    // Move to next step (notes)
+    setStep(4);
+  };
+
   const analyzeImage = async () => {
-    console.log('analyzeImage called', { file, bodyPart, note, mapPos });
+    console.log('analyzeImage called', { file, croppedFile, bodyPart, note, mapPos, cropData, hasCoin });
     setAnalyzing(true);
     setError(null);
 
@@ -152,14 +178,18 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
       const diseaseId = `${timestamp}`;       // Disease ID (no prefix, just timestamp)
       const caseId = `case_${timestamp}`;     // Folder name for Python storage
 
+      // Use cropped file if available, otherwise original file
+      const fileToUpload = croppedFile || file;
+      const displayImage = croppedPreview || preview;
+
       // Save uploaded file to temp location for Python to access via IPC
       let imagePath;
       if (window.electronAPI && window.electronAPI.saveUploadedImage) {
-        const buffer = await file.arrayBuffer();
+        const buffer = await fileToUpload.arrayBuffer();
         const uint8Array = new Uint8Array(buffer);
         imagePath = await window.electronAPI.saveUploadedImage(
           caseId,
-          file.name,
+          fileToUpload.name || file.name,
           uint8Array,
         );
       } else {
@@ -211,7 +241,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             const tempDisease = {
               id: diseaseId,
               name: 'Analyzing...', // Placeholder, will be updated
-              image: preview,
+              image: displayImage,
               bodyPart: bodyPart || 'Unknown',
               mapPosition: finalMapPos ? {
                 leftPct: finalMapPos.leftPct,
@@ -232,17 +262,23 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
               predictionTextUnsubscribe();
             }
 
-            // Close the dialog immediately so navigation can take effect
-            console.log('[AddDiseaseFlow] Closing dialog before navigation');
-            setAnalyzing(false);
-            onClose && onClose();
+            // Add disease to context BEFORE navigation so ChatPanel can find it
+            console.log('[AddDiseaseFlow] Adding tempDisease to context');
+            addDisease(tempDisease).then(() => {
+              console.log('[AddDiseaseFlow] Disease added to context, now navigating');
+              
+              // Close the dialog immediately so navigation can take effect
+              console.log('[AddDiseaseFlow] Closing dialog before navigation');
+              setAnalyzing(false);
+              onClose && onClose();
 
-            // Navigate to results - streaming will start shortly after this
-            if (onStartAnalysis) {
-              console.log('[AddDiseaseFlow] Calling onStartAnalysis');
-              onStartAnalysis(tempDisease);
-              console.log('[AddDiseaseFlow] onStartAnalysis completed');
-            }
+              // Navigate to results - streaming will start shortly after this
+              if (onStartAnalysis) {
+                console.log('[AddDiseaseFlow] Calling onStartAnalysis');
+                onStartAnalysis(tempDisease);
+                console.log('[AddDiseaseFlow] onStartAnalysis completed');
+              }
+            });
           }
         });
       }
@@ -264,7 +300,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
           const tempDisease = {
             id: diseaseId,
             name: 'Analyzing...',
-            image: preview,
+            image: displayImage,
             bodyPart: bodyPart || 'Unknown',
             mapPosition: finalMapPos ? {
               leftPct: finalMapPos.leftPct,
@@ -284,13 +320,16 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             predictionTextUnsubscribe();
           }
 
-          // Close the dialog immediately so navigation can take effect
-          setAnalyzing(false);
-          onClose && onClose();
+          // Add disease to context BEFORE navigation (fallback timeout case)
+          addDisease(tempDisease).then(() => {
+            // Close the dialog immediately so navigation can take effect
+            setAnalyzing(false);
+            onClose && onClose();
 
-          if (onStartAnalysis) {
-            onStartAnalysis(tempDisease);
-          }
+            if (onStartAnalysis) {
+              onStartAnalysis(tempDisease);
+            }
+          });
         }
       }, 30000); // 30 second timeout (vision encoder + cloud API can be slow)
 
@@ -301,7 +340,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         imagePath,      // file path
         note || '',     // text description
         caseId,
-        {},             // metadata
+        { hasCoin },    // Pass hasCoin flag in metadata
       ).then((results) => {
         // Clear fallback timeout since prediction completed
         clearTimeout(fallbackTimeout);
@@ -335,7 +374,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         const newDisease = {
           id: diseaseId,
           name: formattedName,
-          image: preview,
+          image: displayImage,
           description: enrichedDisease.description || '',
           bodyPart: enrichedDisease.bodyPart || bodyPart || 'Unknown',
           mapPosition: enrichedDisease.mapPosition || null,
@@ -345,12 +384,12 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
           predictionText: enrichedDisease.predictionText || '',
           timelineData: enrichedDisease.timelineData || [],
           conversationHistory: enrichedDisease.conversationHistory || [],
+          caseId: caseId,
         };
 
-        // Update disease list in background
+        // Update the disease in context (it was already added as tempDisease)
         addDisease(newDisease).then(() => {
-          // Update the selected condition with full data (it was already set to tempDisease)
-          // The results view will re-render with the updated data
+          // Notify parent that analysis is complete with full data
           if (onSaved) onSaved(newDisease);
         });
 
@@ -553,6 +592,15 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
           </Box>
         )}
 
+        {/* Step 3: Crop image */}
+        {step === 3 && preview && (
+          <ImageCropper
+            imageSrc={preview}
+            onCropComplete={handleCropComplete}
+            onCancel={() => setStep(2)}
+          />
+        )}
+
 
         {/* Step 4: Notes */}
         {step === 4 && (
@@ -560,6 +608,21 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             <Typography variant="subtitle1" sx={{ mb: 1 }}>Optional Notes</Typography>
             <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>Add any symptoms or context (optional, max 1000 characters).</Typography>
             <TextField value={note} onChange={(e) => setNote(e.target.value.slice(0, 1000))} placeholder="Describe symptoms, duration, etc." multiline minRows={4} fullWidth />
+            
+            {/* Checkbox for coin presence */}
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+              <input
+                type="checkbox"
+                id="has-coin-checkbox"
+                checked={hasCoin}
+                onChange={(e) => setHasCoin(e.target.checked)}
+                style={{ marginRight: 8 }}
+              />
+              <label htmlFor="has-coin-checkbox" style={{ cursor: 'pointer', fontSize: '0.875rem' }}>
+                This image contains a coin (for size reference)
+              </label>
+            </Box>
+
             {error && (
               <Typography variant="body2" sx={{ color: 'error.main', mt: 2 }}>
                 {error}
@@ -620,14 +683,16 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             <Button variant="text" onClick={() => setStep(1)}>Back</Button>
             <Box>
               {canCancel && <Button variant="text" onClick={close}>Cancel</Button>}
-              <Button variant="contained" onClick={() => setStep(4)} disabled={!preview} sx={{ ml: 1 }}>Continue</Button>
+              <Button variant="contained" onClick={() => setStep(3)} disabled={!preview} sx={{ ml: 1 }}>Next</Button>
             </Box>
           </Box>
         )}
 
+        {/* Step 3: Cropping - handled by ImageCropper component with its own buttons */}
+
         {step === 4 && (
           <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: 'space-between' }}>
-            <Button variant="text" onClick={() => setStep(2)}>Back</Button>
+            <Button variant="text" onClick={() => setStep(3)}>Back</Button>
             <Box>
               {canCancel && <Button variant="text" onClick={close}>Cancel</Button>}
               <Button

@@ -40,10 +40,12 @@ class LLM:
         max_new_tokens: int = 700,
         base_prompt: str = "",
         question_prompt: str = "",
+        time_tracking_prompt: str = "",
     ):
         self.max_new_tokens = max_new_tokens
         self.base_prompt = " ".join(base_prompt.split()) if base_prompt else ""
         self.question_prompt = " ".join(question_prompt.split()) if question_prompt else ""
+        self.time_tracking_prompt = " ".join(time_tracking_prompt.split()) if time_tracking_prompt else ""
         self.model_name = model_name
 
         print(f"Loading model: {model_name}")
@@ -87,28 +89,19 @@ class LLM:
         if "user_input" in metadata:
             prompt += f"User input: {metadata['user_input']}\n"
 
-        if "cv_analysis" in metadata:
-            cv = metadata["cv_analysis"]
-            area = str(cv.get("area", "N/A"))
-            color_profile = cv.get("color_profile", {})
-            parts = [f"area={area}"]
-            if color_profile:
-                redness = color_profile.get("redness_index", "N/A")
-                parts.append(f"redness={redness}")
-            prompt += f"Latest CV Analysis: {', '.join(parts)}.\n"
+        # New: include high-level CV time-tracking summary text instead of raw metrics
+        cv_tracking_summary = metadata.get("cv_tracking_summary")
+        if cv_tracking_summary:
+            prompt += f"\nTime tracking CV summary:\n{cv_tracking_summary}\n"
 
         if "history" in metadata and metadata["history"]:
             prompt += "\nHistorical Data:\n"
             for date, data in sorted(metadata["history"].items()):
                 prompt += f"Date: {date}.\n"
-                if "cv_analysis" in data:
-                    cv = data["cv_analysis"]
-                    area = str(cv.get("area", "N/A"))
-                    color_profile = cv.get("color_profile", {})
-                    redness = color_profile.get("redness_index", "N/A") if color_profile else "N/A"
-                    prompt += f"  CV Analysis: area={area}, redness={redness}.\n"
                 if "text_summary" in data:
-                    prompt += f"  Text Summary: {data['text_summary']}.\n"
+                    prompt += f"  User note: {data['text_summary']}.\n"
+                if "tracking_summary" in data and data["tracking_summary"]:
+                    prompt += f"  Tracking summary: {data['tracking_summary']}.\n"
 
         return prompt
 
@@ -305,3 +298,65 @@ class LLM:
         for delta in self.generate_stream(prompt):
             if delta:
                 yield {"delta": delta}
+
+    def time_tracking_summary(
+        self,
+        predictions: dict,
+        user_demographics: dict,
+        user_input: str,
+        cv_analysis_history: dict,
+        temperature: float = 0.3
+    ) -> dict:
+        """
+        Generate a brief summary of time tracking data changes.
+        
+        Args:
+            predictions: Top disease predictions {"disease": confidence, ...}
+            user_demographics: User demographic information
+            user_input: User's text description of the condition
+            cv_analysis_history: Date-keyed CV metrics {"2024-12-01": {...}, ...}
+            temperature: Generation temperature
+            
+        Returns:
+            {"summary": "3-4 sentence summary text"}
+        """
+        # Build prompt for time tracking
+        top_pred = max(predictions.items(), key=lambda x: x[1])[0] if predictions else "Unknown"
+        pred_str = f"{top_pred} ({predictions.get(top_pred, 0)*100:.1f}%)"
+        
+        prompt = f"{self.time_tracking_prompt}\n\nINPUT DATA:\n"
+        prompt += f"Predicted condition: {pred_str}\n"
+        
+        if user_input:
+            prompt += f"User description: {user_input}\n"
+        
+        if user_demographics:
+            demo_parts = []
+            if "age" in user_demographics:
+                demo_parts.append(f"age {user_demographics['age']}")
+            if "skin_type" in user_demographics:
+                demo_parts.append(f"skin type {user_demographics['skin_type']}")
+            if demo_parts:
+                prompt += f"Demographics: {', '.join(demo_parts)}\n"
+        
+        prompt += "\nTracking Data:\n"
+        sorted_dates = sorted(cv_analysis_history.keys())
+        
+        for i, date in enumerate(sorted_dates):
+            metrics = cv_analysis_history[date]
+            prompt += f"\n{'First entry' if i == 0 else f'Entry {i+1}'} ({date}):\n"
+            
+            if "area_cm2" in metrics and metrics["area_cm2"] is not None:
+                prompt += f"  - Area: {metrics['area_cm2']:.2f} cm²\n"
+            
+            if "compactness_index" in metrics:
+                prompt += f"  - Shape compactness: {metrics['compactness_index']:.2f}\n"
+            
+            if "color_stats_lab" in metrics:
+                color = metrics["color_stats_lab"]
+                prompt += f"  - Color (LAB): L={color.get('mean_L', 0):.1f}, A={color.get('mean_A', 0):.1f}, B={color.get('mean_B', 0):.1f}\n"
+        
+        # Generate summary
+        summary_text = self.generate(prompt, temperature)
+        
+        return {"summary": summary_text}
