@@ -3,6 +3,7 @@ Vision + text embedding classifier for inference.
 Loads checkpoint, computes text embeddings, and takes vision/text embeddings to return skin condition predictions.
 """
 
+import os
 import torch
 from typing import Union, List, Dict
 import numpy as np
@@ -30,6 +31,20 @@ class InferenceClassifier:
         # If no checkpoint provided, initialize with default baseline configuration
         if checkpoint_path is None:
             logger.info("No checkpoint provided, initializing baseline classifier with random weights")
+            self._init_baseline()
+            return
+
+        # Validate checkpoint exists
+        if not checkpoint_path or checkpoint_path.lower() in ["none", "null", ""]:
+            logger.info("Checkpoint path is empty/null, initializing baseline classifier with random weights")
+            self._init_baseline()
+            return
+
+        # Check if file exists
+        if not os.path.exists(checkpoint_path):
+            logger.error(f"Checkpoint file not found at: {checkpoint_path}")
+            logger.error("Falling back to baseline initialization (predictions will be unreliable)")
+            logger.error("Make sure MODEL_CHECKPOINT_PATH is set correctly and model download completed")
             self._init_baseline()
             return
 

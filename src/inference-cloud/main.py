@@ -17,23 +17,34 @@ async def lifespan(app: FastAPI):
     """Load model on startup, cleanup on shutdown."""
     global model
 
-    checkpoint_path = os.getenv("MODEL_CHECKPOINT_PATH", "/models/test_best.pth")
+    checkpoint_path = os.getenv("MODEL_CHECKPOINT_PATH", "/tmp/models/test_best.pth")
     device = os.getenv("DEVICE", "cpu")
+    gcs_path = os.getenv("MODEL_GCS_PATH", "")
 
-    # Handle special case for testing
-    if checkpoint_path.lower() in ["none", "null", ""]:
-        checkpoint_path = None
-        print("No checkpoint specified - initializing baseline model with random weights")
-    else:
-        print(f"Loading model from {checkpoint_path}...")
+    # Log startup info
+    print("=" * 70)
+    print("🚀 INFERENCE SERVICE STARTUP")
+    print("=" * 70)
+    print(f"  Device: {device}")
+    print(f"  Checkpoint path: {checkpoint_path}")
+    if gcs_path:
+        print(f"  GCS source: {gcs_path}")
+    print("=" * 70)
 
+    # Initialize model (will fall back to baseline if checkpoint not found)
     model = InferenceClassifier(checkpoint_path=checkpoint_path, device=device)
-    print("Model loaded successfully!")
+
+    if model is not None:
+        print("✓ Model loaded successfully!")
+    else:
+        print("⚠️  Warning: Model loaded in baseline mode (random initialization)")
+
+    print("=" * 70)
 
     yield  # App runs here
 
     # Cleanup (if needed)
-    print("Shutting down...")
+    print("Shutting down inference service...")
 
 
 app = FastAPI(title="Skin Condition Classifier API", lifespan=lifespan)

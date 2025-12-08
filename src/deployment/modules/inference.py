@@ -51,13 +51,16 @@ class InferenceService(pulumi.ComponentResource):
         # Build and push Docker image to GCR
         image_name = f"gcr.io/{project_id}/inference-cloud:{environment}"
 
-        # Use the src directory as context so Dockerfile can access both inference-cloud and ml_workflow
-        # The Dockerfile expects to copy from ac215_Group_127_2473879/src/...
+        # Use the src directory as context (mounted to /ac215_Group_127_2473879/src in deployment container)
+        # Dockerfile will copy from:
+        #   - ml_workflow/ (local path in src)
+        #   - . (all of inference-cloud)
         self.image = docker.Image(
             f"{name}-image",
             build=docker.DockerBuildArgs(
                 context="/ac215_Group_127_2473879/src",
-                dockerfile="inference-cloud/Dockerfile",  # Relative to context (src directory)
+                # Use absolute path to avoid relative resolution issues inside Pulumi
+                dockerfile="/ac215_Group_127_2473879/src/inference-cloud/Dockerfile",
                 platform="linux/amd64",  # Cloud Run requirement
             ),
             image_name=image_name,
@@ -91,7 +94,10 @@ class InferenceService(pulumi.ComponentResource):
                         envs=[
                             gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(name="PORT", value="8080"),
                             gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
-                                name="MODEL_CHECKPOINT_PATH", value="/app/models/test_best.pth"
+                                name="MODEL_CHECKPOINT_PATH", value="/tmp/models/test_best.pth"
+                            ),
+                            gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                                name="MODEL_GCS_PATH", value="gs://apcomp215-datasets/test_best.pth"
                             ),
                             gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(name="DEVICE", value="cpu"),
                             gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(name="ENVIRONMENT", value=environment),
@@ -102,12 +108,13 @@ class InferenceService(pulumi.ComponentResource):
                             initial_delay_seconds=10,
                             period_seconds=30,
                         ),
-                        # Startup probe (for slow model loading)
+                        # Startup probe (for model download and loading)
+                        # Model download from GCS can take time, so we allow 120 seconds (24 checks * 5 sec)
                         startup_probe=gcp.cloudrunv2.ServiceTemplateContainerStartupProbeArgs(
                             http_get=gcp.cloudrunv2.ServiceTemplateContainerStartupProbeHttpGetArgs(path="/health"),
                             initial_delay_seconds=0,
                             period_seconds=5,
-                            failure_threshold=12,  # 60 seconds total
+                            failure_threshold=24,  # 120 seconds total for model download
                         ),
                     )
                 ],

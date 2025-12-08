@@ -19,25 +19,26 @@ RUN set -ex; \
 USER app
 WORKDIR /app
 
-# Copy ml_workflow first (from parent context)
-COPY --chown=app:app ac215_Group_127_2473879/src/ml_workflow/ ./ml_workflow/
+# Copy ml_workflow package (for path dependency resolution in pyproject.toml)
+COPY --chown=app:app ml_workflow/ ./ml_workflow/
 
-# Copy inference-cloud contents (includes docker-entrypoint.sh and tests/)
-COPY --chown=app:app ac215_Group_127_2473879/src/inference-cloud/ ./
+# Copy inference-cloud contents (includes docker-entrypoint.sh, pyproject.toml, and source code)
+COPY --chown=app:app . ./
 
-# Install dependencies
+# Install dependencies (uv will resolve ml_workflow as local path dependency)
 RUN uv sync
 
 # Set environment variables
 ENV PORT=8080
-ENV MODEL_CHECKPOINT_PATH=/app/models/test_best.pth
+ENV MODEL_CHECKPOINT_PATH=/tmp/models/test_best.pth
+ENV MODEL_GCS_PATH=gs://apcomp215-datasets/test_best.pth
 ENV DEVICE=cpu
 ENV DEV=0
 
 # Expose port
 EXPOSE 8080
 
-# Make entrypoint executable (already copied above)
+# Make entrypoint executable
 RUN chmod +x /app/docker-entrypoint.sh
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
