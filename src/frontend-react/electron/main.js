@@ -418,13 +418,14 @@ setInterval(() => {
 }, 60 * 1000);
 
 // IPC handlers to call Python
-ipcMain.handle('ml:getInitialPrediction', async (event, { caseId, imagePath, textDescription, userTimestamp }) => {
+ipcMain.handle('ml:getInitialPrediction', async (event, { caseId, imagePath, textDescription, userTimestamp, hasCoin = false }) => {
   if (!caseId) throw new Error('caseId required');
   if (!imagePath) throw new Error('imagePath required');
   return await pyRequest(caseId, 'predict', {
     image_path: imagePath,
     text_description: textDescription,
-    user_timestamp: userTimestamp
+    user_timestamp: userTimestamp,
+    has_coin: hasCoin,
   }, (chunk) => {
     // Emit chunk event to renderer
     event.sender.send('ml:streamChunk', { chunk });
@@ -435,7 +436,7 @@ const activeInitialStreams = new Map();
 
 ipcMain.on(
   'ml:getInitialPredictionStream:start',
-  async (event, { streamId, caseId, imagePath, textDescription, userTimestamp }) => {
+  async (event, { streamId, caseId, imagePath, textDescription, userTimestamp, hasCoin = false }) => {
     if (!caseId) {
       event.sender.send('ml:getInitialPredictionStream:chunk', {
         streamId,
@@ -467,6 +468,7 @@ ipcMain.on(
           image_path: imagePath,
           text_description: textDescription,
           user_timestamp: userTimestamp,
+          has_coin: hasCoin,
         },
         (chunk) => {
           // stream each chunk out as it arrives
@@ -627,7 +629,7 @@ ipcMain.handle('data:saveCaseHistory', async (event, caseId, caseHistory) => {
   return await pyRequest('static', 'save_case_history', { case_id: caseId, case_history: caseHistory });
 });
 
-ipcMain.handle('data:addTimelineEntry', async (event, caseId, imagePath, note, date) => {
+ipcMain.handle('data:addTimelineEntry', async (event, caseId, imagePath, note, date, hasCoin = false) => {
   if (!caseId) throw new Error('caseId required');
   if (!imagePath) throw new Error('imagePath required');
   if (!date) throw new Error('date required');
@@ -635,7 +637,8 @@ ipcMain.handle('data:addTimelineEntry', async (event, caseId, imagePath, note, d
     case_id: caseId,
     image_path: imagePath,
     note: note || '',
-    date: date
+    date: date,
+    has_coin: hasCoin,
   });
 });
 

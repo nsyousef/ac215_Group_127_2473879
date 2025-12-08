@@ -114,6 +114,42 @@ class CNNModel(nn.Module):
 
         return model
 
+    def _get_all_individual_layers(self, module: nn.Module, layer_types: list = None) -> list:
+        """
+        Recursively extract individual layers from a module.
+        
+        For ResNet models, the "101" refers to Conv2d layers specifically.
+        This function can filter by layer type to match the naming convention.
+        
+        Args:
+            module: The module to extract layers from
+            layer_types: List of layer types to include (e.g., [nn.Conv2d]).
+                        If None, includes all layers with parameters.
+        
+        Returns:
+            List of all individual layers matching the criteria in order
+        """
+        layers = []
+        
+        # If this module has parameters and no children, it's a leaf layer
+        children = list(module.children())
+        if len(children) == 0:
+            # Leaf node - check if it matches our criteria
+            params = list(module.parameters())
+            if len(params) > 0:
+                # If layer_types specified, check if this layer matches
+                if layer_types is None:
+                    layers.append(module)
+                elif any(isinstance(module, lt) for lt in layer_types):
+                    layers.append(module)
+            return layers
+        
+        # Recursively process children
+        for child in children:
+            layers.extend(self._get_all_individual_layers(child, layer_types))
+        
+        return layers
+
     def _freeze_layers(self, warmup_mode: bool = False):
         """
         Freeze layers in the model based on unfreeze_layers parameter
@@ -149,18 +185,97 @@ class CNNModel(nn.Module):
             # Keep all layers frozen
             return
 
-        # Get direct children (layers)
-        layers = list(self.model.children())
-        total_layers = len(layers)
+        # Get all layers
+        # For ResNet models, get all individual layers (to match the 101 layer count)
+        # The "101" in ResNet101 refers to Conv2d layers specifically
+        # For other models, use top-level modules
+        conv_layers = []  # Initialize for all models
+        if self.model_name in ['resnet50', 'resnet101']:
+            # For ResNet, count only Conv2d layers to match the naming convention (101 layers)
+            # But we still need to unfreeze BatchNorm2d layers that go with those conv layers
+            # So we get ALL layers with parameters, but count only Conv2d for the total
+            all_layers = self._get_all_individual_layers(self.model)
+            conv_layers = self._get_all_individual_layers(self.model, layer_types=[nn.Conv2d])
+            total_layers = len(conv_layers)  # Use Conv2d count to match "101" naming
+            
+            # Log layer structure for debugging
+            top_level_modules = list(self.model.children())
+            top_level_count = len(top_level_modules)
+            logger.info(
+                f"ResNet structure: {top_level_count} top-level modules -> {len(all_layers)} total parameterized layers -> {total_layers} Conv2d layers"
+            )
+            
+            # Log some statistics about layer types
+            layer_types = {}
+            for layer in all_layers:
+                layer_type = type(layer).__name__
+                layer_types[layer_type] = layer_types.get(layer_type, 0) + 1
+            
+            logger.info(f"Layer type distribution: {layer_types}")
+            logger.info(f"Conv2d layers (for unfreezing): {total_layers}")
+            
+            # Log what the top-level modules are (for reference)
+            module_names = []
+            for i, module in enumerate(top_level_modules):
+                if isinstance(module, nn.Sequential) and len(list(module.children())) > 0:
+                    children = list(module.children())
+                    if any('Bottleneck' in str(type(child)) or 'BasicBlock' in str(type(child)) for child in children):
+                        # This is a ResNet layer (layer1-4)
+                        layer_num = i - 3  # Adjust: indices 4,5,6,7 -> layer1,2,3,4
+                        module_names.append(f"layer{layer_num} ({len(children)} blocks)")
+                    else:
+                        module_names.append(f"sequential_{i}")
+                else:
+                    # Initial layers: conv1, bn1, relu, maxpool
+                    if i == 0:
+                        module_names.append("conv1")
+                    elif i == 1:
+                        module_names.append("bn1")
+                    elif i == 2:
+                        module_names.append("relu")
+                    elif i == 3:
+                        module_names.append("maxpool")
+                    else:
+                        module_names.append(f"module_{i}")
+            logger.info(f"Top-level modules: {module_names}")
+        else:
+            # For other models, use top-level modules
+            all_layers = list(self.model.children())
+            total_layers = len(all_layers)
 
         # Determine which layers to unfreeze
-        if self.unfreeze_layers > total_layers:
-            logger.warning(
-                f"unfreeze_layers ({self.unfreeze_layers}) > total layers ({total_layers}). Unfreezing all layers."
-            )
-            layers_to_unfreeze = layers
+        if self.model_name in ['resnet50', 'resnet101']:
+            # For ResNet, unfreeze based on Conv2d layer count
+            # But we need to unfreeze the Conv2d layers AND their associated BatchNorm2d layers
+            if self.unfreeze_layers > total_layers:
+                logger.warning(
+                    f"unfreeze_layers ({self.unfreeze_layers}) > Conv2d layers ({total_layers}). Unfreezing all layers."
+                )
+                layers_to_unfreeze = all_layers
+            else:
+                # Get the last N Conv2d layers
+                conv_layers_to_unfreeze = conv_layers[-self.unfreeze_layers:]
+                
+                # Find the position of the first Conv2d we want to unfreeze in all_layers
+                first_conv_to_unfreeze = conv_layers_to_unfreeze[0]
+                first_conv_index = all_layers.index(first_conv_to_unfreeze)
+                
+                # Unfreeze from that position onwards (this includes Conv2d and their BatchNorm2d)
+                layers_to_unfreeze = all_layers[first_conv_index:]
+                
+                logger.info(
+                    f"Unfreezing {self.unfreeze_layers} Conv2d layers (starting from index {first_conv_index} in all_layers, "
+                    f"which includes {len(layers_to_unfreeze)} total layers with BatchNorm2d)"
+                )
         else:
-            layers_to_unfreeze = layers[-self.unfreeze_layers :]
+            # For other models, use simple slicing
+            if self.unfreeze_layers > total_layers:
+                logger.warning(
+                    f"unfreeze_layers ({self.unfreeze_layers}) > total layers ({total_layers}). Unfreezing all layers."
+                )
+                layers_to_unfreeze = all_layers
+            else:
+                layers_to_unfreeze = all_layers[-self.unfreeze_layers :]
 
         # Unfreeze the specified layers
         for layer in layers_to_unfreeze:
@@ -168,8 +283,17 @@ class CNNModel(nn.Module):
                 param.requires_grad = True
 
         # Log freeze status
-        trainable_layers = sum(1 for layer in layers if any(p.requires_grad for p in layer.parameters()))
-        logger.info(f"Vision model: {total_layers} total layers, {trainable_layers} trainable layers")
+        trainable_layers = sum(1 for layer in all_layers if any(p.requires_grad for p in layer.parameters()))
+        
+        if self.model_name in ['resnet50', 'resnet101']:
+            trainable_conv_layers = sum(1 for layer in conv_layers if any(p.requires_grad for p in layer.parameters()))
+            logger.info(
+                f"Vision model: {total_layers} Conv2d layers (matching ResNet naming), "
+                f"{trainable_conv_layers} trainable Conv2d layers, "
+                f"{trainable_layers} total trainable layers (including BatchNorm2d)"
+            )
+        else:
+            logger.info(f"Vision model: {total_layers} total layers/blocks, {trainable_layers} trainable layers/blocks")
 
     def _get_embedding_dim(self) -> int:
         """Get the number of output features from the model"""

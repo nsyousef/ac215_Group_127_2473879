@@ -112,29 +112,59 @@ def handle_message(msg):
             image_path = data.get("image_path")
             text = data.get("text_description", "")
             user_timestamp = data.get("user_timestamp")
+            has_coin = data.get("has_coin", False)  # Default False if not provided
 
             if not image_path:
                 raise ValueError("Missing image_path")
 
-            # Get predictions first (before LLM streaming) to send predictionText early
-            # This allows frontend to show predefined text immediately
+            # Get predictions and CV analysis before LLM streaming
+            # This allows us to:
+            #   1) compute a time-tracking CV summary
+            #   2) save history
+            #   3) send predictionText
             from prediction_texts import get_prediction_text
-
-            # Run initial steps to get predictions
             from PIL import Image
 
             image = Image.open(image_path)
             saved_image_path = manager._save_image(image)
             embedding = manager._run_local_ml_model(image)
-            cv_analysis = manager._run_cv_analysis(saved_image_path)
             updated_text_description = manager.update_text_input(text)
             predictions_raw = manager._run_cloud_ml_model(embedding, updated_text_description)
             predictions = {item["class"]: item["probability"] for item in predictions_raw}
 
-            # Get predictionText immediately after predictions are available
+            # Determine if we should run CV analysis
+            top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0] if predictions else ""
+            should_run_cv = has_coin
+
+            # Run CV analysis if conditions are met
+            cv_analysis = {}
+            tracking_summary = ""
+            if should_run_cv:
+                cv_analysis = manager._run_cv_analysis(saved_image_path)
+                # Generate time-tracking summary text from CV + history
+                tracking_summary = manager._get_time_tracking_summary(
+                    predictions=predictions,
+                    text_description=text,  # ORIGINAL user input
+                    cv_analysis=cv_analysis,
+                )
+            else:
+                debug_log(f"[ml_server] Skipping CV analysis (has_coin={has_coin}, top_prediction={top_prediction_label})")
+
+            # Save history entry (including tracking summary) BEFORE we start LLM streaming,
+            # so that the TimeTrackingPanel can read it as soon as the UI switches to results.
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            manager._save_history_entry(
+                date=current_date,
+                cv_analysis=cv_analysis,
+                predictions=predictions,
+                image_path=saved_image_path,
+                text_summary=text,  # ORIGINAL user input
+                tracking_summary=tracking_summary,
+            )
+
+            # Get predictionText immediately after predictions & tracking summary are ready
             predictionText = ""
-            if predictions:
-                top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0]
+            if predictions and top_prediction_label:
                 predictionText = get_prediction_text(top_prediction_label)
                 debug_log(f"[ml_server] Generated predictionText for {top_prediction_label}: {predictionText[:100]}...")
 
@@ -149,10 +179,11 @@ def handle_message(msg):
                 # Each call becomes one "chunk" event up to Node
                 send({"id": req_id, "chunk": text})
 
-            # Continue with LLM call (streaming if on_chunk provided)
+            # Continue with LLM call (streaming if on_chunk provided).
+            # Pass high-level CV tracking summary text into metadata instead of raw CV metrics.
             metadata = {
                 "user_input": updated_text_description,
-                "cv_analysis": cv_analysis,
+                "cv_tracking_summary": tracking_summary,
                 "history": manager.case_history["dates"],
             }
             llm_response_dict, llm_timestamp = manager._call_llm_explain(
@@ -164,20 +195,12 @@ def handle_message(msg):
                 llm_response_dict.get("answer", "") if isinstance(llm_response_dict, dict) else str(llm_response_dict)
             )
 
-            # Save conversation and history
+            # Save conversation (history is already saved above)
             manager._save_conversation_entry(
                 user_message=updated_text_description,
                 llm_response=llm_response,
                 user_timestamp=user_timestamp,
                 llm_timestamp=llm_timestamp,
-            )
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            manager._save_history_entry(
-                date=current_date,
-                cv_analysis=cv_analysis,
-                predictions=predictions,
-                image_path=saved_image_path,
-                text_summary=updated_text_description,
             )
 
             # Build enriched disease and return complete result

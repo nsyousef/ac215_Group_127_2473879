@@ -8,6 +8,15 @@ try:
 except ImportError:
     from ml_workflow.model.utils import MLP, FocalLoss
 
+try:
+    from ...utils import logger
+except ImportError:
+    try:
+        from ml_workflow.utils import logger
+    except ImportError:
+        import logging
+        logger = logging.getLogger(__name__)
+
 
 class MultimodalClassifier(nn.Module):
     """

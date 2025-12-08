@@ -27,8 +27,17 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
     const theme = useTheme();
     const primary = theme.palette.primary.main;
 
+    // Deduplicate conditions by ID (keep the last occurrence which has the most recent data)
+    const deduplicatedConditions = rawConditions.reduce((acc, condition) => {
+        acc[condition.id] = condition; // Later occurrences override earlier ones
+        return acc;
+    }, {});
+    
+    // Convert back to array
+    const uniqueConditions = Object.values(deduplicatedConditions);
+
     // Sort conditions by last message timestamp (most recent first)
-    const conditions = [...rawConditions].sort((a, b) => {
+    const conditions = [...uniqueConditions].sort((a, b) => {
         const timestampA = a.lastMessageTimestamp || a.date || '';
         const timestampB = b.lastMessageTimestamp || b.date || '';
         

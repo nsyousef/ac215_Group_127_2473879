@@ -65,11 +65,13 @@ class MLClient {
 
     if (isElectron() && window.electronAPI && window.electronAPI.mlGetInitialPrediction) {
       const userTimestamp = new Date().toISOString();
+      const hasCoin = metadata.hasCoin !== undefined ? metadata.hasCoin : false;
       return await window.electronAPI.mlGetInitialPrediction(
         caseId,
         imagePath,
         textDescription,
         userTimestamp,
+        hasCoin,
       );
     }
 
@@ -93,6 +95,7 @@ class MLClient {
   async *getInitialPredictionStream(imagePath, textDescription, caseId, metadata = {}) {
     await this.initialize();
     const userTimestamp = new Date().toISOString();
+    const hasCoin = metadata.hasCoin !== undefined ? metadata.hasCoin : false;
 
     if (isElectron() && window.electronAPI?.mlGetInitialPredictionStream) {
       const stream = window.electronAPI.mlGetInitialPredictionStream(
@@ -100,6 +103,7 @@ class MLClient {
         imagePath,
         textDescription,
         userTimestamp,
+        hasCoin,
       );
 
       for await (const item of stream) {

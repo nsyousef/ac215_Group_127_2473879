@@ -119,11 +119,34 @@ def stratified_split(
         df = df[df[label_col].isin(valid_classes)].reset_index(drop=True)
 
     if val_size is None:
+        # Handle test_size = 0.0 (no test set)
+        if test_size == 0.0:
+            logger.info(f"Train samples: {len(df):,}, Test samples: 0 (test_size=0.0)")
+            return df.reset_index(drop=True), None
+        
         train_df, test_df = train_test_split(df, test_size=test_size, stratify=df[label_col], random_state=seed)
         logger.info(f"Train samples: {len(train_df):,}, Test samples: {len(test_df):,}")
         return train_df.reset_index(drop=True), test_df.reset_index(drop=True)
     else:
+        # Handle test_size = 0.0 (no test set, only train/val split)
+        if test_size == 0.0:
+            # Handle val_size = 0.0 (all training data)
+            if val_size == 0.0:
+                logger.info(f"Train samples: {len(df):,}, Val samples: 0, Test samples: 0")
+                return df.reset_index(drop=True), None, None
+            
+            # Split into train and val only
+            train_df, val_df = train_test_split(df, test_size=val_size, stratify=df[label_col], random_state=seed)
+            logger.info(f"Train samples: {len(train_df):,}, Val samples: {len(val_df):,}, Test samples: 0")
+            return train_df.reset_index(drop=True), val_df.reset_index(drop=True), None
+        
         train_df, test_df = train_test_split(df, test_size=test_size, stratify=df[label_col], random_state=seed)
+        
+        # Handle val_size = 0.0 (no validation set)
+        if val_size == 0.0:
+            logger.info(f"Train samples: {len(train_df):,}, Val samples: 0, Test samples: {len(test_df):,}")
+            return train_df.reset_index(drop=True), None, test_df.reset_index(drop=True)
+        
         adjusted_val_size = val_size / (1 - test_size)
         # Check again for train/val split (after train/test split, some classes might have < 2 samples)
         train_label_counts = train_df[label_col].value_counts()

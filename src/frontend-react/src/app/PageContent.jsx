@@ -380,7 +380,7 @@ export default function PageContent({ initialView }) {
 
                     {/* Center Column: Chat */}
                     <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
-                        <ChatPanel conditionId={selectedCondition?.id} refreshKey={chatRefreshKey} />
+                        <ChatPanel conditionId={selectedCondition?.id} refreshKey={chatRefreshKey} selectedCondition={selectedCondition} />
                     </Grid>
 
                     {/* Right Column: Time Tracking */}

@@ -259,6 +259,11 @@ def create_dataloaders(
         else:
             train_df, test_df = split_result
             val_df = None
+    
+    # Ensure test_df is not an empty DataFrame (convert to None)
+    if test_df is not None and len(test_df) == 0:
+        logger.warning("Test set is empty after split, setting to None")
+        test_df = None
 
     all_classes = sorted(metadata_df[LABEL_COL].astype(str).unique().tolist())
     num_classes = len(all_classes)
@@ -319,16 +324,20 @@ def create_dataloaders(
         classes=all_classes,
     )
 
-    test_dataset = ImageDataset(
-        df=test_df,
-        img_col=IMG_COL,
-        label_col=LABEL_COL,
-        embedding_col=EMBEDDING_COL,
-        img_prefix=img_prefix,
-        use_local=use_local,
-        transform=get_test_valid_transform(mean, std, img_size),
-        classes=all_classes,
-    )
+    # Only create test dataset if test_df is not None
+    if test_df is not None:
+        test_dataset = ImageDataset(
+            df=test_df,
+            img_col=IMG_COL,
+            label_col=LABEL_COL,
+            embedding_col=EMBEDDING_COL,
+            img_prefix=img_prefix,
+            use_local=use_local,
+            transform=get_test_valid_transform(mean, std, img_size),
+            classes=all_classes,
+        )
+    else:
+        test_dataset = None
 
     if val_df is not None:
         val_dataset = ImageDataset(
@@ -370,14 +379,17 @@ def create_dataloaders(
         logger.info("Using weighted sampling for imbalanced data")
     else:
         train_loader = DataLoader(train_dataset, shuffle=True, drop_last=True, **dataloader_kwargs)
-    test_loader = DataLoader(test_dataset, shuffle=False, **dataloader_kwargs)
+    
+    # Only create test_loader if test_dataset exists
+    test_loader = DataLoader(test_dataset, shuffle=False, **dataloader_kwargs) if test_dataset is not None else None
     val_loader = DataLoader(val_dataset, shuffle=False, **dataloader_kwargs) if val_dataset is not None else None
+    
     info = {
         "num_classes": num_classes,
         "classes": all_classes,
         "class_to_idx": train_dataset.class_to_idx,
         "train_size": len(train_dataset),
-        "test_size": len(test_dataset),
+        "test_size": len(test_dataset) if test_dataset is not None else 0,
         "val_size": len(val_dataset) if val_dataset is not None else 0,
         "mean": mean,
         "std": std,
