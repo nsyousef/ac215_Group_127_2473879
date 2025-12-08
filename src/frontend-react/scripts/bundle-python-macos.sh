@@ -82,9 +82,17 @@ find "$VENV_DIR/lib" -type d -name "*_test" -exec rm -rf {} + 2>/dev/null || tru
 # Remove PyTorch test files and unnecessary subdirectories
 echo "  Removing PyTorch test and non-essential files..."
 if [ -d "$VENV_DIR/lib/python*/site-packages/torch" ]; then
-  find "$VENV_DIR/lib/python*/site-packages/torch" -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
+  # Remove test directories (safe to remove)
+  find "$VENV_DIR/lib/python"*/site-packages/torch -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
+  find "$VENV_DIR/lib/python"*/site-packages/torch -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
+
+  # Remove bin directory (executables not needed at runtime)
   rm -rf "$VENV_DIR/lib/python"*/site-packages/torch/bin 2>/dev/null || true
-  rm -rf "$VENV_DIR/lib/python"*/site-packages/torch/share 2>/dev/null || true
+
+  # Remove only specific large cmake files (keep the directory structure)
+  find "$VENV_DIR/lib/python"*/site-packages/torch/share/cmake -name "*.cmake" -size +1M -delete 2>/dev/null || true
+
+  echo "  PyTorch optimization complete (kept runtime dependencies)"
 fi
 
 # Remove transformers test files if installed
