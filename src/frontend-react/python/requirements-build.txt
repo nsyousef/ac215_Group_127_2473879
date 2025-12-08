@@ -2,5 +2,7 @@ requests>=2.32.0
 pillow>=10.0.0
 numpy>=1.24.0,<2.0.0
 modal>=0.56.0  # For LLM API integration
+opencv-python
+scikit-learn
 # torch and torchvision installed separately as CPU-only in bundle script
 # pytest and pytest-mock excluded (not needed in production app bundle)
