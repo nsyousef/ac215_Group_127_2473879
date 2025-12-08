@@ -17,7 +17,7 @@ class ModalLLMService(pulumi.ComponentResource):
         scaledown_window: int = 1000,
         modal_token_id: str = None,
         modal_token_secret: str = None,
-        modal_username: str = "tanushkmr2001",
+        modal_username: str = "nsyousef",
         tags: Optional[Dict] = None,
         opts: Optional[pulumi.ResourceOptions] = None,
     ):
@@ -44,16 +44,17 @@ class ModalLLMService(pulumi.ComponentResource):
 
         model_name = f"medgemma-{model_size}"
         max_tokens = "500" if model_size == "4b" else "700"
-        max_containers = "1"
-        scaledown_window = "1000"
+        # Use parameter values instead of hardcoded strings
+        max_containers_str = str(max_containers)
+        scaledown_window_str = str(scaledown_window)
         # Construct deployment command
         deploy_cmd = f"""
 cd /llm && \
 export MODAL_MODEL_NAME="{model_name}" && \
 export MODAL_MAX_TOKENS="{max_tokens}" && \
 export MODAL_GPU="{gpu_type}" && \
-export MODAL_MAX_CONTAINERS="{max_containers}" && \
-export MODAL_SCALEDOWN_WINDOW="{scaledown_window}" && \
+export MODAL_MAX_CONTAINERS="{max_containers_str}" && \
+export MODAL_SCALEDOWN_WINDOW="{scaledown_window_str}" && \
 modal deploy llm_modal.py
 """
 
@@ -62,8 +63,8 @@ modal deploy llm_modal.py
             "MODAL_MODEL_NAME": model_name,
             "MODAL_MAX_TOKENS": max_tokens,
             "MODAL_GPU": gpu_type,
-            "MODAL_MAX_CONTAINERS": max_containers,
-            "MODAL_SCALEDOWN_WINDOW": scaledown_window,
+            "MODAL_MAX_CONTAINERS": max_containers_str,
+            "MODAL_SCALEDOWN_WINDOW": scaledown_window_str,
         }
 
         # Add Modal credentials if provided

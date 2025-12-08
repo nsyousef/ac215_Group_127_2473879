@@ -1,10 +1,12 @@
 """
 Pibu.AI Infrastructure Deployment
-Deploys Cloud Run inference service and manages Modal LLM deployment
+Deploys GKE inference service and manages Modal LLM deployment
 """
 
 import pulumi
-from modules.inference import InferenceService
+from create_network import create_network
+from modules.gke_cluster import GKECluster
+from modules.gke_inference import GKEInferenceService
 from modules.modal_llm import ModalLLMService
 
 # Get configuration
@@ -18,17 +20,50 @@ environment = pulumi.get_stack()  # dev, staging, prod
 tags = {"project": "pibu-ai", "environment": environment, "managed-by": "pulumi"}
 
 # ============================================================================
-# CLOUD RUN INFERENCE SERVICE
+# NETWORK
 # ============================================================================
-inference_service = InferenceService(
+app_name = f"pibu-ai-{environment}"
+network, subnet, router, nat = create_network(region, app_name)
+
+# ============================================================================
+# GKE CLUSTER
+# ============================================================================
+gke_cluster = GKECluster(
+    "gke",
+    project_id=project_id,
+    region=region,
+    environment=environment,
+    network=network,
+    subnet=subnet,
+    node_count=config.get_int("gke_node_count") or 1,
+    min_node_count=config.get_int("gke_min_node_count") or 1,
+    max_node_count=config.get_int("gke_max_node_count") or 3,
+    machine_type=config.get("gke_machine_type") or "e2-standard-4",
+    disk_size_gb=config.get_int("gke_disk_size_gb") or 30,
+    tags=tags,
+)
+
+# ============================================================================
+# GKE INFERENCE SERVICE
+# ============================================================================
+inference_service = GKEInferenceService(
     "inference",
     project_id=project_id,
     region=region,
     environment=environment,
+    cluster_name=gke_cluster.cluster_name,
+    cluster_endpoint=gke_cluster.cluster_endpoint,
+    cluster_ca_certificate=gke_cluster.cluster_ca_certificate,
     memory=config.get("inference_memory") or "4Gi",
     cpu=config.get("inference_cpu") or "2",
-    min_instances=config.get_int("inference_min_instances") or (1 if environment == "prod" else 0),
-    max_instances=config.get_int("inference_max_instances") or 10,
+    min_replicas=config.get_int("inference_min_replicas") or (2 if environment == "prod" else 1),
+    max_replicas=config.get_int("inference_max_replicas") or 10,
+    target_cpu_utilization=config.get_int("inference_target_cpu") or 70,
+    target_memory_utilization=config.get_int("inference_target_memory") or 80,
+    model_gcs_path=config.get("inference_model_gcs_path") or "gs://apcomp215-datasets/test_best.pth",
+    model_checkpoint_path=config.get("inference_model_checkpoint_path") or "/tmp/models/test_best.pth",
+    device=config.get("inference_device") or "cpu",
+    port=config.get("inference_port") or "8080",
     tags=tags,
 )
 
@@ -41,7 +76,7 @@ modal_llm = ModalLLMService(
     gpu_type=config.get("llm_gpu") or "H200",
     modal_token_id=config.get_secret("modal_token_id"),
     modal_token_secret=config.get_secret("modal_token_secret"),
-    modal_username=config.get("modal_username") or "tanushkmr2001",
+    modal_username=config.get("modal_username") or "nsyousef",
     tags=tags,
 )
 
@@ -52,9 +87,12 @@ pulumi.export("environment", environment)
 pulumi.export("region", region)
 pulumi.export("project_id", project_id)
 
+# GKE cluster outputs
+pulumi.export("gke_cluster_name", gke_cluster.cluster_name)
+pulumi.export("gke_cluster_endpoint", gke_cluster.cluster_endpoint)
+
 # Inference service outputs
 pulumi.export("inference_url", inference_service.url)
-pulumi.export("inference_service_name", inference_service.service.name)
 pulumi.export("inference_image", inference_service.image.image_name)
 
 # LLM service outputs
