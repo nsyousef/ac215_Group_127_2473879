@@ -1,0 +1,158 @@
+# Baseline model for final experiments with cosine annealing
+
+data:
+  use_local: True
+  dataset: dataset_v2
+  min_samples_per_label: 250
+  datasets:
+    - fitzpatrick17k
+    - ddi
+    - isic
+    - derm1m
+  per_dataset_split_ratios:
+    fitzpatrick17k:
+      train: 0.3
+      val: 0.4
+      test: 0.3
+    ddi:
+      train: 0.3
+      val: 0.4
+      test: 0.3
+    isic:
+      train: 0.3
+      val: 0.4
+      test: 0.3
+    derm1m:
+      train: 0.9
+      val: 0.0     # EXCLUDE from validation
+      test: 0.1
+  derm1m_sources:
+    - IIYI
+    - edu
+    - note
+    - public
+    - pubmed
+    - reddit
+    - twitter
+    - youtube
+  has_text: null
+  img_size: [380, 380]  # EfficientNet-B4 native size
+  seed: 42
+
+training:
+  batch_size: 128
+  num_workers: 16
+  prefetch_factor: 8
+  num_epochs: 30
+  patience: 10
+  validation_interval: 1
+  n_warmup_epochs: 1
+  compute_stats: False
+  use_normalization: False
+  weighted_sampling: True
+
+  # Vision-only pre-training DISABLED
+  vision_only_pretraining:
+    enabled: false
+    epochs: 0
+
+  # Auxiliary loss scheduling
+  auxiliary_loss_schedule:
+    vision:
+      schedule_type: "constant"
+      start_epoch: 0
+      end_epoch: 30
+      start_weight: 0.5
+      end_weight: 0.5
+
+    text:
+      schedule_type: "constant"
+      start_epoch: 0
+      end_epoch: 30
+      start_weight: 0.1
+      end_weight: 0.1
+
+  scheduler:
+    use_cosine_annealing: True
+    vision_eta_min: 0.0000001
+    multimodal_classifier_eta_min: 0.0000001
+
+augmentation:
+  brightness_jitter: 0.3
+  contrast_jitter: 0.3
+  saturation_jitter: 0.3
+  hue_jitter: 0.05
+  rotation_degrees: 45
+  translate: [0.1, 0.1]
+  scale: [0.8, 1.2]
+  grayscale_prob: 0.1
+  horizontal_flip_prob: 0.5
+  vertical_flip_prob: 0.3
+
+vision_model:
+  name: "efficientnet_b4"
+  pretrained: true
+  pooling_type: "avg"
+  unfreeze_layers: -1  # -1 = unfreeze all layers
+
+multimodal_classifier:
+  projection_dim: 256
+  use_l2_normalization: false
+  image_projection_hidden: [512]
+  projection_activation: "relu"
+  projection_dropout: 0.3
+  text_projection_hidden: [512]
+  final_hidden_sizes: [128]
+  final_activation: "relu"
+  final_dropout: 0.3
+  fusion_strategy: "concat_mlp"
+  use_auxiliary_loss: true
+  auxiliary_vision_loss_weight: 0.5
+  auxiliary_text_loss_weight: 0.1
+  loss_fn: "cross_entropy"
+  label_smoothing: 0.05
+  use_class_weights_from_data: false
+
+masking:
+  mask_complete: null
+
+  random_mask:
+    enabled: false
+    image_prob: 0.0
+    text_prob: 0.0
+
+  epoch_schedule:
+    enabled: false
+
+encoder:
+  embedding_filename: "pubmedbert_256_cls.parquet"
+  model_name: "pubmedbert"
+  max_length: 256
+  pooling_type: "cls"
+  batch_size: 32
+  qwen_instr: ""
+
+optimizer:
+  vision_model:
+    name: "adamw"
+    learning_rate: 0.0001
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+  multimodal_classifier:
+    name: "adamw"
+    learning_rate: 0.0005
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+    eps: 0.00000001
+
+output:
+  save_dir: "/checkpoints"
+  log_dir: "./logs"
+  experiment_name: "exp_arch_dv2_35_cosine_annealing"
+  wandb_project: "APCOMP215"
+
+checkpoint:
+  save_frequency: 5
+  keep_last: 2
+  load_from: null

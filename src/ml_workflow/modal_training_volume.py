@@ -214,7 +214,7 @@ def sync_data_from_gcs():
 @app.function(
     gpu="H200",
     cpu=20.0,
-    timeout=14400,
+    timeout=18000,
     region="us-east",
     secrets=[
         modal.Secret.from_name("wandb-secret"),
