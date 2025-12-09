@@ -44,10 +44,17 @@ module.exports = {
       '^/scripts',
       '^/public',
       '^/dist',
-      // Python development files
-      '^/python/.*\\.py$',
+      // Python development artifacts (keep runtime modules)
+      '^/python/tests($|/)',
+      '^/python/test_.*',
+      '^/python/run_.*',
+      '^/python/.*\\.ipynb$',
       '^/python/\\.venv',
       '^/python/__pycache__',
+      '^/python/inference_local/tests($|/)',
+      '^/python/inference_local/.*\\.ipynb$',
+      '^/python/Dockerfile',
+      '^/python/docker-shell\\.sh$',
       '^/python/\\.env',
       // node_modules cleanup
       '/node_modules/.bin',

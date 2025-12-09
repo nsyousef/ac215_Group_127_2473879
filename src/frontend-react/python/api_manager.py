@@ -12,6 +12,9 @@ import requests
 from prediction_texts import get_prediction_text
 from model_manager import get_model_path
 
+# Disclaimer appended to all LLM responses
+DISCLAIMER = "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. This information is for general knowledge, and a doctor is the best person to give you a proper diagnosis and treatment plan."
+
 # Shared vision encoder instance (lazy-loaded)
 _VISION_ENCODER = None
 
@@ -43,7 +46,6 @@ def debug_log(msg: str):
 try:
     sys.path.insert(0, str(Path(__file__).parent / "cv-analysis"))
     from module import run_cv_analysis as cv_run_analysis
-
     CV_ANALYSIS_AVAILABLE = True
     debug_log("✓ CV analysis module loaded successfully")
 except ImportError as e:
@@ -451,7 +453,8 @@ class APIManager:
 
         # Create temporary APIManager instance to use its methods
         api = APIManager(case_id, dummy=False)
-
+        
+        debug_log(f"[api_manager] add_timeline_entry called with has_coin={has_coin} (type: {type(has_coin).__name__})")
         debug_log(f"Adding timeline entry for case {case_id} (has_coin={has_coin})")
 
         # Get predictions from the earliest date entry (initial diagnosis)
@@ -775,11 +778,14 @@ class APIManager:
         llm_response = (
             llm_response_dict.get("answer", "") if isinstance(llm_response_dict, dict) else str(llm_response_dict)
         )
+        # Append disclaimer to the response
+        llm_response = llm_response + DISCLAIMER
 
         # Step 6: Save to conversation history (initial LLM response)
+        # Save ORIGINAL user text (without demographics) to conversation
         debug_log("  → Saving conversation...")
         self._save_conversation_entry(
-            user_message=updated_text_description,
+            user_message=text_description,  # Use original text, not augmented
             llm_response=llm_response,
             user_timestamp=user_timestamp,
             llm_timestamp=llm_timestamp,
@@ -1131,7 +1137,14 @@ class APIManager:
             timeout=60,
         )
         response.raise_for_status()
-        return response.json().get("top_k", {})
+        result = response.json()
+        
+        # Check if model is uncertain about the prediction
+        if result.get("predicted_class") == "UNCERTAIN":
+            debug_log("⚠️ Model returned UNCERTAIN prediction")
+            return {"UNCERTAIN": 1.0}
+        
+        return result.get("top_k", {})
 
     def _call_llm_explain(
         self,
@@ -1331,15 +1344,15 @@ class APIManager:
 
         Args:
             predictions: Disease predictions from ML model
-            text_description: User's text description
+            text_description: User's text description (for first entry) or note (for subsequent entries)
             cv_analysis: Current CV metrics
 
         Returns:
-            String summary (3-4 sentences)
+            String summary (2 sentences)
         """
         if self.dummy:
             debug_log("    [DUMMY MODE] Returning dummy tracking summary...")
-            return "The affected area measures roughly 2.5 cm² with moderate color variation. The shape appears fairly regular. These measurements align with the suspected condition based on the image."
+            return "The affected area measures roughly 2.5 cm² with moderate color variation. The shape appears fairly regular."
 
         debug_log("Calling LLM time tracking summary API...")
 
@@ -1352,9 +1365,21 @@ class APIManager:
         # Add current analysis
         current_date = datetime.now().strftime("%Y-%m-%d")
         cv_analysis_history[current_date] = cv_analysis
+        
+        # Determine if this is the first entry
+        is_first_entry = len(cv_analysis_history) == 1
+        
+        # For first entry, augment user text with demographics
+        # For subsequent entries, just use the note as-is
+        if is_first_entry:
+            user_input_with_context = self.update_text_input(text_description)
+        else:
+            user_input_with_context = text_description
 
         payload = {
-            "user_input": text_description,
+            "predictions": predictions,
+            "user_demographics": self.demographics,
+            "user_input": user_input_with_context,
             "cv_analysis_history": cv_analysis_history,
         }
 
@@ -1459,6 +1484,9 @@ class APIManager:
             on_chunk=on_chunk,  # ← IMPORTANT
         )
 
+        # Append disclaimer to the response
+        response["answer"] = response["answer"] + DISCLAIMER
+        
         # Step 4: Save new conversation entry
         debug_log("  → Saving conversation...")
         self._save_conversation_entry(

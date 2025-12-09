@@ -364,3 +364,78 @@ After deployment:
 - [Cloud Run Documentation](https://cloud.google.com/run/docs)
 - [Modal Documentation](https://modal.com/docs)
 - [Project Architecture](../../docs/architecture.pdf)
+
+## How to delete EVERYTHING and start over
+
+```bash
+# 1. Delete GKE Node Pool first (this is causing your Pulumi errors)
+gcloud container node-pools delete pibu-ai-dev-pool \
+  --cluster=pibu-ai-dev \
+  --region=us-east1 \
+  --project=level-scheme-471117-i9 \
+  --quiet
+
+# 2. Delete GKE Cluster
+gcloud container clusters delete pibu-ai-dev \
+  --region=us-east1 \
+  --project=level-scheme-471117-i9 \
+  --quiet
+
+# 3. Delete Service Account
+gcloud iam service-accounts delete inference-dev@level-scheme-471117-i9.iam.gserviceaccount.com \
+  --project=level-scheme-471117-i9 \
+  --quiet
+
+# 4. List and delete firewall rules (must delete before network)
+gcloud compute firewall-rules list \
+  --project=level-scheme-471117-i9 \
+  --filter="network:pibu-ai-dev-network" \
+  --format="value(name)"
+
+# Delete each firewall rule (replace FIREWALL_RULE_NAME with actual names from above)
+gcloud compute firewall-rules delete FIREWALL_RULE_NAME \
+  --project=level-scheme-471117-i9 \
+  --quiet
+
+# 5. Delete Subnetwork
+gcloud compute networks subnets delete pibu-ai-dev-subnet \
+  --region=us-east1 \
+  --project=level-scheme-471117-i9 \
+  --quiet
+
+# 6. Delete Network (must be last - no dependencies)
+gcloud compute networks delete pibu-ai-dev-network \
+  --project=level-scheme-471117-i9 \
+  --quiet
+
+# List forwarding rules
+gcloud compute forwarding-rules list \
+  --project=level-scheme-471117-i9 \
+  --filter="name~pibu-ai" \
+  --format="value(name,region)"
+
+# Delete forwarding rules (replace NAME and REGION)
+gcloud compute forwarding-rules delete NAME \
+  --region=us-east1 \
+  --project=level-scheme-471117-i9 \
+  --quiet
+
+# Delete target pools if exist
+gcloud compute target-pools list \
+  --project=level-scheme-471117-i9 \
+  --filter="name~pibu-ai"
+
+gcloud compute target-pools delete TARGET_POOL_NAME \
+  --region=us-east1 \
+  --project=level-scheme-471117-i9 \
+  --quiet
+
+# delete router
+gcloud compute routers delete pibu-ai-dev-router --region=us-east1 --project=level-scheme-471117-i9 --quiet
+
+# delete vpc
+gcloud compute networks delete pibu-ai-dev-vpc --project=level-scheme-471117-i9 --quiet
+
+# delete artifact registry
+gcloud artifacts repositories delete pibu-ai-images --location=us-east1 --project=level-scheme-471117-i9 --quiet
+```

@@ -7,6 +7,9 @@ from api_manager import APIManager
 
 manager = None
 
+# Disclaimer appended to all LLM responses
+DISCLAIMER = "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. This information is for general knowledge, and a doctor is the best person to give you a proper diagnosis and treatment plan."
+
 
 def debug_log(msg: str):
     """Print to stderr so it doesn't interfere with stdout JSON protocol"""
@@ -86,9 +89,12 @@ def handle_message(msg):
             image_path = data.get("image_path")
             note = data.get("note", "")
             date = data.get("date")
+            has_coin = data.get("has_coin", False)  # Default False if not provided
+            debug_log(f"[ml_server] add_timeline_entry - received has_coin: {has_coin} (type: {type(has_coin).__name__})")
+            debug_log(f"[ml_server] add_timeline_entry - full data keys: {list(data.keys())}")
             if not case_id or not image_path or not date:
                 raise ValueError("Missing case_id, image_path, or date")
-            APIManager.add_timeline_entry(case_id, image_path, note, date)
+            APIManager.add_timeline_entry(case_id, image_path, note, date, has_coin)
             send({"id": req_id, "ok": True, "result": {"success": True}})
             return
         elif cmd == "delete_cases":
@@ -113,6 +119,8 @@ def handle_message(msg):
             text = data.get("text_description", "")
             user_timestamp = data.get("user_timestamp")
             has_coin = data.get("has_coin", False)  # Default False if not provided
+            debug_log(f"[ml_server] predict - received has_coin: {has_coin} (type: {type(has_coin).__name__})")
+            debug_log(f"[ml_server] predict - full data keys: {list(data.keys())}")
 
             if not image_path:
                 raise ValueError("Missing image_path")
@@ -130,7 +138,25 @@ def handle_message(msg):
             embedding = manager._run_local_ml_model(image)
             updated_text_description = manager.update_text_input(text)
             predictions_raw = manager._run_cloud_ml_model(embedding, updated_text_description)
-            predictions = {item["class"]: item["probability"] for item in predictions_raw}
+            
+            # Check if predictions_raw is a dict (new format) or list (old format)
+            if isinstance(predictions_raw, dict):
+                # New format: already a dict
+                predictions = predictions_raw
+            else:
+                # Old format: list of {"class": ..., "probability": ...}
+                predictions = {item["class"]: item["probability"] for item in predictions_raw}
+            
+            # Check if model returned UNCERTAIN
+            if "UNCERTAIN" in predictions:
+                debug_log("⚠️ Model is uncertain about this prediction")
+                send({
+                    "id": req_id,
+                    "ok": False,
+                    "error": "UNCERTAIN",
+                    "message": "Unable to determine the condition from this image. Please try again with better lighting, a clearer photo, or more descriptive text. It's also possible that there's nothing concerning to identify."
+                })
+                return
 
             # Determine if we should run CV analysis
             top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0] if predictions else ""
@@ -148,7 +174,9 @@ def handle_message(msg):
                     cv_analysis=cv_analysis,
                 )
             else:
-                debug_log(f"[ml_server] Skipping CV analysis (has_coin={has_coin}, top_prediction={top_prediction_label})")
+                debug_log(
+                    f"[ml_server] Skipping CV analysis (has_coin={has_coin}, top_prediction={top_prediction_label})"
+                )
 
             # Save history entry (including tracking summary) BEFORE we start LLM streaming,
             # so that the TimeTrackingPanel can read it as soon as the UI switches to results.
@@ -194,10 +222,13 @@ def handle_message(msg):
             llm_response = (
                 llm_response_dict.get("answer", "") if isinstance(llm_response_dict, dict) else str(llm_response_dict)
             )
+            # Append disclaimer to the response
+            llm_response = llm_response + DISCLAIMER
 
             # Save conversation (history is already saved above)
+            # Save ORIGINAL user text (without demographics) to conversation
             manager._save_conversation_entry(
-                user_message=updated_text_description,
+                user_message=text,  # Use original text, not augmented
                 llm_response=llm_response,
                 user_timestamp=user_timestamp,
                 llm_timestamp=llm_timestamp,

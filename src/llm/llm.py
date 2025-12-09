@@ -303,10 +303,12 @@ class LLM:
         """
         Generate a brief summary of time tracking data changes.
 
+
         Args:
             user_input: User's text description of the condition
             cv_analysis_history: Date-keyed CV metrics {"2024-12-01": {...}, ...}
             temperature: Generation temperature
+
 
         Returns:
             {"summary": "3-4 sentence summary text"}
@@ -320,21 +322,27 @@ class LLM:
         prompt += "Tracking Data:\n"
         sorted_dates = sorted(cv_analysis_history.keys())
 
+
         for i, date in enumerate(sorted_dates):
             metrics = cv_analysis_history[date]
             prompt += f"\n{'First entry' if i == 0 else f'Entry {i+1}'} ({date}):\n"
 
+
             if "area_cm2" in metrics and metrics["area_cm2"] is not None:
                 prompt += f"  - Area: {metrics['area_cm2']:.2f} cm²\n"
 
+
             if "compactness_index" in metrics:
                 prompt += f"  - Shape compactness: {metrics['compactness_index']:.2f}\n"
+
 
             if "color_stats_lab" in metrics:
                 color = metrics["color_stats_lab"]
                 prompt += f"  - Color (LAB): L={color.get('mean_L', 0):.1f}, A={color.get('mean_A', 0):.1f}, B={color.get('mean_B', 0):.1f}\n"
 
+
         # Generate summary
         summary_text = self.generate(prompt, temperature)
+
 
         return {"summary": summary_text}

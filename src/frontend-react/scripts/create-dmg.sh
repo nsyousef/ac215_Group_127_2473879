@@ -33,7 +33,13 @@ mkdir -p "$STAGING_DIR"
 echo "🎬 Setting up DMG layout..."
 
 # Copy the app into staging folder
-cp -r "$APP_DIR/pibu_ai.app" "$STAGING_DIR/pibu_ai.app"
+# macOS adds com.apple.provenance extended attributes to many files in the
+# bundled Python environment. Attempting to copy those attributes inside the
+# Codex sandbox triggers "Operation not permitted", which then makes cp report
+# dozens of "No such file or directory" errors for the Python packages (torch,
+# sympy, scipy, …). Using -X tells BSD cp to skip extended attributes/ACLs so
+# the filesystem tree can be copied cleanly.
+cp -R -X "$APP_DIR/pibu_ai.app" "$STAGING_DIR/pibu_ai.app"
 
 # Create symbolic link to Applications folder
 ln -s /Applications "$STAGING_DIR/Applications"

@@ -18,7 +18,7 @@ import { isElectron } from '@/utils/config';
 export default function ConditionListView({ selectedConditionId, onChange, compact = false, conditions: propConditions, onAddDisease, showAddButton = true }) {
     const { diseases, reload: reloadDiseases } = useDiseaseContext();
     const rawConditions = propConditions || diseases || [];
-    
+
     const [deleteMode, setDeleteMode] = useState(false);
     const [selectedForDelete, setSelectedForDelete] = useState(new Set());
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -32,7 +32,7 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
         acc[condition.id] = condition; // Later occurrences override earlier ones
         return acc;
     }, {});
-    
+
     // Convert back to array
     const uniqueConditions = Object.values(deduplicatedConditions);
 
@@ -40,12 +40,12 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
     const conditions = [...uniqueConditions].sort((a, b) => {
         const timestampA = a.lastMessageTimestamp || a.date || '';
         const timestampB = b.lastMessageTimestamp || b.date || '';
-        
+
         // If no timestamp, put at the end
         if (!timestampA && !timestampB) return 0;
         if (!timestampA) return 1;
         if (!timestampB) return -1;
-        
+
         // Compare timestamps (most recent first)
         return new Date(timestampB).getTime() - new Date(timestampA).getTime();
     });
@@ -55,20 +55,20 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
         if (!condition.date) {
             return condition.name || 'Unknown Condition';
         }
-        
+
         // Extract date part (remove timestamp if present, e.g., "2025-11-21_123456" -> "2025-11-21")
         let dateStr = condition.date;
         if (dateStr.includes('_')) {
             dateStr = dateStr.split('_')[0];
         }
-        
+
         // Format date nicely (e.g., "2025-11-21" -> "Nov 21, 2025")
         try {
             const date = new Date(dateStr + 'T00:00:00');
-            const formattedDate = date.toLocaleDateString('en-US', { 
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric' 
+            const formattedDate = date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
             });
             return `${formattedDate} - ${condition.name || 'Unknown Condition'}`;
         } catch (e) {
@@ -102,28 +102,28 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
 
     const handleConfirmDelete = async () => {
         if (selectedForDelete.size === 0) return;
-        
+
         setIsDeleting(true);
         try {
             const caseIds = Array.from(selectedForDelete);
-            
+
             // Check if currently selected condition is being deleted
             const isSelectedConditionDeleted = selectedConditionId && caseIds.includes(selectedConditionId);
-            
+
             if (isElectron() && window.electronAPI?.deleteCases) {
                 await window.electronAPI.deleteCases(caseIds);
             } else {
                 console.warn('Delete cases not available in non-Electron environment');
             }
-            
+
             // Reload diseases list
             await reloadDiseases();
-            
+
             // If the selected condition was deleted, clear the selection
             if (isSelectedConditionDeleted && onChange) {
                 onChange(null);
             }
-            
+
             // Clear selection and exit delete mode
             setSelectedForDelete(new Set());
             setDeleteMode(false);
@@ -142,7 +142,7 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
             {deleteMode && (
                 <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'error.light', color: 'error.contrastText' }}>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {selectedForDelete.size > 0 
+                        {selectedForDelete.size > 0
                             ? `${selectedForDelete.size} case${selectedForDelete.size > 1 ? 's' : ''} selected`
                             : 'Select cases to delete'}
                     </Typography>
@@ -214,8 +214,8 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
                                         borderLeft: `4px solid ${primary}`,
                                     },
                                     '&:hover': {
-                                        bgcolor: deleteMode && selectedForDelete.has(condition.id) 
-                                            ? 'error.main' 
+                                        bgcolor: deleteMode && selectedForDelete.has(condition.id)
+                                            ? 'error.main'
                                             : `${primary}10`,
                                     },
                                 }}
@@ -290,21 +290,21 @@ export default function ConditionListView({ selectedConditionId, onChange, compa
                 <DialogTitle>Delete Cases</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        Are you sure you want to delete {selectedForDelete.size} case{selectedForDelete.size > 1 ? 's' : ''}? 
+                        Are you sure you want to delete {selectedForDelete.size} case{selectedForDelete.size > 1 ? 's' : ''}?
                         This action cannot be undone and will permanently remove all data for these cases.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
-                    <Button 
-                        onClick={() => setShowDeleteDialog(false)} 
+                    <Button
+                        onClick={() => setShowDeleteDialog(false)}
                         disabled={isDeleting}
                         sx={{ textTransform: 'none' }}
                     >
                         Cancel
                     </Button>
-                    <Button 
-                        onClick={handleConfirmDelete} 
-                        color="error" 
+                    <Button
+                        onClick={handleConfirmDelete}
+                        color="error"
                         variant="contained"
                         disabled={isDeleting}
                         sx={{ textTransform: 'none' }}

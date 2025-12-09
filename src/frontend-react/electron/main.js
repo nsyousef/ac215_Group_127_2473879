@@ -191,7 +191,8 @@ ipcMain.handle('reset-app-data', async () => {
 // ML: Python Process Manager (one process per caseId)
 // ============================================================================
 
-const PY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+// Keep Python alive longer to cover slow first-time model downloads
+const PY_IDLE_TIMEOUT_MS = 45 * 60 * 1000; // 45 minutes
 
 const pyProcesses = new Map(); // caseId -> { child, buffer, pending, lastUsed }
 
@@ -337,7 +338,21 @@ function spawnPythonForCase(caseId) {
           state.pending.delete(id);
 
           if (msg.ok === false || msg.error) {
-            reject(new Error(msg.error || 'Python error'));
+            // Special handling for UNCERTAIN: resolve with error info instead of rejecting
+            // This prevents Electron from logging the error to console
+            if (msg.error === 'UNCERTAIN') {
+              resolve({
+                ok: false,
+                error: msg.error,
+                message: msg.message,
+                isUncertain: true
+              });
+            } else {
+              const error = new Error(msg.message || msg.error || 'Python error');
+              error.code = msg.error;
+              error.details = msg;
+              reject(error);
+            }
           } else {
             // Prefer msg.result if present, else whole msg
             resolve(
@@ -421,6 +436,7 @@ setInterval(() => {
 ipcMain.handle('ml:getInitialPrediction', async (event, { caseId, imagePath, textDescription, userTimestamp, hasCoin = false }) => {
   if (!caseId) throw new Error('caseId required');
   if (!imagePath) throw new Error('imagePath required');
+  console.log('[EL] [main.js] ml:getInitialPrediction - hasCoin:', hasCoin, 'type:', typeof hasCoin);
   return await pyRequest(caseId, 'predict', {
     image_path: imagePath,
     text_description: textDescription,
@@ -633,6 +649,7 @@ ipcMain.handle('data:addTimelineEntry', async (event, caseId, imagePath, note, d
   if (!caseId) throw new Error('caseId required');
   if (!imagePath) throw new Error('imagePath required');
   if (!date) throw new Error('date required');
+  console.log('[EL] [main.js] data:addTimelineEntry - hasCoin:', hasCoin, 'type:', typeof hasCoin);
   return await pyRequest('static', 'add_timeline_entry', {
     case_id: caseId,
     image_path: imagePath,
