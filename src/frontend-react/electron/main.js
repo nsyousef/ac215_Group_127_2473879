@@ -191,7 +191,8 @@ ipcMain.handle('reset-app-data', async () => {
 // ML: Python Process Manager (one process per caseId)
 // ============================================================================
 
-const PY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+// Keep Python alive longer to cover slow first-time model downloads
+const PY_IDLE_TIMEOUT_MS = 45 * 60 * 1000; // 45 minutes
 
 const pyProcesses = new Map(); // caseId -> { child, buffer, pending, lastUsed }
 

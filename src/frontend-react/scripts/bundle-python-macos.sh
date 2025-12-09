@@ -102,7 +102,7 @@ fi
 
 # Strip debug symbols from compiled libraries (.so files)
 echo "  Stripping debug symbols from compiled libraries..."
-find "$VENV_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*/bin/*" -exec strip -x {} + 2>/dev/null || true
+# find "$VENV_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*/bin/*" -exec strip -x {} + 2>/dev/null || true
 
 # Remove pip cache
 rm -rf "$VENV_DIR/lib/python"*/site-packages/pip* 2>/dev/null || true
