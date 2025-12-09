@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
     Box,
@@ -40,9 +40,50 @@ export default function PageContent({ initialView }) {
     const [chatRefreshKey, setChatRefreshKey] = useState(0); // Key to force ChatPanel reload
     const [mobileView, setMobileView] = useState(viewParam);
     const [previousMobileView, setPreviousMobileView] = useState('home'); // Track previous view for back navigation
+    const selectedConditionIdRef = useRef(null); // Track selected condition ID to avoid unnecessary updates
 
     const { diseases, reload: reloadDiseases } = useDiseaseContext();
     const { profile, loading: profileLoading, updateProfile } = useProfile();
+
+    // Restore selected condition from URL if conditionId is in query params
+    // This only runs when URL changes or diseases load, not when selectedCondition changes
+    useEffect(() => {
+        const conditionId = searchParams.get('conditionId');
+        
+        // If we have a conditionId in URL
+        if (conditionId) {
+            // Check if we already have this condition selected (avoid unnecessary updates)
+            if (selectedConditionIdRef.current === conditionId) {
+                // If we already have the condition selected, don't overwrite it
+                // This preserves the full condition object that was passed from the list
+                return;
+            }
+            
+            // If diseases are loaded, try to find and set the condition
+            if (diseases && diseases.length > 0) {
+                const condition = diseases.find((d) => d.id === conditionId);
+                if (condition) {
+                    // Only set if we don't already have a condition selected
+                    // This prevents overwriting a condition that was just set by handleSelectCondition
+                    setSelectedCondition((prev) => {
+                        // If we already have a condition selected, keep it
+                        // This is important when selecting from list - we want to keep the full object
+                        if (prev && prev.id === conditionId) {
+                            return prev;
+                        }
+                        // Only set if we don't have a condition or it's a different one
+                        return condition;
+                    });
+                    selectedConditionIdRef.current = conditionId;
+                }
+            } else {
+                // Diseases not loaded yet, just store the ID for later
+                selectedConditionIdRef.current = conditionId;
+            }
+        }
+        // Don't clear selection if conditionId is removed - let user explicitly clear it
+        // This prevents the flash where condition appears then disappears
+    }, [searchParams, diseases]);
 
     // Sync mobileView with view param and track previous view
     useEffect(() => {
@@ -54,12 +95,30 @@ export default function PageContent({ initialView }) {
     }, [viewParam]);
 
     const handleSelectCondition = (condition) => {
+        // Handle null condition (e.g., when deleting)
+        if (!condition) {
+            setSelectedCondition(null);
+            selectedConditionIdRef.current = null;
+            // Clear conditionId from URL
+            const currentView = searchParams.get('view') || 'home';
+            router.replace(`/?view=${currentView}`);
+            return;
+        }
+        
+        // Set condition and ref FIRST, before navigation
+        // This ensures the condition is set immediately and the useEffect won't overwrite it
+        selectedConditionIdRef.current = condition.id;
         setSelectedCondition(condition);
         // Force ChatPanel to reload conversation history
         setChatRefreshKey((k) => k + 1);
-        // On mobile, when selecting from list, show results
+        
+        // Navigate immediately - the ref check in useEffect will prevent overwriting
+        // Use replace instead of push to avoid back button issues
         if (isMobile) {
-            router.push('/?view=results');
+            router.replace(`/?view=results&conditionId=${condition.id}`);
+        } else {
+            // On desktop, also update URL to persist selection
+            router.replace(`/?view=home&conditionId=${condition.id}`);
         }
     };
 
@@ -76,10 +135,11 @@ export default function PageContent({ initialView }) {
 
     const handlePopoverViewResults = (condition) => {
         // When user clicks "View Results" in the popover (mobile only)
+        selectedConditionIdRef.current = condition.id;
         setSelectedCondition(condition);
         // Force ChatPanel to reload conversation history
         setChatRefreshKey((k) => k + 1);
-        router.push('/?view=results');
+        router.replace(`/?view=results&conditionId=${condition.id}`);
     };
 
     const handleBackFromResults = () => {
@@ -153,7 +213,8 @@ export default function PageContent({ initialView }) {
         setTimeEntriesVersion((v) => v + 1);
 
         // Navigate to results view
-        router.push('/?view=results');
+        selectedConditionIdRef.current = newDisease.id;
+        router.replace(`/?view=results&conditionId=${newDisease.id}`);
     };
 
     const handleStartAnalysis = (tempDisease) => {
@@ -164,13 +225,14 @@ export default function PageContent({ initialView }) {
         setSelectedCondition(tempDisease);
 
         // Navigate to appropriate view
+        selectedConditionIdRef.current = tempDisease.id;
         if (isMobile) {
             // On mobile, navigate to chat view
-            router.push('/?view=chat');
+            router.replace(`/?view=chat&conditionId=${tempDisease.id}`);
         } else {
             // On desktop, navigate to results view (which shows chat in right column)
             // The chat panel will be visible once selectedCondition is set
-            router.push('/?view=results');
+            router.replace(`/?view=results&conditionId=${tempDisease.id}`);
         }
     };
 
