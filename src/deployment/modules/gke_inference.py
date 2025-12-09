@@ -252,6 +252,7 @@ class GKEInferenceService(pulumi.ComponentResource):
             ),
             spec=k8s.apps.v1.DeploymentSpecArgs(
                 replicas=min_replicas,
+                progress_deadline_seconds=1200,  # allow up to 20 minutes for initial model load/boot
                 selector=k8s.meta.v1.LabelSelectorArgs(match_labels=app_labels),
                 template=k8s.core.v1.PodTemplateSpecArgs(
                     metadata=k8s.meta.v1.ObjectMetaArgs(labels=app_labels),
@@ -288,7 +289,8 @@ class GKEInferenceService(pulumi.ComponentResource):
                                     http_get=k8s.core.v1.HTTPGetActionArgs(path="/health", port=8080),
                                     initial_delay_seconds=0,
                                     period_seconds=5,
-                                    failure_threshold=60,  # 300 seconds total
+                                    timeout_seconds=30,
+                                    failure_threshold=60,  # ample time for large model download/startup
                                 ),
                                 volume_mounts=[
                                     k8s.core.v1.VolumeMountArgs(
