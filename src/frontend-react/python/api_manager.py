@@ -43,6 +43,7 @@ def debug_log(msg: str):
 try:
     sys.path.insert(0, str(Path(__file__).parent / "cv-analysis"))
     from module import run_cv_analysis as cv_run_analysis
+
     CV_ANALYSIS_AVAILABLE = True
     debug_log("✓ CV analysis module loaded successfully")
 except ImportError as e:
@@ -450,9 +451,9 @@ class APIManager:
 
         # Create temporary APIManager instance to use its methods
         api = APIManager(case_id, dummy=False)
-        
+
         debug_log(f"Adding timeline entry for case {case_id} (has_coin={has_coin})")
-        
+
         # Get predictions from the earliest date entry (initial diagnosis)
         predictions = {}
         top_prediction_label = ""
@@ -462,28 +463,26 @@ class APIManager:
             predictions = earliest_entry.get("predictions", {})
             if predictions:
                 top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0]
-        
+
         # Determine if we should run CV analysis
         should_run_cv = has_coin
 
         cv_analysis = {}
         tracking_summary = ""
-        
+
         if should_run_cv:
             # Run CV analysis on the uploaded image
             debug_log("  → Running CV analysis...")
             cv_analysis = api._run_cv_analysis(image_path)
-            
+
             # Generate time tracking summary
             debug_log("  → Generating time tracking summary...")
             tracking_summary = api._get_time_tracking_summary(
-                predictions=predictions,
-                text_description=note,
-                cv_analysis=cv_analysis
+                predictions=predictions, text_description=note, cv_analysis=cv_analysis
             )
         else:
             debug_log(f"  → Skipping CV analysis (has_coin={has_coin}, top_prediction={top_prediction_label})")
-        
+
         # Add new entry to dates using the provided date as key
         if "dates" not in api.case_history:
             api.case_history["dates"] = {}
@@ -922,7 +921,7 @@ class APIManager:
             "text_summary": text_summary or "",
             "tracking_summary": tracking_summary or "",
         }
-        
+
         # Log what we're saving for debugging
         debug_log(f"    Saved to history[{date}]:")
         debug_log(f"      - text_summary: {(text_summary or '')[:80]}...")
@@ -1056,19 +1055,20 @@ class APIManager:
             try:
                 debug_log(f"    Running CV analysis on: {image_path}")
                 cv_results = cv_run_analysis(image_path, bbox=None)
-                
+
                 # Extract only the metrics dict (not the images/masks)
                 metrics = cv_results.get("metrics", {})
-                
+
                 debug_log(f"    CV analysis completed. Metrics: {json.dumps(metrics, indent=2)}")
                 return metrics
-                
+
             except Exception as e:
                 debug_log(f"    ⚠ CV analysis failed: {e}")
                 import traceback
+
                 debug_log(traceback.format_exc())
                 # Fall through to dummy data
-        
+
         # Fallback to dummy data if CV analysis not available or failed
         debug_log("    [FALLBACK] Using dummy CV analysis...")
         return {
@@ -1154,11 +1154,11 @@ class APIManager:
         }
 
         # Log the full prompt/payload being sent to the LLM
-        debug_log("\n" + "="*80)
+        debug_log("\n" + "=" * 80)
         debug_log("📤 FULL PROMPT SENT TO LLM EXPLAIN API:")
-        debug_log("="*80)
+        debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
-        debug_log("="*80 + "\n")
+        debug_log("=" * 80 + "\n")
 
         try:
             full_answer_parts: List[str] = []
@@ -1249,11 +1249,11 @@ class APIManager:
         }
 
         # Log the full prompt/payload being sent to the LLM
-        debug_log("\n" + "="*80)
+        debug_log("\n" + "=" * 80)
         debug_log("📤 FULL PROMPT SENT TO LLM FOLLOWUP API:")
-        debug_log("="*80)
+        debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
-        debug_log("="*80 + "\n")
+        debug_log("=" * 80 + "\n")
 
         debug_log("Calling LLM followup API (streaming only)...")
 
@@ -1328,43 +1328,43 @@ class APIManager:
     ) -> str:
         """
         Generate a brief tracking summary from CV analysis and predictions.
-        
+
         Args:
             predictions: Disease predictions from ML model
             text_description: User's text description
             cv_analysis: Current CV metrics
-            
+
         Returns:
             String summary (3-4 sentences)
         """
         if self.dummy:
             debug_log("    [DUMMY MODE] Returning dummy tracking summary...")
             return "The affected area measures roughly 2.5 cm² with moderate color variation. The shape appears fairly regular. These measurements align with the suspected condition based on the image."
-        
+
         debug_log("Calling LLM time tracking summary API...")
-        
+
         # Build CV analysis history from case history
         cv_analysis_history = {}
         for date, entry in self.case_history.get("dates", {}).items():
             if "cv_analysis" in entry:
                 cv_analysis_history[date] = entry["cv_analysis"]
-        
+
         # Add current analysis
         current_date = datetime.now().strftime("%Y-%m-%d")
         cv_analysis_history[current_date] = cv_analysis
-        
+
         payload = {
             "user_input": text_description,
             "cv_analysis_history": cv_analysis_history,
         }
-        
+
         # Log the full payload
-        debug_log("\n" + "="*80)
+        debug_log("\n" + "=" * 80)
         debug_log("📤 TIME TRACKING SUMMARY REQUEST:")
-        debug_log("="*80)
+        debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
-        debug_log("="*80 + "\n")
-        
+        debug_log("=" * 80 + "\n")
+
         try:
             # Call the time tracking summary endpoint
             time_tracking_url = LLM_TIME_TRACKING_URL
@@ -1384,7 +1384,7 @@ class APIManager:
                 debug_log("⚠ LLM returned empty tracking summary; generating fallback from CV metrics")
                 area = cv_analysis.get("area_cm2") or cv_analysis.get("area_cm2_uncorrected")
                 compactness = cv_analysis.get("compactness_index")
-                color = (cv_analysis.get("color_stats_lab") or {})
+                color = cv_analysis.get("color_stats_lab") or {}
                 mean_L = color.get("mean_L")
                 mean_A = color.get("mean_A")
 

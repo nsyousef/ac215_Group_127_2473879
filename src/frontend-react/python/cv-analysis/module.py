@@ -85,8 +85,8 @@ def _detect_coin_and_get_scale(
         cv2.HOUGH_GRADIENT,
         dp=1.2,
         minDist=max(min_radius_px * 2, 30),  # Reduced from 3 to 2, 50 to 30
-        param1=80,   # Reduced from 100 (less strict edge detection)
-        param2=30,   # Reduced from 50 (lower accumulator threshold)
+        param1=80,  # Reduced from 100 (less strict edge detection)
+        param2=30,  # Reduced from 50 (lower accumulator threshold)
         minRadius=min_radius_px,
         maxRadius=max_radius_px,
     )
@@ -204,13 +204,13 @@ def _score_coin_candidate(
     # Uniformity in [0,1] (1 = very uniform)
     uniformity_score = 1.0 - (std_h / 180.0 + std_s / 255.0) / 2.0
     uniformity_score = max(0.0, min(1.0, uniformity_score))
-    
+
     # --- 1b. Coin color detection ---
     # Pennies are typically orange/bronze: hue 5-30 in HSV (expanded range)
     # Also check for copper/bronze colors (hue 0-5 or 25-30 for reddish tones)
     # Reject dark lesions (low brightness) and non-metallic colors
     is_penny_color = False
-    
+
     # Primary: Orange/bronze range (typical penny color)
     if 5 <= mean_h <= 30:
         is_penny_color = True
@@ -222,7 +222,7 @@ def _score_coin_candidate(
     # Tertiary: Low saturation metallic (silver coins) - but prioritize pennies
     elif std_s < 25 and mean_v > 100:
         is_penny_color = True
-    
+
     # Strong penalty for non-coin colors (lesions are typically darker, different hue)
     if not is_penny_color:
         color_score = 0.1  # Very low score for non-penny colors
@@ -276,12 +276,12 @@ def _score_coin_candidate(
     # --- 6. Combine scores ---
     # Prioritize: color match > edge strength > size > contrast > brightness
     score = (
-        0.30 * color_score          # NEW: Strong weight on coin-like colors
-        + 0.25 * edge_strength      # Strong circular edge is key
-        + 0.15 * contrast_score     # Coin vs skin contrast
-        + 0.05 * brightness_score   # Reduced weight
-        + 0.03 * uniformity_score   # Reduced (coins can have markings)
-        + 0.02 * tilt_score         # Reduced
+        0.30 * color_score  # NEW: Strong weight on coin-like colors
+        + 0.25 * edge_strength  # Strong circular edge is key
+        + 0.15 * contrast_score  # Coin vs skin contrast
+        + 0.05 * brightness_score  # Reduced weight
+        + 0.03 * uniformity_score  # Reduced (coins can have markings)
+        + 0.02 * tilt_score  # Reduced
     )
 
     return score
@@ -627,8 +627,8 @@ def run_cv_analysis(image_path: str, bbox: Tuple[int, int, int, int] = None) -> 
     # Load image and immediately downscale to max 1024x1024 if needed
     full_image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
 
-    #Save image to downloads
-    cv2.imwrite('/Users/tk20/Downloads/tmp.png', full_image)
+    # Save image to downloads
+    cv2.imwrite("/Users/tk20/Downloads/tmp.png", full_image)
 
     # Initialize bbox with full image boundaries if not provided
     full_h, full_w = full_image.shape[:2]
