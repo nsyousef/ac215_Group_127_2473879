@@ -66,13 +66,33 @@ class MLClient {
     if (isElectron() && window.electronAPI && window.electronAPI.mlGetInitialPrediction) {
       const userTimestamp = new Date().toISOString();
       const hasCoin = metadata.hasCoin !== undefined ? metadata.hasCoin : false;
-      return await window.electronAPI.mlGetInitialPrediction(
-        caseId,
-        imagePath,
-        textDescription,
-        userTimestamp,
-        hasCoin,
-      );
+      console.log('[mlClient] getInitialPrediction - metadata:', metadata, 'hasCoin:', hasCoin);
+      
+      try {
+        const result = await window.electronAPI.mlGetInitialPrediction(
+          caseId,
+          imagePath,
+          textDescription,
+          userTimestamp,
+          hasCoin,
+        );
+        
+        // Check if this is an UNCERTAIN response (resolved, not rejected, to avoid console error)
+        // Return it as-is so the calling code can check for isUncertain flag
+        if (result && result.isUncertain) {
+          return result;
+        }
+        
+        return result;
+      } catch (error) {
+        // Clean up Electron IPC error prefix before rethrowing (for other errors)
+        const cleanMessage = error.message.replace(/^Error invoking remote method '[^']+': Error: /, '');
+        const cleanError = new Error(cleanMessage);
+        cleanError.code = error.code;
+        cleanError.details = error.details;
+        cleanError.stack = error.stack;
+        throw cleanError;
+      }
     }
 
     // Non-Electron fallback: no public dummy loading; return a structured error

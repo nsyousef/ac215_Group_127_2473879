@@ -58,11 +58,11 @@ class DermatologyLLM:
         print(f"Initializing {MODEL_NAME} with max_tokens={MAX_TOKENS}")
 
         self.llm = LLM(
-            model_name=MODEL_NAME, 
-            max_new_tokens=MAX_TOKENS, 
-            base_prompt=BASE_PROMPT, 
+            model_name=MODEL_NAME,
+            max_new_tokens=MAX_TOKENS,
+            base_prompt=BASE_PROMPT,
             question_prompt=QUESTION_PROMPT,
-            time_tracking_prompt=TIME_TRACKING_PROMPT
+            time_tracking_prompt=TIME_TRACKING_PROMPT,
         )
 
     @modal.fastapi_endpoint(method="POST", docs=True)
@@ -139,7 +139,7 @@ class DermatologyLLM:
     def time_tracking_summary(self, json_data: dict) -> dict:
         """
         Generate a brief summary of time tracking data for a skin condition.
-        
+
         Expects:
             {
                 "predictions": {"disease1": 0.78, ...},
@@ -150,7 +150,7 @@ class DermatologyLLM:
                     "2024-12-08": {"area_cm2": 2.0, "color_stats_lab": {...}, ...}
                 }
             }
-        
+
         Returns:
             {"summary": "3-4 sentence summary text"}
         """
@@ -159,5 +159,5 @@ class DermatologyLLM:
             user_demographics=json_data.get("user_demographics", {}),
             user_input=json_data.get("user_input", ""),
             cv_analysis_history=json_data["cv_analysis_history"],
-            temperature=0.3
+            temperature=0.3,
         )

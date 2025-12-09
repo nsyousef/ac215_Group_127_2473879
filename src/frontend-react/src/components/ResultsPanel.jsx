@@ -16,6 +16,12 @@ import {
 } from '@mui/icons-material';
 import { isElectron } from '@/utils/config';
 
+// Helper to convert **bold** markdown to HTML
+function markdownToHtml(text) {
+  if (!text) return '';
+  return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+}
+
 /**
  * Reusable results/overview panel component
  * @param {Object} props
@@ -193,10 +199,8 @@ export default function ResultsPanel({
                 mb: 2,
                 whiteSpace: 'pre-wrap',
               }}
-            >
-              {explanation ||
-                'Preparing your explanation…'}
-            </Typography>
+              dangerouslySetInnerHTML={{ __html: markdownToHtml(explanation || 'Preparing your explanation…') }}
+            />
           </>
         ) : (
           <Typography

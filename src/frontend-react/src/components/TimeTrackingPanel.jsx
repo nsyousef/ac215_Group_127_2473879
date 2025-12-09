@@ -81,7 +81,7 @@ export default function TimeTrackingPanel({ conditionId, onAddImage, refreshKey 
                   })
                 );
 
-                // If case_history has no dates yet (initial prediction still saving), 
+                // If case_history has no dates yet (initial prediction still saving),
                 // fall back to in-memory timelineData from the condition object
                 if (data.length === 0 && condition?.timelineData && Array.isArray(condition.timelineData) && condition.timelineData.length > 0) {
                   data = await Promise.all(

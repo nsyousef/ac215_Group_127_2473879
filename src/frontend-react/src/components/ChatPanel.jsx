@@ -16,6 +16,12 @@ import { isElectron } from '@/utils/config';
 import { useDiseaseContext } from '@/contexts/DiseaseContext';
 import mlClient from '@/services/mlClient';
 
+// Helper to convert **bold** markdown to HTML
+function markdownToHtml(text) {
+  if (!text) return '';
+  return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+}
+
 export default function ChatPanel({ conditionId, refreshKey }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -287,7 +293,7 @@ export default function ChatPanel({ conditionId, refreshKey }) {
                   borderRadius: 2,
                 }}
               >
-                <Typography variant="body2">{m.text}</Typography>
+                <Typography variant="body2" dangerouslySetInnerHTML={{ __html: markdownToHtml(m.text) }} />
               </Box>
               <Typography variant="caption" sx={{ color: '#999' }}>
                 {new Date(m.time).toLocaleString()}
