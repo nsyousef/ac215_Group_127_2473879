@@ -22,3 +22,7 @@ config:
   # Modal LLM configuration
   pibu-ai-deployment:modal_username: nsyousef
   pibu-ai-deployment:llm_model_size: 27b
+  pibu-ai-deployment:modal_token_id:
+    secure: v1:NGyYKyZFWCeil705:WbJFG5JM4Sh5+SghNkmh8jEU+zyuU83nYfGwWy99wQauHR7Bkd4nFK8=
+  pibu-ai-deployment:modal_token_secret:
+    secure: v1:hlcLDYpnikyFG8p0:KwjMNVtafD/8Trdt+OjmFF06K3EvDG3dh02O9mqmqkpiuU+lSjvpxLo=
