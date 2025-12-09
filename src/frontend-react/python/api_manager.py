@@ -1354,8 +1354,6 @@ class APIManager:
         cv_analysis_history[current_date] = cv_analysis
         
         payload = {
-            "predictions": predictions,
-            "user_demographics": self.demographics,
             "user_input": text_description,
             "cv_analysis_history": cv_analysis_history,
         }

@@ -142,8 +142,6 @@ class DermatologyLLM:
         
         Expects:
             {
-                "predictions": {"disease1": 0.78, ...},
-                "user_demographics": {...},
                 "user_input": "text description",
                 "cv_analysis_history": {
                     "2024-12-01": {"area_cm2": 2.5, "color_stats_lab": {...}, ...},
@@ -155,8 +153,6 @@ class DermatologyLLM:
             {"summary": "3-4 sentence summary text"}
         """
         return self.llm.time_tracking_summary(
-            predictions=json_data["predictions"],
-            user_demographics=json_data.get("user_demographics", {}),
             user_input=json_data.get("user_input", ""),
             cv_analysis_history=json_data["cv_analysis_history"],
             temperature=0.3

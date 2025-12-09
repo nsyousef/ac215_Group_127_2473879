@@ -42,11 +42,10 @@ echo "Upgrading pip..."
 # Install Python dependencies
 echo "Installing dependencies..."
 
-# Step 1: Install CPU-only PyTorch first with strict index constraint
-echo "Installing CPU-only PyTorch..."
+# Step 1: Install PyTorch 2.9.1 (verified working on M-series)
+echo "Installing PyTorch 2.9.1..."
 "$VENV_DIR/bin/pip" install --no-cache-dir \
-  --index-url https://download.pytorch.org/whl/cpu \
-  torch torchvision
+  torch==2.9.1 torchvision==0.24.1
 
 # Step 2: Install remaining dependencies from requirements-build.txt (excludes torch & test deps)
 # Falls back to requirements-ci.txt if build version doesn't exist
@@ -101,8 +100,9 @@ if [ -d "$VENV_DIR/lib/python*/site-packages/transformers" ]; then
 fi
 
 # Strip debug symbols from compiled libraries (.so files)
-echo "  Stripping debug symbols from compiled libraries..."
-find "$VENV_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*/bin/*" -exec strip -x {} + 2>/dev/null || true
+# DISABLED: Breaks PyTorch on M-series
+# echo "  Stripping debug symbols from compiled libraries..."
+# find "$VENV_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*/bin/*" -exec strip -x {} + 2>/dev/null || true
 
 # Remove pip cache
 rm -rf "$VENV_DIR/lib/python"*/site-packages/pip* 2>/dev/null || true

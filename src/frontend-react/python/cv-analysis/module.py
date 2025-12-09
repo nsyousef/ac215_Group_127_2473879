@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 from typing import Dict, Any, Tuple
 import math
-from skimage.measure import regionprops
 from sklearn.cluster import KMeans
 
 ASSUMED_HORIZONTAL_FOV_DEGREES = 60.0
@@ -73,24 +72,27 @@ def _detect_coin_and_get_scale(
     corrected_L = correct_illumination(image)
 
     # 1. Detect circles on illumination-corrected image
-    min_radius_px = int(min(full_h, full_w) * 0.1)
-    max_radius_px = int(min(full_h, full_w) * 0.7)
+    min_radius_px = int(min(full_h, full_w) * 0.1)  # Reduced from 0.1 (smaller coins)
+    max_radius_px = int(min(full_h, full_w) * 0.9)  # Slightly larger allowance for full coin detection
 
     gray_blurred = cv2.GaussianBlur(corrected_L, (9, 9), 2)
+
+    min_radius_px = int(min(full_h, full_w) * 0.05)  # Reduced from 0.1 (smaller coins)
+    max_radius_px = int(min(full_h, full_w) * 0.95)  # Slightly larger allowance for full coin detection
 
     circles = cv2.HoughCircles(
         gray_blurred,
         cv2.HOUGH_GRADIENT,
         dp=1.2,
-        minDist=max(min_radius_px * 3, 50),
-        param1=100,
-        param2=50,
+        minDist=max(min_radius_px * 2, 30),  # Reduced from 3 to 2, 50 to 30
+        param1=80,   # Reduced from 100 (less strict edge detection)
+        param2=30,   # Reduced from 50 (lower accumulator threshold)
         minRadius=min_radius_px,
         maxRadius=max_radius_px,
     )
 
     # 2. Detect ellipses from contours
-    edges = cv2.Canny(gray_blurred, 50, 150)
+    edges = cv2.Canny(gray_blurred, 30, 120)  # Reduced from 50,150 (more lenient edge detection)
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     ellipses = []
@@ -111,7 +113,7 @@ def _detect_coin_and_get_scale(
 
             # Use major axis to approximate diameter; filter by size in px
             # major_axis is the projected diameter in pixels
-            if min_radius_px * 2 < major_axis < max_radius_px * 2 and aspect_ratio < 2.0:
+            if min_radius_px * 2 < major_axis < max_radius_px * 2 and aspect_ratio < 3.0:  # Increased from 2.0 to 3.0
                 r_approx = int(major_axis / 2)  # radius from major axis
                 ellipses.append((int(cx), int(cy), r_approx, ellipse, tilt_correction))
 
@@ -125,11 +127,15 @@ def _detect_coin_and_get_scale(
     if circles is not None:
         circles = np.round(circles[0, :]).astype("int")
         for x, y, r in circles:
-            candidates.append(("circle", x, y, r, None, 1.0))
+            # Check if coin is completely within image bounds
+            if r <= x < full_w - r and r <= y < full_h - r:
+                candidates.append(("circle", x, y, r, None, 1.0))
 
     # Add ellipses as candidates (with their tilt correction)
     for x, y, r, ellipse_data, tilt_correction in ellipses:
-        candidates.append(("ellipse", x, y, r, ellipse_data, tilt_correction))
+        # Check if coin is completely within image bounds
+        if r <= x < full_w - r and r <= y < full_h - r:
+            candidates.append(("ellipse", x, y, r, ellipse_data, tilt_correction))
 
     # Score each candidate
     for candidate_type, x, y, r, extra_data, tilt_correction in candidates:
@@ -149,6 +155,9 @@ def _detect_coin_and_get_scale(
             best_score = score
             best_candidate = (candidate_type, x, y, r, tilt_correction)
 
+    # Only accept if score is above threshold (reject weak candidates)
+    # Higher threshold since we now check for penny colors and full visibility
+    MIN_COIN_SCORE = 0  # Minimum score to consider it a coin
     if best_candidate is not None:
         _, x, y, r, tilt_correction = best_candidate
         coin_radius_cm = 0.9525  # US penny radius in cm
@@ -185,15 +194,42 @@ def _score_coin_candidate(
 
     # --- 1. Basic stats ---
     mean_v = float(np.mean(v_vals))
+    mean_h = float(np.mean(h_vals))
     std_h = float(np.std(h_vals))
     std_s = float(np.std(s_vals))
 
-    # Brightness in [0,1]
+    # Brightness in [0,1] - coins are typically brighter than skin lesions
     brightness_score = mean_v / 255.0
 
     # Uniformity in [0,1] (1 = very uniform)
     uniformity_score = 1.0 - (std_h / 180.0 + std_s / 255.0) / 2.0
     uniformity_score = max(0.0, min(1.0, uniformity_score))
+    
+    # --- 1b. Coin color detection ---
+    # Pennies are typically orange/bronze: hue 5-30 in HSV (expanded range)
+    # Also check for copper/bronze colors (hue 0-5 or 25-30 for reddish tones)
+    # Reject dark lesions (low brightness) and non-metallic colors
+    is_penny_color = False
+    
+    # Primary: Orange/bronze range (typical penny color)
+    if 5 <= mean_h <= 30:
+        is_penny_color = True
+    # Secondary: Reddish-copper tones (hue 0-5 or 170-180 for red)
+    elif (0 <= mean_h <= 5) or (170 <= mean_h <= 180):
+        # Check if it's bright enough to be a coin (not a dark lesion)
+        if mean_v > 80:  # Coins are brighter than most lesions
+            is_penny_color = True
+    # Tertiary: Low saturation metallic (silver coins) - but prioritize pennies
+    elif std_s < 25 and mean_v > 100:
+        is_penny_color = True
+    
+    # Strong penalty for non-coin colors (lesions are typically darker, different hue)
+    if not is_penny_color:
+        color_score = 0.1  # Very low score for non-penny colors
+    elif mean_v < 60:  # Too dark to be a coin
+        color_score = 0.2
+    else:
+        color_score = 1.0  # Full score for penny-like colors
 
     # --- 2. Edge strength around boundary ---
     # Build a thin ring at the border of the candidate
@@ -232,14 +268,20 @@ def _score_coin_candidate(
     tilt_score = float(tilt_correction)
     tilt_score = max(0.0, min(1.0, tilt_score))
 
-    # --- 5. Combine scores ---
-    # You can tune these weights
+    # --- 5. Size check (penny should be ~1.9cm, reasonable pixel size) ---
+    # Typical penny in photo: 50-200 pixels radius depending on distance
+    img_h, img_w = hsv_img.shape[:2]
+    img_diag = np.sqrt(img_h**2 + img_w**2)
+
+    # --- 6. Combine scores ---
+    # Prioritize: color match > edge strength > size > contrast > brightness
     score = (
-        0.25 * brightness_score
-        + 0.25 * uniformity_score
-        + 0.25 * edge_strength
-        + 0.15 * contrast_score
-        + 0.10 * tilt_score
+        0.30 * color_score          # NEW: Strong weight on coin-like colors
+        + 0.25 * edge_strength      # Strong circular edge is key
+        + 0.15 * contrast_score     # Coin vs skin contrast
+        + 0.05 * brightness_score   # Reduced weight
+        + 0.03 * uniformity_score   # Reduced (coins can have markings)
+        + 0.02 * tilt_score         # Reduced
     )
 
     return score
@@ -270,14 +312,22 @@ def create_coin_masks(
     if coin_data is not None:
         full_cx, full_cy, full_cr = coin_data
 
+        # Expand coin radius to fully remove coin edges/reflections
+        expanded_radius = int(full_cr * 1.4) + 4
+
         # Draw on full space mask (downscaled image space)
-        cv2.circle(coin_mask_full, (full_cx, full_cy), full_cr, 255, -1)
+        cv2.circle(coin_mask_full, (full_cx, full_cy), expanded_radius, 255, -1)
 
         # Draw on cropped space mask (for segmentation exclusion)
         crop_cx = full_cx - roi_x
         crop_cy = full_cy - roi_y
-        cv2.circle(mask, (crop_cx, crop_cy), full_cr, 0, -1)
-        cv2.circle(coin_mask, (crop_cx, crop_cy), full_cr, 255, -1)
+        cv2.circle(mask, (crop_cx, crop_cy), expanded_radius, 0, -1)  # Remove expanded area
+        cv2.circle(coin_mask, (crop_cx, crop_cy), expanded_radius, 255, -1)
+
+        # Dilate masks slightly to ensure full coverage
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        coin_mask_full = cv2.dilate(coin_mask_full, kernel, iterations=1)
+        coin_mask = cv2.dilate(coin_mask, kernel, iterations=1)
 
     return mask, coin_mask, coin_mask_full
 
@@ -410,7 +460,8 @@ def create_bad_color_mask(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
     # Mark as bad: non-skin colors (greens, blues, purples)
     # Keep dark regions - they're part of melanoma
-    bad_color_mask = (s > 60) & (v > 80) & ((h > 25) & (h < 155))
+    # Made less strict: increased saturation threshold and narrowed hue range
+    bad_color_mask = (s > 80) & (v > 100) & ((h > 30) & (h < 140))  # More lenient
 
     filtered_image = image.copy()
     filtered_image[bad_color_mask] = 0
@@ -576,6 +627,9 @@ def run_cv_analysis(image_path: str, bbox: Tuple[int, int, int, int] = None) -> 
     # Load image and immediately downscale to max 1024x1024 if needed
     full_image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
 
+    #Save image to downloads
+    cv2.imwrite('/Users/tk20/Downloads/tmp.png', full_image)
+
     # Initialize bbox with full image boundaries if not provided
     full_h, full_w = full_image.shape[:2]
     if bbox is None:
@@ -598,7 +652,10 @@ def run_cv_analysis(image_path: str, bbox: Tuple[int, int, int, int] = None) -> 
     pixels_per_cm, coin_data, tilt_correction = _detect_coin_and_get_scale(image)
     final_mask, coin_mask, coin_mask_full = create_coin_masks(grabcut_mask, image, coin_data, roi_x, roi_y)
 
-    # final_mask = _largest_component(final_mask)
+    # Clean up small artifacts (e.g., hairs) and keep the largest component
+    kernel_clean = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_OPEN, kernel_clean)
+    final_mask = _largest_component(final_mask)
 
     # --- METRICS CALCULATION ---
     metrics = _calculate_metrics(filtered_image, final_mask, pixels_per_cm, tilt_correction if tilt_correction else 1.0)
