@@ -23,6 +23,9 @@ jobs:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.stack || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+    outputs:
+      stack: ${{ steps.stack.outputs.stack }}
+      frontend_config_b64: ${{ steps.frontend-config.outputs.frontend_config }}
     env:
       GCP_PROJECT: ${{ secrets.GCP_PROJECT || 'level-scheme-471117-i9' }}
       GCP_REGION: ${{ secrets.GCP_REGION || 'us-east1' }}
@@ -134,22 +137,19 @@ jobs:
             pibu-ai-deployment:latest \
             bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && pulumi stack output frontend_config --json > frontend-config.json && cat frontend-config.json"
 
-      - name: Cleanup old workflow artifacts
-        run: ./delete-all-artifacts.sh --keep 0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Pulumi outputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: pulumi-outputs
-          path: src/deployment/frontend-config.json
-          retention-days: 7
+      - name: Encode frontend config for downstream job
+        id: frontend-config
+        working-directory: src/deployment
+        run: |
+          ENCODED=$(base64 frontend-config.json | tr -d '\n')
+          echo "frontend_config=$ENCODED" >> $GITHUB_OUTPUT
 
   build-electron-app:
     name: Build macOS Electron App
     needs: deploy-infrastructure
     runs-on: macos-latest
+    env:
+      PUBLIC_RELEASE_REPO: ${{ secrets.PUBLIC_RELEASE_REPO }}
 
     steps:
       - name: Checkout code
@@ -178,15 +178,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Download Pulumi outputs
-        uses: actions/download-artifact@v4
-        with:
-          name: pulumi-outputs
-          path: ./pulumi-outputs
-
-      - name: Inject Pulumi config into frontend
+      - name: Write Pulumi config from upstream job
+        env:
+          FRONTEND_CONFIG_B64: ${{ needs.deploy-infrastructure.outputs.frontend_config_b64 }}
         run: |
-          cp ./pulumi-outputs/frontend-config.json src/frontend-react/.pulumi-config.json
+          python - <<'PY'
+            import base64, os, pathlib
+            data = os.environ["FRONTEND_CONFIG_B64"]
+            path = pathlib.Path("src/frontend-react/.pulumi-config.json")
+            path.write_bytes(base64.b64decode(data))
+            PY
           echo "Pulumi config:"
           cat src/frontend-react/.pulumi-config.json | jq '.'
 
@@ -211,45 +212,37 @@ jobs:
         working-directory: src/frontend-react
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      - name: Ensure artifact space for DMG
-        run: ./delete-all-artifacts.sh --keep 0
+      - name: Publish DMG to public release repository
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pibu-ai-macos-${{ steps.package-version.outputs.VERSION }}-${{ steps.stack.outputs.stack }}
-          path: src/frontend-react/dist/pibu_ai.dmg
-          retention-days: 30
-
-      - name: Create GitHub Release (if prod)
-        if: steps.stack.outputs.stack == 'prod'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ steps.package-version.outputs.VERSION }}-${{ github.sha }}
-          name: Pibu.AI v${{ steps.package-version.outputs.VERSION }}
-          files: src/frontend-react/dist/Pibu.dmg
-          body: |
+          GH_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          PUBLIC_RELEASE_REPO: ${{ secrets.PUBLIC_RELEASE_REPO }}
+          STACK_NAME: ${{ steps.stack.outputs.stack }}
+          VERSION: ${{ steps.package-version.outputs.VERSION }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "PUBLIC_RELEASE_TOKEN secret is required to publish the DMG." >&2
+            exit 1
+          fi
+          if [ -z "$PUBLIC_RELEASE_REPO" ]; then
+            echo "PUBLIC_RELEASE_REPO secret (owner/name) is required." >&2
+            exit 1
+          fi
+          TAG="v${VERSION}-${STACK_NAME}"
+          TITLE="Pibu Desktop ${VERSION} (${STACK_NAME})"
+          BODY=$(cat <<'EOF'
             ## Pibu.AI Desktop Application
-
-            ### Installation
-            1. Download `Pibu.dmg`
-            2. Open the DMG file
-            3. Drag `Pibu.app` to Applications folder
-            4. Launch from Applications
-
-            ### Services
-            - Environment: ${{ github.event.inputs.stack }}
-            - Built from commit: ${{ github.sha }}
-
-            ### System Requirements
-            - macOS 11.0 or later
-            - Apple Silicon (M1/M2/M3/M4) or Intel
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - Build commit: GITHUB_SHA_PLACEHOLDER
+            - Stack: STACK_PLACEHOLDER
+            EOF
+            )
+          BODY="${BODY/GITHUB_SHA_PLACEHOLDER/${GITHUB_SHA}}"
+          BODY="${BODY/STACK_PLACEHOLDER/${STACK_NAME}}"
+          if gh release view "$TAG" --repo "$PUBLIC_RELEASE_REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists in $PUBLIC_RELEASE_REPO; uploading asset."
+          else
+            gh release create "$TAG" --repo "$PUBLIC_RELEASE_REPO" --title "$TITLE" --notes "$BODY"
+          fi
+          gh release upload "$TAG" src/frontend-react/dist/pibu_ai.dmg --repo "$PUBLIC_RELEASE_REPO" --clobber
 
       - name: Deployment Summary
         run: |
