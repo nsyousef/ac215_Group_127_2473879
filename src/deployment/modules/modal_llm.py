@@ -49,7 +49,7 @@ class ModalLLMService(pulumi.ComponentResource):
         scaledown_window_str = str(scaledown_window)
         # Construct deployment command
         deploy_cmd = f"""
-cd /llm && \
+cd ../llm && \
 export MODAL_MODEL_NAME="{model_name}" && \
 export MODAL_MAX_TOKENS="{max_tokens}" && \
 export MODAL_GPU="{gpu_type}" && \
