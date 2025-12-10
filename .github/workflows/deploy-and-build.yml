@@ -80,8 +80,7 @@ jobs:
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
-            bash -c "source .venv/bin/activate && \
-              pulumi stack select ${{ steps.stack.outputs.stack }} && \
+            bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && \
               pulumi config set --secret pibu-ai-deployment:modal_token_id '${{ secrets.MODAL_TOKEN_ID }}' && \
               pulumi config set --secret pibu-ai-deployment:modal_token_secret '${{ secrets.MODAL_TOKEN_SECRET }}'"
 
@@ -100,8 +99,7 @@ jobs:
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
-            bash -c "source .venv/bin/activate && \
-              pulumi stack select ${{ steps.stack.outputs.stack }} && \
+            bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && \
               pulumi refresh --yes && \
               pulumi up --yes"
 
@@ -119,7 +117,7 @@ jobs:
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
-            bash -c "source .venv/bin/activate && pulumi stack select ${{ steps.stack.outputs.stack }} && pulumi stack output frontend_config --json > frontend-config.json && cat frontend-config.json"
+            bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && pulumi stack output frontend_config --json > frontend-config.json && cat frontend-config.json"
 
       - name: Upload Pulumi outputs
         uses: actions/upload-artifact@v4
