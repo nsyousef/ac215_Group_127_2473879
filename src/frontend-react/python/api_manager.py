@@ -5,7 +5,7 @@ import shutil
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Callable
 
 import requests
 from prediction_texts import get_prediction_text
