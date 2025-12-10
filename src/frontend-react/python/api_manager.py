@@ -1181,7 +1181,7 @@ class APIManager:
 
         Returns:
             Dictionary containing CV analysis metrics:
-                - compactness_index: Shape metric (circularity)
+                - irregularity_index: Shape metric (circularity)
                 - color_stats_lab: LAB color space statistics
                 - area_cm2: Lesion area in cm² (if coin detected)
                 - tilt_correction_factor: Correction factor for tilted coins
@@ -1189,7 +1189,7 @@ class APIManager:
         if self.dummy:
             debug_log("    [DUMMY MODE] Returning dummy CV analysis...")
             return {
-                "compactness_index": 1.2,
+                "irregularity_index": 1.2,
                 "color_stats_lab": {
                     "mean_L": 67.2,
                     "mean_A": 18.4,
@@ -1228,7 +1228,7 @@ class APIManager:
         # Fallback to dummy data if CV analysis not available or failed
         debug_log("    [FALLBACK] Using dummy CV analysis...")
         return {
-            "compactness_index": 1.2,
+            "irregularity_index": 1.2,
             "color_stats_lab": {
                 "mean_L": 67.2,
                 "mean_A": 18.4,
@@ -1590,7 +1590,7 @@ class APIManager:
             if not summary.strip():
                 debug_log("⚠ LLM returned empty tracking summary; generating fallback from CV metrics")
                 area = cv_analysis.get("area_cm2") or cv_analysis.get("area_cm2_uncorrected")
-                compactness = cv_analysis.get("compactness_index")
+                irregularity = cv_analysis.get("irregularity_index")
                 color = cv_analysis.get("color_stats_lab") or {}
                 mean_L = color.get("mean_L")
                 mean_A = color.get("mean_A")
@@ -1604,10 +1604,10 @@ class APIManager:
                         if mean_A < 25
                         else "The redness level appears relatively high and should be monitored over time."
                     )
-                if compactness:
+                if irregularity:
                     sentences.append(
                         "The shape is reasonably regular for this type of spot."
-                        if compactness < 3.0
+                        if irregularity < 3.0
                         else "The shape is a bit irregular, so changes in the edges should be watched."
                     )
                 if not sentences:

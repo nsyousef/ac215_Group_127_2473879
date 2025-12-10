@@ -338,7 +338,7 @@ def create_coin_masks(
 def _calculate_metrics(
     filtered_image: np.ndarray, final_mask: np.ndarray, pixels_per_cm: float = None, tilt_correction: float = 1.0
 ) -> Dict[str, Any]:
-    """Calculates Compactness, Color Stats (LAB), Dominant Hues, and Area.
+    """Calculates irregularity, Color Stats (LAB), Dominant Hues, and Area.
 
     Args:
         filtered_image: Preprocessed image
@@ -356,8 +356,8 @@ def _calculate_metrics(
     if lesion_pixels_lab.size == 0:
         return metrics
 
-    # 1. Compactness (Shape Metric)
-    # Compactness Index = Perimeter^2 / (4 * pi * Area)
+    # 1. irregularity (Shape Metric)
+    # irregularity Index = Perimeter^2 / (4 * pi * Area)
     # Value close to 1 is highly circular.
     try:
         # Find contour (perimeter)
@@ -369,12 +369,12 @@ def _calculate_metrics(
             area = cv2.contourArea(largest_contour)
 
             if area > 0:
-                compactness = (perimeter * perimeter) / (4.0 * math.pi * area)
-                metrics["compactness_index"] = float(compactness)
+                irregularity = (perimeter * perimeter) / (4.0 * math.pi * area)
+                metrics["irregularity_index"] = float(irregularity)
             else:
-                metrics["compactness_index"] = 0.0
+                metrics["irregularity_index"] = 0.0
     except Exception:
-        metrics["compactness_index"] = np.nan
+        metrics["irregularity_index"] = np.nan
 
     # 2. Color Statistics (LAB)
     # L=Lightness, A=Green-Red axis, B=Blue-Yellow axis
