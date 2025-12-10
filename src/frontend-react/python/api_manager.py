@@ -879,10 +879,6 @@ class APIManager:
                 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
                 processed_image = Image.fromarray(img_rgb)
 
-                # Save processed image for debugging
-                try:
-                except Exception as e:
-                    debug_log(f"  → ❌ Failed to save processed image: {e}")
             else:
                 debug_log("  → ⚠️ No coin detected or coin mask is empty, skipping coin removal")
 

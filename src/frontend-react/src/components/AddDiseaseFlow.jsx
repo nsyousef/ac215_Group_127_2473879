@@ -362,17 +362,17 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
           caseId,
           { hasCoin },    // Pass hasCoin flag in metadata
         );
-        
+
         // Check if this is an UNCERTAIN result (not an error, so no console logging)
         if (results && results.isUncertain) {
           // Clear fallback timeout
           clearTimeout(fallbackTimeout);
-          
+
           // Clean up subscription
           if (predictionTextUnsubscribe) {
             predictionTextUnsubscribe();
           }
-          
+
           const errorMsg = results.message || 'Unable to determine the condition from this image. Please try again with better lighting, a clearer photo, or more descriptive text. It\'s also possible that there\'s nothing concerning to identify.';
           setError(errorMsg);
           setAnalyzing(false);
@@ -381,15 +381,15 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         }
       } catch (e) {
         console.error('Prediction failed:', e);
-        
+
         // Clear fallback timeout
         clearTimeout(fallbackTimeout);
-        
+
         // Clean up subscription
         if (predictionTextUnsubscribe) {
           predictionTextUnsubscribe();
         }
-        
+
         // Other errors (actual failures)
         const errorMsg = cleanErrorMessage(e.message) || 'Analysis failed. Please try again.';
         setError(errorMsg);
@@ -397,7 +397,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
         setStep(2);
         return;
       }
-      
+
       // Clear fallback timeout since prediction completed successfully
       clearTimeout(fallbackTimeout);
 
@@ -445,7 +445,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
 
       // Update the disease in context (it was already added as tempDisease)
       await addDisease(newDisease);
-      
+
       // Notify parent that analysis is complete with full data
       if (onSaved) onSaved(newDisease);
 
@@ -471,7 +471,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
       // Handle error (UNCERTAIN is handled above, so this is for actual failures)
       const errorMsg = cleanErrorMessage(e.message) || 'Analysis failed. Please try again.';
       setError(errorMsg);
-      
+
       setAnalyzing(false);
       setStep(2); // Go back to photo step on error
     }
@@ -541,9 +541,9 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>Tap the body map to place the marker, or choose from the list below.</Typography>
 
             <Box sx={{ mb: 2 }}>
-              <BodyMapPicker 
-                value={mapPos} 
-                onChange={(coords) => handleMapChange(coords)} 
+              <BodyMapPicker
+                value={mapPos}
+                onChange={(coords) => handleMapChange(coords)}
                 showBoundingBoxes={false}
               />
             </Box>
@@ -579,15 +579,27 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
           </Box>
         )}
 
-        {/* Step 1: Coin / instructions */}
+        {/* Step 1: Photo instructions */}
         {step === 1 && (
           <Box>
             <Typography variant="subtitle1" sx={{ mb: 1 }}>Image Instructions</Typography>
             <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
-              To enable tracking of size and color, place a coin (or a similarly sized object) near the skin condition in the photo.
+              Please take a clear, well-focused photo of the skin area you want to analyze.
             </Typography>
-            <Box sx={{ my: 2, display: 'flex', justifyContent: 'center' }}>
-              <img src="/assets/instructions.png" alt="Coin placement instructions" style={{ maxWidth: 320, width: '100%', borderRadius: 8, boxShadow: '0 2px 8px #0001' }} />
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>Make sure:</Typography>
+              <ul style={{ marginTop: 0, paddingLeft: '1.2rem', color: '#666', fontSize: '0.9rem' }}>
+                <li>The area is brightly and evenly lit</li>
+                <li>There are no shadows, glare, or strong reflections</li>
+                <li>The camera is held steady and the image is in focus</li>
+                <li>Nothing is covering or touching the skin area (hair, clothing, jewelry, etc.)</li>
+              </ul>
+            </Box>
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontSize: '0.95rem', mb: 1 }}>Optional: Computer Vision</Typography>
+              <Typography variant="body2" sx={{ color: '#666' }}>
+                If you would like to enable computer-vision size analysis, place a penny next to the skin area. Ensure the penny does not cover any part of the condition, and keep it on the same surface/plane as the skin so the size reference is accurate.
+              </Typography>
             </Box>
           </Box>
         )}
@@ -601,12 +613,12 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             </Typography>
 
             {error && (
-              <Box sx={{ 
-                bgcolor: '#fff3e0', 
-                border: '1px solid #ff9800', 
-                borderRadius: 1, 
-                p: 2, 
-                mb: 2 
+              <Box sx={{
+                bgcolor: '#fff3e0',
+                border: '1px solid #ff9800',
+                borderRadius: 1,
+                p: 2,
+                mb: 2
               }}>
                 <Typography variant="body2" sx={{ color: '#e65100', fontWeight: 500 }}>
                   {error}

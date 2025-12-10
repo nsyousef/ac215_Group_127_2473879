@@ -3,8 +3,6 @@ import sys
 import json
 import traceback
 from datetime import datetime
-import cv2
-import numpy as np
 from api_manager import APIManager
 
 manager = None
@@ -262,7 +260,6 @@ def handle_message(msg):
                                     coin_overlay = np.zeros_like(overlay_img)
                                     coin_overlay[coin_mask_original > 0] = [0, 0, 255]  # Red in BGR
                                     overlay_img = cv2.addWeighted(overlay_img, 0.7, coin_overlay, 0.3, 0)
-
 
                                 # Save cropped image (from PIL, preserving quality)
                             except Exception as e:
