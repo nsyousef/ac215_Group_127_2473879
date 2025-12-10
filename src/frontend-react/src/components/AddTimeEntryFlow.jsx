@@ -163,9 +163,9 @@ export default function AddTimeEntryFlow({ open, onClose, conditionId, onSaved }
               </ul>
             </Box>
             <Box sx={{ mt: 3 }}>
-              <Typography variant="subtitle1" sx={{ fontSize: '0.95rem', mb: 1 }}>Optional: Computer Vision</Typography>
+              <Typography variant="subtitle1" sx={{ fontSize: '0.95rem', mb: 1 }}>Optional: Temporal Tracking</Typography>
               <Typography variant="body2" sx={{ color: '#666' }}>
-                If you would like to enable computer-vision size analysis, place a penny next to the skin area.
+                If you would like to enable temporal tracking with size analysis, place a penny next to the skin area.
                 Ensure the penny does not cover any part of the condition, and keep it on the same surface/plane as the skin so the size reference is accurate.
               </Typography>
             </Box>
