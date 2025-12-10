@@ -22,6 +22,7 @@ llm_image = (
         "sentencepiece",
         "bitsandbytes",
         "huggingface-hub==0.36.0",
+        "hf_transfer",
         "fastapi[standard]",
     )
     .env({"HF_XET_HIGH_PERFORMANCE": "1", "HF_HOME": "/root/.cache/huggingface", "HF_HUB_ENABLE_HF_TRANSFER": "1"})
