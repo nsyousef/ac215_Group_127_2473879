@@ -5,6 +5,9 @@ echo "Architecture: $(uname -m)"
 echo "Python version: $(python --version)"
 echo "UV version: $(uv --version)"
 
+# Ensure Pulumi CLI is on PATH (installed under /home/app/.pulumi/bin)
+export PATH="$PATH:/home/app/.pulumi/bin"
+
 # Clean up any empty mount directories in /app that might shadow root-level mounts
 echo "Cleaning up empty mount directories..."
 rm -rf /app/inference-cloud /app/llm /app/ml_workflow 2>/dev/null || true
