@@ -322,6 +322,7 @@ class LLM:
 
         for i, date in enumerate(sorted_dates):
             metrics = cv_analysis_history[date]
+            # Label as Entry 1, Entry 2, etc. (no dates)
             prompt += f"\nEntry {i+1}:\n"
 
             # Only include area_cm2
