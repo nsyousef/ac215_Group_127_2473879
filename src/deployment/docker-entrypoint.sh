@@ -44,9 +44,22 @@ echo "Available Pulumi stacks in GCS:"
 # gsutil cat $PULUMI_BUCKET/.pulumi/stacks/  || echo "No stacks found."
 pulumi stack ls
 
-# set up modal tokens
-echo "Setting up Modal tokens..."
-modal token set --token-id $(cat ./secrets/modal-token-id.txt) --token-secret $(cat ./secrets/modal-token-secret.txt)
+MODAL_TOKEN_ID_VALUE="${MODAL_TOKEN_ID:-}"
+MODAL_TOKEN_SECRET_VALUE="${MODAL_TOKEN_SECRET:-}"
+
+# Fallback to secrets directory if env vars not set
+if { [ -z "$MODAL_TOKEN_ID_VALUE" ] || [ -z "$MODAL_TOKEN_SECRET_VALUE" ]; } && \
+   [ -f "./secrets/modal-token-id.txt" ] && [ -f "./secrets/modal-token-secret.txt" ]; then
+    MODAL_TOKEN_ID_VALUE="$(cat ./secrets/modal-token-id.txt)"
+    MODAL_TOKEN_SECRET_VALUE="$(cat ./secrets/modal-token-secret.txt)"
+fi
+
+if [ -n "$MODAL_TOKEN_ID_VALUE" ] && [ -n "$MODAL_TOKEN_SECRET_VALUE" ]; then
+    echo "Configuring Modal CLI tokens..."
+    modal token set --token-id "$MODAL_TOKEN_ID_VALUE" --token-secret "$MODAL_TOKEN_SECRET_VALUE"
+else
+    echo "Modal tokens not provided; skipping Modal CLI token setup."
+fi
 
 # Initialize and configure Pulumi stack
 echo "Configuring Pulumi stack..."
@@ -98,23 +111,28 @@ else
 fi
 
 # Check and set Modal token ID secret (always update to ensure sync with secrets file)
-NEW_TOKEN_ID=$(cat ./secrets/modal-token-id.txt)
-CURRENT_TOKEN_ID=$(pulumi config get pibu-ai-deployment:modal_token_id 2>/dev/null || echo "")
-if [ "$CURRENT_TOKEN_ID" != "$NEW_TOKEN_ID" ]; then
-    echo "Setting Modal token ID secret... (updating)"
-    pulumi config set --secret pibu-ai-deployment:modal_token_id "$NEW_TOKEN_ID"
-else
-    echo "Modal token ID already configured."
-fi
+if [ -n "$MODAL_TOKEN_ID_VALUE" ] && [ -n "$MODAL_TOKEN_SECRET_VALUE" ]; then
+    # Check and set Modal token ID secret (always update to ensure sync with provided values)
+    NEW_TOKEN_ID="$MODAL_TOKEN_ID_VALUE"
+    CURRENT_TOKEN_ID=$(pulumi config get pibu-ai-deployment:modal_token_id 2>/dev/null || echo "")
+    if [ "$CURRENT_TOKEN_ID" != "$NEW_TOKEN_ID" ]; then
+        echo "Setting Modal token ID secret... (updating)"
+        pulumi config set --secret pibu-ai-deployment:modal_token_id "$NEW_TOKEN_ID"
+    else
+        echo "Modal token ID already configured."
+    fi
 
-# Check and set Modal token secret (always update to ensure sync with secrets file)
-NEW_TOKEN_SECRET=$(cat ./secrets/modal-token-secret.txt)
-CURRENT_TOKEN_SECRET=$(pulumi config get pibu-ai-deployment:modal_token_secret 2>/dev/null || echo "")
-if [ "$CURRENT_TOKEN_SECRET" != "$NEW_TOKEN_SECRET" ]; then
-    echo "Setting Modal token secret... (updating)"
-    pulumi config set --secret pibu-ai-deployment:modal_token_secret "$NEW_TOKEN_SECRET"
+    # Check and set Modal token secret
+    NEW_TOKEN_SECRET="$MODAL_TOKEN_SECRET_VALUE"
+    CURRENT_TOKEN_SECRET=$(pulumi config get pibu-ai-deployment:modal_token_secret 2>/dev/null || echo "")
+    if [ "$CURRENT_TOKEN_SECRET" != "$NEW_TOKEN_SECRET" ]; then
+        echo "Setting Modal token secret... (updating)"
+        pulumi config set --secret pibu-ai-deployment:modal_token_secret "$NEW_TOKEN_SECRET"
+    else
+        echo "Modal token secret already configured."
+    fi
 else
-    echo "Modal token secret already configured."
+    echo "Skipping Modal token Pulumi config updates; tokens not provided."
 fi
 
 echo "Pulumi configuration complete!"

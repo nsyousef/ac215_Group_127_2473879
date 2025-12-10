@@ -22,6 +22,8 @@ jobs:
     env:
       GCP_PROJECT: ${{ secrets.GCP_PROJECT || 'level-scheme-471117-i9' }}
       GCP_REGION: ${{ secrets.GCP_REGION || 'us-east1' }}
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
 
     steps:
       - name: Checkout code
@@ -70,6 +72,8 @@ jobs:
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
             -e GCP_PROJECT="$GCP_PROJECT" \
             -e GCP_REGION="$GCP_REGION" \
+            -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
+            -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
@@ -88,6 +92,8 @@ jobs:
             -e DOCKER_BUILD_CONTEXT="/app" \
             -e GCP_PROJECT="$GCP_PROJECT" \
             -e GCP_REGION="$GCP_REGION" \
+            -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
+            -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
@@ -105,6 +111,8 @@ jobs:
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
             -e GCP_PROJECT="$GCP_PROJECT" \
             -e GCP_REGION="$GCP_REGION" \
+            -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
+            -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
