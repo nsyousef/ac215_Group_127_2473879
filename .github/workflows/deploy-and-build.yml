@@ -103,7 +103,7 @@ jobs:
             bash -c "source .venv/bin/activate && pulumi stack select ${{ steps.stack.outputs.stack }} && pulumi stack output frontend_config --json > frontend-config.json && cat frontend-config.json"
 
       - name: Upload Pulumi outputs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pulumi-outputs
           path: src/deployment/frontend-config.json
@@ -142,7 +142,7 @@ jobs:
           python-version: '3.11'
 
       - name: Download Pulumi outputs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: pulumi-outputs
           path: ./pulumi-outputs
@@ -175,7 +175,7 @@ jobs:
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pibu-ai-macos-${{ steps.package-version.outputs.VERSION }}-${{ steps.stack.outputs.stack }}
           path: src/frontend-react/dist/pibu_ai.dmg
