@@ -70,6 +70,7 @@ jobs:
         working-directory: src/deployment
         run: |
           docker run --rm \
+            -u root \
             -v "$(pwd):/app" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
             -v "/var/run/docker.sock:/var/run/docker.sock" \
@@ -90,6 +91,7 @@ jobs:
         working-directory: src/deployment
         run: |
           docker run --rm \
+            -u root \
             -v "$(pwd):/app" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
             -v "/var/run/docker.sock:/var/run/docker.sock" \
@@ -111,6 +113,7 @@ jobs:
         working-directory: src/deployment
         run: |
           docker run --rm \
+            -u root \
             -v "$(pwd):/app" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
             -v "/var/run/docker.sock:/var/run/docker.sock" \
