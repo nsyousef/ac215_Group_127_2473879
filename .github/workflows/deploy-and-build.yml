@@ -29,6 +29,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Fix permissions for deployment directory
+        run: sudo chown -R 1000:1000 src/deployment
+
       - name: Determine stack name
         id: stack
         run: |
