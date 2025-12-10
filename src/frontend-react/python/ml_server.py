@@ -3,6 +3,8 @@ import sys
 import json
 import traceback
 from datetime import datetime
+import cv2
+import numpy as np
 from api_manager import APIManager
 
 manager = None
@@ -19,6 +21,24 @@ def debug_log(msg: str):
 def send(resp):
     sys.stdout.write(json.dumps(resp) + "\n")
     sys.stdout.flush()
+
+
+def _convert_numpy_types(obj):
+    """Recursively convert numpy types to Python native types for JSON serialization."""
+    import numpy as np
+
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: _convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_convert_numpy_types(item) for item in obj]
+    else:
+        return obj
 
 
 def handle_message(msg):
@@ -90,7 +110,9 @@ def handle_message(msg):
             note = data.get("note", "")
             date = data.get("date")
             has_coin = data.get("has_coin", False)  # Default False if not provided
-            debug_log(f"[ml_server] add_timeline_entry - received has_coin: {has_coin} (type: {type(has_coin).__name__})")
+            debug_log(
+                f"[ml_server] add_timeline_entry - received has_coin: {has_coin} (type: {type(has_coin).__name__})"
+            )
             debug_log(f"[ml_server] add_timeline_entry - full data keys: {list(data.keys())}")
             if not case_id or not image_path or not date:
                 raise ValueError("Missing case_id, image_path, or date")
@@ -132,13 +154,135 @@ def handle_message(msg):
             #   3) send predictionText
             from prediction_texts import get_prediction_text
             from PIL import Image
+            import cv2
+            import numpy as np
 
             image = Image.open(image_path)
             saved_image_path = manager._save_image(image)
-            embedding = manager._run_local_ml_model(image)
+
+            # Step 1: Run CV analysis first if needed, then remove coin from image
+            cv_analysis = {}
+            processed_image = image
+            if has_coin:
+                debug_log("  → Running CV analysis to detect coin...")
+                cv_result = manager._run_cv_analysis(saved_image_path)
+                cv_analysis = cv_result
+
+                # Crop to lesion bounding box
+                lesion_mask_full = cv_result.get("masks", {}).get("final_mask")
+                coin_mask_full = cv_result.get("masks", {}).get("coin_mask_full")
+                debug_log(
+                    f"  → Lesion mask check: mask is None={lesion_mask_full is None}, has_data={lesion_mask_full is not None and lesion_mask_full.any() if lesion_mask_full is not None else False}"
+                )
+
+                if lesion_mask_full is not None and lesion_mask_full.any():
+                    debug_log("  → Cropping to lesion bounding box in original image space...")
+
+                    # Get original image dimensions (preserve original quality)
+                    original_w, original_h = image.size
+                    debug_log(f"  → Original image size: {original_w}x{original_h}")
+
+                    # CV analysis may downscale to max 1024x1024, so we need to scale coordinates back
+                    # Get the downscaled mask dimensions
+                    mask_h, mask_w = lesion_mask_full.shape[:2]
+
+                    # Calculate scale factor (how much the image was downscaled)
+                    # CV analysis downscales based on max dimension to MAX_PROCESS_DIMENSION (1024)
+                    max_original_dim = max(original_w, original_h)
+                    max_mask_dim = max(mask_w, mask_h)
+
+                    # If the original image was larger than MAX_PROCESS_DIMENSION, it was downscaled
+                    if max_original_dim > 1024:
+                        # Calculate scale based on how much the max dimension was reduced
+                        scale_factor = max_original_dim / max_mask_dim if max_mask_dim > 0 else 1.0
+                    else:
+                        # Image wasn't downscaled, scale factor is 1.0
+                        scale_factor = 1.0
+
+                    debug_log(f"  → Mask size: {mask_w}x{mask_h}")
+                    debug_log(f"  → Scale factor (original/mask): {scale_factor:.3f}")
+
+                    # Find bounding box of lesion in mask space
+                    lesion_coords = np.where(lesion_mask_full > 0)
+                    if len(lesion_coords[0]) > 0:
+                        # Get bounding box in mask space
+                        lesion_y_min_mask, lesion_y_max_mask = lesion_coords[0].min(), lesion_coords[0].max()
+                        lesion_x_min_mask, lesion_x_max_mask = lesion_coords[1].min(), lesion_coords[1].max()
+
+                        # Scale bounding box back to original image space
+                        lesion_x_min = int(lesion_x_min_mask * scale_factor)
+                        lesion_x_max = int(lesion_x_max_mask * scale_factor)
+                        lesion_y_min = int(lesion_y_min_mask * scale_factor)
+                        lesion_y_max = int(lesion_y_max_mask * scale_factor)
+
+                        # Add padding around lesion bounding box (in original image space)
+                        padding = int(50 * scale_factor)  # Scale padding proportionally
+                        crop_x = max(0, lesion_x_min - padding)
+                        crop_y = max(0, lesion_y_min - padding)
+                        crop_w = min(original_w, lesion_x_max + padding) - crop_x
+                        crop_h = min(original_h, lesion_y_max + padding) - crop_y
+
+                        debug_log(
+                            f"  → Lesion bounding box (mask space): x=[{lesion_x_min_mask}, {lesion_x_max_mask}], y=[{lesion_y_min_mask}, {lesion_y_max_mask}]"
+                        )
+                        debug_log(
+                            f"  → Lesion bounding box (original space): x=[{lesion_x_min}, {lesion_x_max}], y=[{lesion_y_min}, {lesion_y_max}]"
+                        )
+                        debug_log(f"  → Crop region (original space): x={crop_x}, y={crop_y}, w={crop_w}, h={crop_h}")
+
+                        # Ensure we have a valid crop (at least some pixels)
+                        if crop_w > 0 and crop_h > 0:
+                            # Crop directly from original PIL image (preserves quality and color space)
+                            processed_image = image.crop((crop_x, crop_y, crop_x + crop_w, crop_y + crop_h))
+                            debug_log(
+                                f"  → ✅ Cropped image to lesion bounding box: {crop_w}x{crop_h} (original quality preserved)"
+                            )
+
+                            # Save overlay and processed image for debugging (convert to OpenCV only for visualization)
+                            try:
+                                # Convert to numpy for overlay visualization
+                                img_array = np.array(image.convert("RGB"))
+                                img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+
+                                # Resize masks to original image size for overlay
+                                lesion_mask_original = cv2.resize(
+                                    lesion_mask_full, (original_w, original_h), interpolation=cv2.INTER_NEAREST
+                                )
+
+                                # Create overlay
+                                overlay_img = img_bgr.copy()
+                                lesion_overlay = np.zeros_like(overlay_img)
+                                lesion_overlay[lesion_mask_original > 0] = [0, 255, 0]  # Green in BGR
+                                overlay_img = cv2.addWeighted(overlay_img, 0.7, lesion_overlay, 0.3, 0)
+
+                                if coin_mask_full is not None:
+                                    coin_mask_original = cv2.resize(
+                                        coin_mask_full, (original_w, original_h), interpolation=cv2.INTER_NEAREST
+                                    )
+                                    coin_overlay = np.zeros_like(overlay_img)
+                                    coin_overlay[coin_mask_original > 0] = [0, 0, 255]  # Red in BGR
+                                    overlay_img = cv2.addWeighted(overlay_img, 0.7, coin_overlay, 0.3, 0)
+
+                                cv2.imwrite("/Users/tk20/Downloads/coin_mask_overlay.png", overlay_img)
+                                debug_log("  → ✅ Saved mask overlay to /Users/tk20/Downloads/coin_mask_overlay.png")
+
+                                # Save cropped image (from PIL, preserving quality)
+                                processed_image.save("/Users/tk20/Downloads/processed_image.png", "PNG")
+                                debug_log("  → ✅ Saved cropped image to /Users/tk20/Downloads/processed_image.png")
+                            except Exception as e:
+                                debug_log(f"  → ❌ Failed to save overlay/processed image: {e}")
+                        else:
+                            debug_log("  → ⚠️ Invalid crop dimensions, skipping crop")
+                    else:
+                        debug_log("  → ⚠️ Could not find lesion coordinates in mask")
+                else:
+                    debug_log("  → ⚠️ No coin detected or coin mask is empty, skipping coin removal")
+
+            # Step 2: Run local ML model for embeddings (using coin-removed image)
+            embedding = manager._run_local_ml_model(processed_image)
             updated_text_description = manager.update_text_input(text)
             predictions_raw = manager._run_cloud_ml_model(embedding, updated_text_description)
-            
+
             # Check if predictions_raw is a dict (new format) or list (old format)
             if isinstance(predictions_raw, dict):
                 # New format: already a dict
@@ -146,44 +290,61 @@ def handle_message(msg):
             else:
                 # Old format: list of {"class": ..., "probability": ...}
                 predictions = {item["class"]: item["probability"] for item in predictions_raw}
-            
+
             # Check if model returned UNCERTAIN
             if "UNCERTAIN" in predictions:
                 debug_log("⚠️ Model is uncertain about this prediction")
-                send({
-                    "id": req_id,
-                    "ok": False,
-                    "error": "UNCERTAIN",
-                    "message": "Unable to determine the condition from this image. Please try again with better lighting, a clearer photo, or more descriptive text. It's also possible that there's nothing concerning to identify."
-                })
+                # Log the top predictions even when uncertain (excluding UNCERTAIN itself)
+                other_predictions = {k: v for k, v in predictions.items() if k != "UNCERTAIN"}
+                if other_predictions:
+                    debug_log("Top predictions (excluding UNCERTAIN):")
+                    for disease, prob in sorted(other_predictions.items(), key=lambda x: x[1], reverse=True):
+                        debug_log(f"  - {disease}: {prob:.4f}")
+                send(
+                    {
+                        "id": req_id,
+                        "ok": False,
+                        "error": "UNCERTAIN",
+                        "message": "Unable to determine the condition from this image. Please try again with better lighting, a clearer photo, or more descriptive text. It's also possible that there's nothing concerning to identify.",
+                    }
+                )
                 return
 
-            # Determine if we should run CV analysis
+            # Get top prediction label for later use
             top_prediction_label = max(predictions.items(), key=lambda x: x[1])[0] if predictions else ""
-            should_run_cv = has_coin
 
-            # Run CV analysis if conditions are met
-            cv_analysis = {}
+            # Step 3: Generate time-tracking summary from CV + history
             tracking_summary = ""
-            if should_run_cv:
-                cv_analysis = manager._run_cv_analysis(saved_image_path)
-                # Generate time-tracking summary text from CV + history
+            if has_coin and cv_analysis:
                 tracking_summary = manager._get_time_tracking_summary(
                     predictions=predictions,
                     text_description=text,  # ORIGINAL user input
                     cv_analysis=cv_analysis,
                 )
-            else:
-                debug_log(
-                    f"[ml_server] Skipping CV analysis (has_coin={has_coin}, top_prediction={top_prediction_label})"
-                )
 
             # Save history entry (including tracking summary) BEFORE we start LLM streaming,
             # so that the TimeTrackingPanel can read it as soon as the UI switches to results.
             current_date = datetime.now().strftime("%Y-%m-%d")
+
+            # Clean cv_analysis to remove numpy arrays for JSON serialization
+            cv_analysis_clean = {}
+            if cv_analysis:
+                for key, value in cv_analysis.items():
+                    if key == "masks" or key == "images":
+                        # Skip numpy arrays (masks and images)
+                        continue
+                    elif key == "coin_data" and value is not None:
+                        # Convert tuple to list for JSON serialization
+                        cv_analysis_clean[key] = list(value) if isinstance(value, tuple) else value
+                    else:
+                        cv_analysis_clean[key] = value
+
+            # Convert numpy types (int64, float64, etc.) to Python native types
+            cv_analysis_clean = _convert_numpy_types(cv_analysis_clean)
+
             manager._save_history_entry(
                 date=current_date,
-                cv_analysis=cv_analysis,
+                cv_analysis=cv_analysis_clean,
                 predictions=predictions,
                 image_path=saved_image_path,
                 text_summary=text,  # ORIGINAL user input
@@ -236,10 +397,27 @@ def handle_message(msg):
 
             # Build enriched disease and return complete result
             enriched_disease = manager._build_enriched_disease()
+
+            # Clean cv_analysis to remove numpy arrays for JSON serialization
+            cv_analysis_clean = {}
+            if cv_analysis:
+                for key, value in cv_analysis.items():
+                    if key == "masks" or key == "images":
+                        # Skip numpy arrays (masks and images)
+                        continue
+                    elif key == "coin_data" and value is not None:
+                        # Convert tuple to list for JSON serialization
+                        cv_analysis_clean[key] = list(value) if isinstance(value, tuple) else value
+                    else:
+                        cv_analysis_clean[key] = value
+
+            # Convert numpy types (int64, float64, etc.) to Python native types
+            cv_analysis_clean = _convert_numpy_types(cv_analysis_clean)
+
             result = {
                 "llm_response": llm_response,
                 "predictions": predictions,
-                "cv_analysis": cv_analysis,
+                "cv_analysis": cv_analysis_clean,
                 "embedding": embedding,
                 "text_description": text,
                 "enriched_disease": enriched_disease,

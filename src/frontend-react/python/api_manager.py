@@ -42,10 +42,29 @@ def debug_log(msg: str):
     print(msg, file=sys.stderr, flush=True)
 
 
+def _convert_numpy_types(obj):
+    """Recursively convert numpy types to Python native types for JSON serialization."""
+    import numpy as np
+
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: _convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_convert_numpy_types(item) for item in obj]
+    else:
+        return obj
+
+
 # Import CV analysis module (after debug_log is defined)
 try:
     sys.path.insert(0, str(Path(__file__).parent / "cv-analysis"))
     from module import run_cv_analysis as cv_run_analysis
+
     CV_ANALYSIS_AVAILABLE = True
     debug_log("✓ CV analysis module loaded successfully")
 except ImportError as e:
@@ -453,7 +472,7 @@ class APIManager:
 
         # Create temporary APIManager instance to use its methods
         api = APIManager(case_id, dummy=False)
-        
+
         debug_log(f"[api_manager] add_timeline_entry called with has_coin={has_coin} (type: {type(has_coin).__name__})")
         debug_log(f"Adding timeline entry for case {case_id} (has_coin={has_coin})")
 
@@ -486,6 +505,22 @@ class APIManager:
         else:
             debug_log(f"  → Skipping CV analysis (has_coin={has_coin}, top_prediction={top_prediction_label})")
 
+        # Clean cv_analysis to remove numpy arrays for JSON serialization
+        cv_analysis_clean = {}
+        if cv_analysis:
+            for key, value in cv_analysis.items():
+                if key == "masks" or key == "images":
+                    # Skip numpy arrays (masks and images)
+                    continue
+                elif key == "coin_data" and value is not None:
+                    # Convert tuple to list for JSON serialization
+                    cv_analysis_clean[key] = list(value) if isinstance(value, tuple) else value
+                else:
+                    cv_analysis_clean[key] = value
+
+        # Convert numpy types (int64, float64, etc.) to Python native types
+        cv_analysis_clean = _convert_numpy_types(cv_analysis_clean)
+
         # Add new entry to dates using the provided date as key
         if "dates" not in api.case_history:
             api.case_history["dates"] = {}
@@ -493,7 +528,7 @@ class APIManager:
         api.case_history["dates"][date] = {
             "image_path": image_path,
             "text_summary": note or "",
-            "cv_analysis": cv_analysis,
+            "cv_analysis": cv_analysis_clean,
             "predictions": predictions,  # Use predictions from initial entry
             "tracking_summary": tracking_summary,
         }
@@ -688,6 +723,7 @@ class APIManager:
         text_description: str,
         user_timestamp: Optional[str] = None,
         on_chunk: Optional[Callable[[str], None]] = None,
+        has_coin: bool = False,
     ) -> Dict[str, Any]:
         """
         Process initial image and text input to generate predictions and LLM analysis.
@@ -734,20 +770,132 @@ class APIManager:
         if saved_image_path and not Path(saved_image_path).exists():
             raise FileNotFoundError(f"Saved image not found at: {saved_image_path}")
 
-        # Step 1: Run local ML model for embeddings
+        # Step 1: Run CV analysis first if needed, then remove coin from image
+        cv_analysis = {}
+        processed_image = image
+        debug_log(f"  → has_coin={has_coin}")
+        if has_coin:
+            debug_log("  → Running CV analysis to detect coin...")
+            cv_result = self._run_cv_analysis(saved_image_path)
+            cv_analysis = cv_result
+
+            # Remove coin from image if detected
+            coin_mask_full = cv_result.get("masks", {}).get("coin_mask_full")
+            debug_log(
+                f"  → Coin mask check: mask is None={coin_mask_full is None}, has_data={coin_mask_full is not None and coin_mask_full.any() if coin_mask_full is not None else False}"
+            )
+
+            if coin_mask_full is not None and coin_mask_full.any():
+                debug_log("  → Cropping coin from image...")
+                import cv2
+                import numpy as np
+
+                # Convert PIL image to OpenCV format
+                img_array = np.array(image.convert("RGB"))
+                img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+
+                # Ensure image is 8-bit 3-channel BGR
+                if img_bgr.dtype != np.uint8:
+                    img_bgr = img_bgr.astype(np.uint8)
+                if len(img_bgr.shape) == 2:
+                    img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
+                elif img_bgr.shape[2] == 4:
+                    img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_BGRA2BGR)
+
+                # Resize coin mask to match image if needed (CV analysis may downscale)
+                h, w = img_bgr.shape[:2]
+                if coin_mask_full.shape[:2] != (h, w):
+                    coin_mask_full = cv2.resize(coin_mask_full, (w, h), interpolation=cv2.INTER_NEAREST)
+
+                # Ensure mask is 8-bit 1-channel
+                if coin_mask_full.dtype != np.uint8:
+                    coin_mask_full = coin_mask_full.astype(np.uint8)
+                if len(coin_mask_full.shape) > 2:
+                    coin_mask_full = cv2.cvtColor(coin_mask_full, cv2.COLOR_BGR2GRAY)
+
+                # Find bounding box of coin
+                coin_coords = np.where(coin_mask_full > 0)
+                if len(coin_coords[0]) > 0:
+                    coin_y_min, coin_y_max = coin_coords[0].min(), coin_coords[0].max()
+                    coin_x_min, coin_x_max = coin_coords[1].min(), coin_coords[1].max()
+
+                    # Add padding to coin bounding box to ensure full removal
+                    padding = 15
+                    coin_y_min = max(0, coin_y_min - padding)
+                    coin_y_max = min(h, coin_y_max + padding)
+                    coin_x_min = max(0, coin_x_min - padding)
+                    coin_x_max = min(w, coin_x_max + padding)
+
+                    # Calculate distances from coin to each edge
+                    dist_left = coin_x_min
+                    dist_right = w - coin_x_max
+                    dist_top = coin_y_min
+                    dist_bottom = h - coin_y_max
+
+                    # Find the edge closest to the coin (coin is likely near that edge)
+                    min_dist = min(dist_left, dist_right, dist_top, dist_bottom)
+
+                    # Crop from the edge closest to the coin
+                    if min_dist == dist_left:
+                        # Coin is on left, crop from left (keep right side)
+                        crop_x = coin_x_max
+                        crop_y = 0
+                        crop_w = w - coin_x_max
+                        crop_h = h
+                        debug_log(f"  → Coin on left edge, cropping from x={crop_x}, keeping {crop_w}x{crop_h}")
+                    elif min_dist == dist_right:
+                        # Coin is on right, crop from right (keep left side)
+                        crop_x = 0
+                        crop_y = 0
+                        crop_w = coin_x_min
+                        crop_h = h
+                        debug_log(f"  → Coin on right edge, cropping to x={crop_w}, keeping {crop_w}x{crop_h}")
+                    elif min_dist == dist_top:
+                        # Coin is on top, crop from top (keep bottom side)
+                        crop_x = 0
+                        crop_y = coin_y_max
+                        crop_w = w
+                        crop_h = h - coin_y_max
+                        debug_log(f"  → Coin on top edge, cropping from y={crop_y}, keeping {crop_w}x{crop_h}")
+                    else:  # dist_bottom
+                        # Coin is on bottom, crop from bottom (keep top side)
+                        crop_x = 0
+                        crop_y = 0
+                        crop_w = w
+                        crop_h = coin_y_min
+                        debug_log(f"  → Coin on bottom edge, cropping to y={crop_h}, keeping {crop_w}x{crop_h}")
+
+                    # Ensure we have a valid crop (at least some pixels)
+                    if crop_w > 0 and crop_h > 0:
+                        # Perform the crop
+                        img_bgr = img_bgr[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
+                        debug_log(f"  → ✅ Cropped image to size: {img_bgr.shape[1]}x{img_bgr.shape[0]}")
+                    else:
+                        debug_log("  → ⚠️ Invalid crop dimensions, skipping crop")
+                else:
+                    debug_log("  → ⚠️ Could not find coin coordinates in mask")
+
+                # Convert back to PIL Image
+                img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+                processed_image = Image.fromarray(img_rgb)
+
+                # Save processed image for debugging
+                try:
+                    cv2.imwrite("/Users/tk20/Downloads/processed_image.png", img_rgb)
+                    debug_log("  → ✅ Saved cropped image to /Users/tk20/Downloads/processed_image.png")
+                except Exception as e:
+                    debug_log(f"  → ❌ Failed to save processed image: {e}")
+            else:
+                debug_log("  → ⚠️ No coin detected or coin mask is empty, skipping coin removal")
+
+        # Step 2: Run local ML model for embeddings (using coin-removed image)
         debug_log("  → Running local ML model for embeddings...")
-        embedding = self._run_local_ml_model(image)
+        embedding = self._run_local_ml_model(processed_image)
 
-        # Step 2: Get predictions from cloud ML model AND run CV analysis in parallel
-        debug_log("  → Getting cloud predictions and running CV analysis in parallel...")
+        # Step 3: Get predictions from cloud ML model
+        debug_log("  → Getting cloud predictions...")
         updated_text_description = self.update_text_input(text_description)
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            fut_preds = executor.submit(self._run_cloud_ml_model, embedding, updated_text_description)
-            fut_cv = executor.submit(self._run_cv_analysis, saved_image_path)
-
-            predictions_raw = fut_preds.result()
-            cv_analysis = fut_cv.result()
+        predictions_raw = self._run_cloud_ml_model(embedding, updated_text_description)
 
         # Step 2.5: Reformat predictions for explain LLM
         predictions = {item["class"]: item["probability"] for item in predictions_raw}
@@ -1062,11 +1210,15 @@ class APIManager:
                 debug_log(f"    Running CV analysis on: {image_path}")
                 cv_results = cv_run_analysis(image_path, bbox=None)
 
-                # Extract only the metrics dict (not the images/masks)
+                # Return full result including masks (needed for coin removal)
+                # Flatten metrics at top level for backward compatibility with existing code
                 metrics = cv_results.get("metrics", {})
+                result = dict(metrics)  # Start with flattened metrics
+                result["masks"] = cv_results.get("masks", {})
+                result["coin_data"] = cv_results.get("coin_data")
 
                 debug_log(f"    CV analysis completed. Metrics: {json.dumps(metrics, indent=2)}")
-                return metrics
+                return result
 
             except Exception as e:
                 debug_log(f"    ⚠ CV analysis failed: {e}")
@@ -1089,6 +1241,8 @@ class APIManager:
             },
             "area_cm2": None,  # No coin detected
             "tilt_correction_factor": None,
+            "masks": {},  # No masks in dummy mode
+            "coin_data": None,
         }
 
     def _run_cloud_ml_model(self, embedding: List[float], text_description: str) -> Dict[str, float]:
@@ -1138,13 +1292,31 @@ class APIManager:
         )
         response.raise_for_status()
         result = response.json()
-        
+
+        # Get top_k predictions (even if uncertain)
+        # Handle both list and dict formats
+        top_k_raw = result.get("top_k", {})
+
+        # Convert list format to dict if needed
+        if isinstance(top_k_raw, list):
+            top_k_predictions = {
+                item.get("class", item.get("disease", "")): item.get("probability", item.get("prob", 0.0))
+                for item in top_k_raw
+            }
+        else:
+            top_k_predictions = top_k_raw if isinstance(top_k_raw, dict) else {}
+
         # Check if model is uncertain about the prediction
         if result.get("predicted_class") == "UNCERTAIN":
             debug_log("⚠️ Model returned UNCERTAIN prediction")
+            # Still log the top k predictions for debugging
+            if top_k_predictions:
+                debug_log("Top K predictions (even though uncertain):")
+                for disease, prob in sorted(top_k_predictions.items(), key=lambda x: x[1], reverse=True):
+                    debug_log(f"  - {disease}: {prob:.4f}")
             return {"UNCERTAIN": 1.0}
-        
-        return result.get("top_k", {})
+
+        return top_k_predictions
 
     def _call_llm_explain(
         self,
@@ -1360,15 +1532,29 @@ class APIManager:
         cv_analysis_history = {}
         for date, entry in self.case_history.get("dates", {}).items():
             if "cv_analysis" in entry:
-                cv_analysis_history[date] = entry["cv_analysis"]
+                # Convert numpy types in existing history entries
+                cv_analysis_history[date] = _convert_numpy_types(entry["cv_analysis"])
 
-        # Add current analysis
+        # Add current analysis (exclude numpy arrays/masks for JSON serialization)
         current_date = datetime.now().strftime("%Y-%m-%d")
-        cv_analysis_history[current_date] = cv_analysis
-        
+        # Create a JSON-serializable version of cv_analysis (exclude masks and images)
+        cv_analysis_serializable = {}
+        for key, value in cv_analysis.items():
+            if key == "masks" or key == "images":
+                # Skip numpy arrays (masks and images)
+                continue
+            elif key == "coin_data" and value is not None:
+                # Convert tuple to list for JSON serialization
+                cv_analysis_serializable[key] = list(value) if isinstance(value, tuple) else value
+            else:
+                cv_analysis_serializable[key] = value
+
+        # Convert numpy types in the serializable version
+        cv_analysis_history[current_date] = _convert_numpy_types(cv_analysis_serializable)
+
         # Determine if this is the first entry
         is_first_entry = len(cv_analysis_history) == 1
-        
+
         # For first entry, augment user text with demographics
         # For subsequent entries, just use the note as-is
         if is_first_entry:
@@ -1377,8 +1563,6 @@ class APIManager:
             user_input_with_context = text_description
 
         payload = {
-            "predictions": predictions,
-            "user_demographics": self.demographics,
             "user_input": user_input_with_context,
             "cv_analysis_history": cv_analysis_history,
         }
@@ -1486,7 +1670,7 @@ class APIManager:
 
         # Append disclaimer to the response
         response["answer"] = response["answer"] + DISCLAIMER
-        
+
         # Step 4: Save new conversation entry
         debug_log("  → Saving conversation...")
         self._save_conversation_entry(
