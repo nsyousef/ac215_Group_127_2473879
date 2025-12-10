@@ -58,7 +58,7 @@ fi
 echo "📦 Managing artifacts for $REPO (keeping latest $KEEP_COUNT)"
 
 ARTIFACT_LINES=$(gh api "repos/$REPO/actions/artifacts" --paginate \
-  --jq '.artifacts[]? | select(.expired == false) | "\(.created_at)\t\(.id)\t\(.name)"' | sort)
+  --jq '.artifacts[]? | "\(.created_at)\t\(.id)\t\(.name)\t\(.expired)"' | sort)
 
 if [[ -z "$ARTIFACT_LINES" ]]; then
   echo "✅ No artifacts to delete."
@@ -79,8 +79,9 @@ DELETE_COUNT=$((TOTAL - KEEP_INT))
 
 echo "🗑️  Deleting $DELETE_COUNT oldest artifact(s)..."
 
-echo "$ARTIFACT_LINES" | head -n "$DELETE_COUNT" | while IFS=$'\t' read -r CREATED ID NAME; do
-  echo "  • $NAME ($ID) created $CREATED"
+echo "$ARTIFACT_LINES" | head -n "$DELETE_COUNT" | while IFS=$'\t' read -r CREATED ID NAME EXPIRED; do
+  STATE=$([[ "$EXPIRED" == "true" ]] && echo "expired" || echo "active")
+  echo "  • $NAME ($ID) created $CREATED [$STATE]"
   if gh api -X DELETE "repos/$REPO/actions/artifacts/$ID" >/dev/null; then
     echo "    ✓ deleted"
   else

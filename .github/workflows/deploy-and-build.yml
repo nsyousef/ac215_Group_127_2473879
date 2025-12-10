@@ -135,7 +135,7 @@ jobs:
             bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && pulumi stack output frontend_config --json > frontend-config.json && cat frontend-config.json"
 
       - name: Cleanup old workflow artifacts
-        run: ./delete-all-artifacts.sh --keep 5
+        run: ./delete-all-artifacts.sh --keep 0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -212,7 +212,7 @@ jobs:
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
       - name: Ensure artifact space for DMG
-        run: ./delete-all-artifacts.sh --keep 5
+        run: ./delete-all-artifacts.sh --keep 0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
