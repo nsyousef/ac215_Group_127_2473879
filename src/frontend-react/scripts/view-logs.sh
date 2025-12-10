@@ -1,7 +1,7 @@
 #!/bin/bash
 # Helper script to view app logs
 
-LOG_FILE="/tmp/pibu_ai_debug.log"
+LOG_FILE="/tmp/Pibu_debug.log"
 
 if [ ! -f "$LOG_FILE" ]; then
     echo "❌ Log file not found: $LOG_FILE"
@@ -66,4 +66,3 @@ case "${1:-tail}" in
         echo "  $0 errors       # Show only errors"
         ;;
 esac
-

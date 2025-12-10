@@ -9,8 +9,8 @@ try {
   fs_immediate.writeFileSync('/tmp/pibu_main_js_loaded.txt', `Main.js loaded at ${new Date().toISOString()}\n`);
 } catch (e) {}
 
-console.log('🚀 pibu_ai Electron main process starting...');
-console.error('🚀 pibu_ai Electron main process starting (stderr)...');
+console.log('🚀 Pibu Electron main process starting...');
+console.error('🚀 Pibu Electron main process starting (stderr)...');
 console.error('TEST_ERROR_OUTPUT_001');
 process.stderr.write('STDERR_TEST_002\n');
 
@@ -25,7 +25,7 @@ const isDev = typeof isDevModule === 'boolean' ? isDevModule : isDevModule.defau
 const fs_module = require('fs');
 
 // Write logs to file for debugging - write to /tmp for easier access
-const logFile = '/tmp/pibu_ai_debug.log';
+const logFile = '/tmp/Pibu_debug.log';
 fs_module.writeFileSync(logFile, `\n========== PROCESS START ${new Date().toISOString()} ==========\n`, { flag: 'a' });
 
 function debugLog(...args) {
@@ -247,6 +247,20 @@ function resolvePythonBin() {
   return systemPython;
 }
 
+function getBundledCertPath() {
+  const prodCert = path.join(process.resourcesPath || '', 'python-bundle', 'cacert.pem');
+  if (prodCert && fsSync.existsSync(prodCert)) {
+    return prodCert;
+  }
+
+  const devCert = path.join(__dirname, '..', 'resources', 'python-bundle', 'cacert.pem');
+  if (fsSync.existsSync(devCert)) {
+    return devCert;
+  }
+
+  return null;
+}
+
 function spawnPythonForCase(caseId) {
   const existing = pyProcesses.get(caseId);
   if (existing) {
@@ -257,6 +271,7 @@ function spawnPythonForCase(caseId) {
   const scriptPath = path.join(__dirname, '..', 'python', 'ml_server.py');
   const pyBin = resolvePythonBin();
   const pyCwd = path.join(__dirname, '..', 'python');
+  const certPath = getBundledCertPath();
   const child = spawn(pyBin, [scriptPath], {
     cwd: pyCwd,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -264,6 +279,12 @@ function spawnPythonForCase(caseId) {
       ...process.env,
       APP_DATA_DIR: app.getPath('userData'),
       PYTHONPATH: [pyCwd, process.env.PYTHONPATH || ''].filter(Boolean).join(path.delimiter),
+      ...(certPath
+        ? {
+            SSL_CERT_FILE: certPath,
+            REQUESTS_CA_BUNDLE: certPath,
+          }
+        : {}),
     },
   });
 

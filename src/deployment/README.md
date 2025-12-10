@@ -171,7 +171,7 @@ npm run build
 npm run make-dmg
 
 # 4. Test DMG
-open dist/pibu_ai.dmg
+open dist/Pibu.dmg
 ```
 
 ## CI/CD Deployment

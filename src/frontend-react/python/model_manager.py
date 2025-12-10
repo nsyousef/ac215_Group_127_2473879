@@ -25,7 +25,7 @@ SECURITY:
 =========
 - GitHub Release URLs are PUBLIC (no credentials needed)
 - Safe for production apps (no token exposure)
-- Models cached locally to ~/.cache/pibu_ai/models/
+- Models cached locally to ~/.cache/Pibu/models/
 - Optional fallback to HuggingFace or other sources
 
 ARCHITECTURE:
@@ -101,7 +101,7 @@ def get_model_path(
     Raises:
         FileNotFoundError: If model cannot be downloaded from any source
     """
-    cache_dir = Path.home() / ".cache" / "pibu_ai" / "models"
+    cache_dir = Path.home() / ".cache" / "Pibu" / "models"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     sources = MODEL_SOURCES.get(model_type, [])

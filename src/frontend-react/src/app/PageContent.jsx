@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
     Box,
@@ -35,55 +35,54 @@ export default function PageContent({ initialView }) {
 
     // Get view from URL query params (reactive to URL changes)
     const viewParam = searchParams.get('view') || initialView || 'home';
+    const conditionIdParam = searchParams.get('conditionId');
+    const selectedConditionId = conditionIdParam && conditionIdParam.length > 0 ? `${conditionIdParam}` : null;
 
-    const [selectedCondition, setSelectedCondition] = useState(null);
+    const { diseases, loading: diseasesLoading } = useDiseaseContext();
+    const { profile, loading: profileLoading } = useProfile();
+
+    const selectedCondition = useMemo(() => {
+        if (!selectedConditionId) return null;
+        return (diseases || []).find((d) => `${d.id}` === selectedConditionId) || null;
+    }, [diseases, selectedConditionId]);
+
     const [chatRefreshKey, setChatRefreshKey] = useState(0); // Key to force ChatPanel reload
     const [mobileView, setMobileView] = useState(viewParam);
     const [previousMobileView, setPreviousMobileView] = useState('home'); // Track previous view for back navigation
-    const selectedConditionIdRef = useRef(null); // Track selected condition ID to avoid unnecessary updates
 
-    const { diseases, reload: reloadDiseases } = useDiseaseContext();
-    const { profile, loading: profileLoading, updateProfile } = useProfile();
-
-    // Restore selected condition from URL if conditionId is in query params
-    // This only runs when URL changes or diseases load, not when selectedCondition changes
-    useEffect(() => {
-        const conditionId = searchParams.get('conditionId');
-        
-        // If we have a conditionId in URL
-        if (conditionId) {
-            // Check if we already have this condition selected (avoid unnecessary updates)
-            if (selectedConditionIdRef.current === conditionId) {
-                // If we already have the condition selected, don't overwrite it
-                // This preserves the full condition object that was passed from the list
-                return;
-            }
-            
-            // If diseases are loaded, try to find and set the condition
-            if (diseases && diseases.length > 0) {
-                const condition = diseases.find((d) => d.id === conditionId);
-                if (condition) {
-                    // Only set if we don't already have a condition selected
-                    // This prevents overwriting a condition that was just set by handleSelectCondition
-                    setSelectedCondition((prev) => {
-                        // If we already have a condition selected, keep it
-                        // This is important when selecting from list - we want to keep the full object
-                        if (prev && prev.id === conditionId) {
-                            return prev;
-                        }
-                        // Only set if we don't have a condition or it's a different one
-                        return condition;
-                    });
-                    selectedConditionIdRef.current = conditionId;
-                }
+    const updateQueryParams = useCallback((updates, { replace = false } = {}) => {
+        const current = new URLSearchParams(searchParams.toString());
+        Object.entries(updates).forEach(([key, value]) => {
+            if (value === null || value === undefined || value === '') {
+                current.delete(key);
             } else {
-                // Diseases not loaded yet, just store the ID for later
-                selectedConditionIdRef.current = conditionId;
+                current.set(key, value);
             }
+        });
+        const queryString = current.toString();
+        const nextUrl = queryString ? `/?${queryString}` : '/';
+        if (replace) {
+            router.replace(nextUrl);
+        } else {
+            router.push(nextUrl);
         }
-        // Don't clear selection if conditionId is removed - let user explicitly clear it
-        // This prevents the flash where condition appears then disappears
-    }, [searchParams, diseases]);
+    }, [router, searchParams]);
+
+    const setConditionIdInQuery = useCallback((conditionId, { view, replace = true } = {}) => {
+        const normalizedId = conditionId === null || conditionId === undefined || conditionId === ''
+            ? null
+            : `${conditionId}`;
+        const updates = { conditionId: normalizedId };
+        if (view) {
+            updates.view = view;
+        }
+        updateQueryParams(updates, { replace });
+    }, [updateQueryParams]);
+
+    const setView = useCallback((view, { replace = false } = {}) => {
+        if (!view) return;
+        updateQueryParams({ view }, { replace });
+    }, [updateQueryParams]);
 
     // Sync mobileView with view param and track previous view
     useEffect(() => {
@@ -94,52 +93,45 @@ export default function PageContent({ initialView }) {
         setMobileView(viewParam);
     }, [viewParam]);
 
+    // Clear an invalid conditionId once diseases finish loading
+    useEffect(() => {
+        if (!diseasesLoading && selectedConditionId && !selectedCondition) {
+            setConditionIdInQuery(null, { replace: true });
+        }
+    }, [diseasesLoading, selectedConditionId, selectedCondition, setConditionIdInQuery]);
+
     const handleSelectCondition = (condition) => {
         // Handle null condition (e.g., when deleting)
         if (!condition) {
-            setSelectedCondition(null);
-            selectedConditionIdRef.current = null;
-            // Clear conditionId from URL
-            const currentView = searchParams.get('view') || 'home';
-            router.replace(`/?view=${currentView}`);
+            setConditionIdInQuery(null, { replace: true });
             return;
         }
-        
-        // Set condition and ref FIRST, before navigation
-        // This ensures the condition is set immediately and the useEffect won't overwrite it
-        selectedConditionIdRef.current = condition.id;
-        setSelectedCondition(condition);
+
         // Force ChatPanel to reload conversation history
         setChatRefreshKey((k) => k + 1);
-        
-        // Navigate immediately - the ref check in useEffect will prevent overwriting
-        // Use replace instead of push to avoid back button issues
-        if (isMobile) {
-            router.replace(`/?view=results&conditionId=${condition.id}`);
-        } else {
-            // On desktop, also update URL to persist selection
-            router.replace(`/?view=home&conditionId=${condition.id}`);
-        }
+
+        // Navigate immediately with the updated conditionId persisted in the URL
+        const targetView = isMobile ? 'results' : 'home';
+        setConditionIdInQuery(condition.id, { view: targetView, replace: true });
     };
 
     const handleSpotClick = (conditionId) => {
         // Called when a spot is clicked on the body map
         // Works on both mobile (with popover) and desktop
-        const condition = (diseases || []).find((c) => c.id === conditionId);
-        if (condition) {
-            setSelectedCondition(condition);
-            // Force ChatPanel to reload conversation history
-            setChatRefreshKey((k) => k + 1);
-        }
+        const exists = (diseases || []).some((c) => c.id === conditionId);
+        if (!exists) return;
+
+        // Force ChatPanel to reload conversation history
+        setChatRefreshKey((k) => k + 1);
+        setConditionIdInQuery(conditionId, { replace: true });
     };
 
     const handlePopoverViewResults = (condition) => {
         // When user clicks "View Results" in the popover (mobile only)
-        selectedConditionIdRef.current = condition.id;
-        setSelectedCondition(condition);
+        if (!condition) return;
         // Force ChatPanel to reload conversation history
         setChatRefreshKey((k) => k + 1);
-        router.replace(`/?view=results&conditionId=${condition.id}`);
+        setConditionIdInQuery(condition.id, { view: 'results', replace: true });
     };
 
     const handleBackFromResults = () => {
@@ -148,22 +140,24 @@ export default function PageContent({ initialView }) {
         // If on chat/time, go back to results
         // If on profile, go back to home
         if (mobileView === 'results') {
-            router.push(`/?view=${previousMobileView}`);
+            setView(previousMobileView, { replace: false });
         } else if (['chat', 'time'].includes(mobileView)) {
-            router.push('/?view=results');
+            setView('results', { replace: false });
         } else if (mobileView === 'profile') {
-            router.push('/?view=home');
+            setView('home', { replace: false });
         }
     };
 
     const handleOpenTime = (condition) => {
-        if (!condition) return;
-        router.push('/?view=time');
+        const id = condition?.id || selectedConditionId;
+        if (!id) return;
+        setConditionIdInQuery(id, { view: 'time', replace: false });
     };
 
     const handleOpenChat = (condition) => {
-        if (!condition) return;
-        router.push('/?view=chat');
+        const id = condition?.id || selectedConditionId;
+        if (!id) return;
+        setConditionIdInQuery(id, { view: 'chat', replace: false });
     };
 
     const handleAddDisease = () => {
@@ -176,13 +170,11 @@ export default function PageContent({ initialView }) {
 
     const handleOpenAddTime = (conditionId) => {
         // Accept an optional conditionId from the caller (TimeTrackingPanel passes its conditionId)
-        const id = conditionId || selectedCondition?.id;
+        const id = conditionId || selectedConditionId;
         if (!id) return; // require a selected condition
 
-        // If the caller provided an id that's different from the current selection, update it
-        if (!selectedCondition || selectedCondition.id !== id) {
-            const found = (diseases || []).find((d) => d.id === id);
-            if (found) setSelectedCondition(found);
+        if (id !== selectedConditionId) {
+            setConditionIdInQuery(id, { replace: true });
         }
 
         setShowAddTimeFlow(true);
@@ -193,7 +185,11 @@ export default function PageContent({ initialView }) {
         setTimeEntriesVersion((v) => v + 1);
         setShowAddTimeFlow(false);
         // Navigate to time view on mobile
-        if (isMobile) router.push('/?view=time');
+        if (isMobile && selectedConditionId) {
+            setConditionIdInQuery(selectedConditionId, { view: 'time', replace: false });
+        } else if (isMobile) {
+            setView('time', { replace: false });
+        }
     };
 
     // Add disease modal state
@@ -206,34 +202,21 @@ export default function PageContent({ initialView }) {
         // newDisease already contains all enriched fields from Python
         // (description, bodyPart, mapPosition, llmResponse, timelineData, conversationHistory)
         // AND it's already been added to the diseases array by AddDiseaseFlow's addDisease() call
-        // So just set it as selected and navigate!
-        setSelectedCondition(newDisease);
+        // So just navigate with the query param as the source of truth!
 
         // Trigger refresh of TimeTrackingPanel to show initial image
         setTimeEntriesVersion((v) => v + 1);
 
         // Navigate to results view
-        selectedConditionIdRef.current = newDisease.id;
-        router.replace(`/?view=results&conditionId=${newDisease.id}`);
+        setConditionIdInQuery(newDisease.id, { view: 'results', replace: true });
     };
 
     const handleStartAnalysis = (tempDisease) => {
         // Called when analysis starts - immediately show results/chat
         console.log('handleStartAnalysis called in PageContent.jsx', tempDisease);
 
-        // Set selected condition first (this is critical - chat needs a selected condition)
-        setSelectedCondition(tempDisease);
-
-        // Navigate to appropriate view
-        selectedConditionIdRef.current = tempDisease.id;
-        if (isMobile) {
-            // On mobile, navigate to chat view
-            router.replace(`/?view=chat&conditionId=${tempDisease.id}`);
-        } else {
-            // On desktop, navigate to results view (which shows chat in right column)
-            // The chat panel will be visible once selectedCondition is set
-            router.replace(`/?view=results&conditionId=${tempDisease.id}`);
-        }
+        const targetView = isMobile ? 'chat' : 'results';
+        setConditionIdInQuery(tempDisease.id, { view: targetView, replace: true });
     };
 
     // Render onboarding flow if not completed
@@ -243,10 +226,7 @@ export default function PageContent({ initialView }) {
                 onComplete={async (newDisease) => {
                     // newDisease already contains all enriched fields from Python
                     // AND it's already in the diseases array (added by OnboardingFlow's addDisease call)
-                    setSelectedCondition(newDisease);
-
-                    // Navigate to results view
-                    router.push('/?view=results');
+                    setConditionIdInQuery(newDisease.id, { view: 'results', replace: true });
                 }}
             />
         );
@@ -271,7 +251,7 @@ export default function PageContent({ initialView }) {
                 <Container maxWidth="sm" sx={{ py: 2, pb: showBottomNav ? 9 : 2 }}>
                     {/* Profile View */}
                     {mobileView === 'profile' && (
-                        <ProfilePage onBack={() => router.push('/?view=home')} />
+                        <ProfilePage onBack={() => setView('home', { replace: false })} />
                     )}
 
                     {/* Home/List View */}
@@ -281,7 +261,7 @@ export default function PageContent({ initialView }) {
                                 Select a condition to view details.
                             </Typography>
                             <ConditionListView
-                                selectedConditionId={selectedCondition?.id}
+                                selectedConditionId={selectedConditionId}
                                 onChange={handleSelectCondition}
                                 onAddDisease={handleAddDisease}
                                 showAddButton={false}
@@ -297,7 +277,7 @@ export default function PageContent({ initialView }) {
                             </Typography>
                             <Card sx={{ p: 2, mb: 2, display: 'flex', justifyContent: 'center' }}>
                                 <BodyMapView
-                                    selectedConditionId={selectedCondition?.id}
+                                    selectedConditionId={selectedConditionId}
                                     onSpotClick={handleSpotClick}
                                     maxWidth="260px"
                                     showPopover={true}
@@ -321,14 +301,14 @@ export default function PageContent({ initialView }) {
                     {/* Time Tracking View */}
                     {mobileView === 'time' && (
                         <>
-                            <TimeTrackingPanel conditionId={selectedCondition?.id} onAddImage={handleOpenAddTime} refreshKey={timeEntriesVersion} />
+                            <TimeTrackingPanel conditionId={selectedConditionId} onAddImage={handleOpenAddTime} refreshKey={timeEntriesVersion} />
                         </>
                     )}
 
                     {/* Chat View */}
                     {mobileView === 'chat' && (
                         <>
-                            <ChatPanel conditionId={selectedCondition?.id} refreshKey={chatRefreshKey} />
+                            <ChatPanel conditionId={selectedConditionId} refreshKey={chatRefreshKey} />
                         </>
                     )}
 
@@ -341,7 +321,7 @@ export default function PageContent({ initialView }) {
                 </Container>
                 {/* Add disease modal (shared) */}
                 <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} onStartAnalysis={handleStartAnalysis} />
-                <AddTimeEntryFlow open={showAddTimeFlow} onClose={() => setShowAddTimeFlow(false)} conditionId={selectedCondition?.id} onSaved={handleTimeSaved} />
+                <AddTimeEntryFlow open={showAddTimeFlow} onClose={() => setShowAddTimeFlow(false)} conditionId={selectedConditionId} onSaved={handleTimeSaved} />
             </MobileLayout>
         );
     }
@@ -356,7 +336,7 @@ export default function PageContent({ initialView }) {
                         <Typography variant="h5" sx={{ fontWeight: 600 }}>
                             Home
                         </Typography>
-                        <IconButton onClick={() => router.push('/?view=profile')} size="large">
+                        <IconButton onClick={() => setView('profile', { replace: false })} size="large">
                             <PersonOutline />
                         </IconButton>
                     </Box>
@@ -365,7 +345,7 @@ export default function PageContent({ initialView }) {
                         {/* Left: Conditions list */}
                         <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
                             <ConditionListView
-                                selectedConditionId={selectedCondition?.id}
+                                selectedConditionId={selectedConditionId}
                                 onChange={handleSelectCondition}
                                 onAddDisease={handleAddDisease}
                                 showAddButton={true}
@@ -377,7 +357,7 @@ export default function PageContent({ initialView }) {
                             <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
                                 <Card sx={{ flex: 1, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
                                     <BodyMapView
-                                        selectedConditionId={selectedCondition?.id}
+                                        selectedConditionId={selectedConditionId}
                                         onSpotClick={handleSpotClick}
                                         maxWidth="420px"
                                         showPopover={false}
@@ -393,7 +373,13 @@ export default function PageContent({ initialView }) {
                             <ResultsPanel
                                 selectedCondition={selectedCondition}
                                 showActions={true}
-                                onCombined={() => router.push('/?view=results')}
+                                onCombined={() => {
+                                    if (selectedConditionId) {
+                                        setConditionIdInQuery(selectedConditionId, { view: 'results', replace: false });
+                                    } else {
+                                        setView('results', { replace: false });
+                                    }
+                                }}
                             />
                         </Grid>
                     </Grid>
@@ -409,12 +395,12 @@ export default function PageContent({ initialView }) {
             <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5', py: 3 }}>
                 <Container maxWidth="sm" sx={{ mb: 3 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                        <Button startIcon={<ArrowBackOutlined />} variant="text" onClick={() => router.push('/?view=home')}>Back</Button>
+                        <Button startIcon={<ArrowBackOutlined />} variant="text" onClick={() => setView('home', { replace: false })}>Back</Button>
                         <Typography variant="h5" sx={{ fontWeight: 600 }}>
                             Profile
                         </Typography>
                     </Box>
-                    <ProfilePage onBack={() => router.push('/?view=home')} />
+                    <ProfilePage onBack={() => setView('home', { replace: false })} />
                 </Container>
             </Box>
         );
@@ -425,7 +411,7 @@ export default function PageContent({ initialView }) {
         <Box sx={{ height: '100vh', bgcolor: '#f5f5f5', py: 3, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <Container maxWidth="xl" sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                    <Button startIcon={<ArrowBackOutlined />} variant="text" onClick={() => router.push('/?view=home')}>Back</Button>
+                    <Button startIcon={<ArrowBackOutlined />} variant="text" onClick={() => setView('home', { replace: false })}>Back</Button>
                     <Typography variant="h5" sx={{ fontWeight: 600 }}>
                         Condition Detail
                     </Typography>
@@ -442,17 +428,17 @@ export default function PageContent({ initialView }) {
 
                     {/* Center Column: Chat */}
                     <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
-                        <ChatPanel conditionId={selectedCondition?.id} refreshKey={chatRefreshKey} selectedCondition={selectedCondition} />
+                        <ChatPanel conditionId={selectedConditionId} refreshKey={chatRefreshKey} selectedCondition={selectedCondition} />
                     </Grid>
 
                     {/* Right Column: Time Tracking */}
                     <Grid item xs={12} md={4} sx={{ height: '100%', minHeight: 0 }}>
-                        <TimeTrackingPanel conditionId={selectedCondition?.id} onAddImage={handleOpenAddTime} refreshKey={timeEntriesVersion} />
+                        <TimeTrackingPanel conditionId={selectedConditionId} onAddImage={handleOpenAddTime} refreshKey={timeEntriesVersion} />
                     </Grid>
                 </Grid>
             </Container>
             <AddDiseaseFlow open={showAddFlow} onClose={() => setShowAddFlow(false)} onSaved={handleAddSaved} />
-            <AddTimeEntryFlow open={showAddTimeFlow} onClose={() => setShowAddTimeFlow(false)} conditionId={selectedCondition?.id} onSaved={handleTimeSaved} />
+            <AddTimeEntryFlow open={showAddTimeFlow} onClose={() => setShowAddTimeFlow(false)} conditionId={selectedConditionId} onSaved={handleTimeSaved} />
         </Box>
     );
 }

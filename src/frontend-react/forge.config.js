@@ -2,7 +2,7 @@ const path = require('path');
 
 module.exports = {
   packagerConfig: {
-    name: 'pibu_ai',
+    name: 'Pibu',
     productName: 'pibu.ai',
     icon: path.join(__dirname, 'build-resources/icon.icns'),
     // Explicitly set the main entry point
@@ -74,7 +74,7 @@ module.exports = {
       config: {
         format: 'ULFO',
         contents: [
-          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/pibu_ai-darwin-x64/pibu_ai.app') },
+          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/Pibu-darwin-x64/Pibu.app') },
           { x: 470, y: 150, type: 'link', path: '/Applications' },
         ],
       },
@@ -84,7 +84,7 @@ module.exports = {
       config: {
         format: 'ULFO',
         contents: [
-          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/pibu_ai-darwin-arm64/pibu_ai.app') },
+          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/Pibu-darwin-arm64/Pibu.app') },
           { x: 470, y: 150, type: 'link', path: '/Applications' },
         ],
       },

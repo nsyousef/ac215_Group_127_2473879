@@ -4,7 +4,7 @@ Complete guide for building the pibu.ai desktop application for macOS with bundl
 
 **Naming Convention:**
 - **User-facing name**: `pibu.ai` (shown in Dock, window titles, menus, Applications folder)
-- **Filename/internal name**: `pibu_ai` (used in DMG files, app bundles, directories, config files)
+- **Filename/internal name**: `Pibu` (used in DMG files, app bundles, directories, config files)
 
 **Table of Contents:**
 - [Quick Start (TL;DR)](#quick-start-tldr)
@@ -37,14 +37,14 @@ npm run build
 npm run make-dmg
 ```
 
-**Output:** `dist/pibu_ai.dmg`
+**Output:** `dist/Pibu.dmg`
 
 The DMG will have a drag-to-install interface with the app and an Applications folder symlink for easy installation.
 
 ### Installing from DMG
 
 1. Open the DMG file
-2. Drag `pibu_ai.app` to the `Applications` folder (shown in the DMG window)
+2. Drag `Pibu.app` to the `Applications` folder (shown in the DMG window)
 3. Launch the app from Applications or use Spotlight Search
 
 ---
@@ -77,7 +77,7 @@ Create a local Python virtual environment with all dependencies:
 npm run bundle-python
 ```
 
-This creates `resources/python-bundle/venv` with all Python dependencies.
+This creates `resources/python-bundle/venv` with all Python dependencies and automatically exports the `certifi` CA bundle to `resources/python-bundle/cacert.pem` so HTTPS downloads work inside the packaged app.
 
 ### 3. Run in Development
 
@@ -113,7 +113,7 @@ npm install
 npm run bundle-python
 ```
 
-This creates `resources/python-bundle/venv` with all Python dependencies for production.
+This creates `resources/python-bundle/venv` with all Python dependencies (plus a bundled `cacert.pem` trust store) for production.
 
 ### Step 3: Build Next.js
 
@@ -131,21 +131,21 @@ npm run make-dmg
 
 Creates the macOS DMG installer file using `electron-forge` for packaging and `hdiutil` for DMG creation.
 
-**Output:** `dist/pibu_ai.dmg` (drag-to-install format with Applications symlink)
+**Output:** `dist/Pibu.dmg` (drag-to-install format with Applications symlink)
 
 #### What Happens:
 1. Builds Next.js frontend (if not already built)
 2. Bundles Python virtual environment with all dependencies
 3. Packages Electron app using electron-forge
 4. Creates a temporary staging folder with:
-   - `pibu_ai.app` (the application)
+   - `Pibu.app` (the application)
    - `Applications` (symbolic link to /Applications)
 5. Creates a compressed, user-friendly DMG file
 
 #### DMG Format:
 The generated DMG uses the standard macOS drag-to-install interface that users are familiar with:
 - Opens with a Finder window showing two items
-- Left side: `pibu_ai.app` (the application to drag)
+- Left side: `Pibu.app` (the application to drag)
 - Right side: `Applications` folder (destination to drag to)
 - Users simply drag the app to Applications to install
 
@@ -173,7 +173,7 @@ The app DMG includes:
 - Users download the DMG and drag pibu.ai to Applications
 - No need to install Python, Node.js, or npm
 - App works completely standalone
-- User data stored in `~/Library/Application Support/pibu_ai/`
+- User data stored in `~/Library/Application Support/Pibu/`
 
 ### Verification
 
@@ -270,7 +270,7 @@ resources/python-bundle/venv/bin/python python/ml_server.py
 **Solution:**
 ```bash
 # Allow the app to run
-xattr -d com.apple.quarantine "/Applications/pibu_ai.app"
+xattr -d com.apple.quarantine "/Applications/Pibu.app"
 
 # OR: Right-click the app → Open → Open
 ```
@@ -437,7 +437,7 @@ For GitHub Actions, see `.github/workflows/ci.yml` to add frontend build steps.
 **Common Issues:**
 1. Python detection logic: See `electron/main.js` → `resolvePythonBin()`
 2. Bundling issues: See `scripts/bundle-python-macos.sh`
-3. App logs: `~/Library/Application Support/pibu_ai/logs/`
+3. App logs: `~/Library/Application Support/Pibu/logs/`
 
 **Tools:**
 - [Electron Forge](https://www.electronforge.io/) - App packaging

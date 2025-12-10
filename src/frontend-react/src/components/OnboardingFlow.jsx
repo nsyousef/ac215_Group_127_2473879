@@ -21,6 +21,7 @@ export default function OnboardingFlow({ onComplete }) {
   const [step, setStep] = useState('splash'); // 'splash' | 'profile' | 'add'
   const [showAddFlow, setShowAddFlow] = useState(false);
   const [formData, setFormData] = useState({ dateOfBirth: '', sex: '', raceEthnicity: '', country: '' });
+  const [isDateOfBirthValid, setIsDateOfBirthValid] = useState(true);
 
   useEffect(() => {
     if (profile) {
@@ -36,6 +37,7 @@ export default function OnboardingFlow({ onComplete }) {
   const handleGetStarted = () => setStep('profile');
 
   const handleProfileNext = async () => {
+    if (!isDateOfBirthValid) return;
     // Persist optional profile data (can be blank)
     await updateProfile({ ...formData });
     setStep('add');
@@ -93,10 +95,16 @@ export default function OnboardingFlow({ onComplete }) {
           <CardContent>
             <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Tell us about you (optional)</Typography>
             <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>This helps personalize recommendations.</Typography>
-            <ProfileFields value={formData} onChange={setFormData} />
+            <ProfileFields
+              value={formData}
+              onChange={setFormData}
+              onDateValidityChange={setIsDateOfBirthValid}
+            />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
               <Button variant="text" onClick={() => setStep('splash')}>Back</Button>
-              <Button variant="contained" onClick={handleProfileNext}>Continue</Button>
+              <Button variant="contained" onClick={handleProfileNext} disabled={!isDateOfBirthValid}>
+                Continue
+              </Button>
             </Box>
           </CardContent>
         </Card>
