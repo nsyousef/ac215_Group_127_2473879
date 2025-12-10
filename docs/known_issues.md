@@ -13,11 +13,11 @@
     * ~~date should reflect date of latest uploaded image~~
 * ~~Chat doesn't load when you go to an existing disease from the home screen~~
 * ~~When navigating to the results/track/chat page, make sure all cards are scrolled to the top (or bottom for the chat)~~
-* For body map selection:
-  * add more options to list (e.g. ear, armpit, etc.)
-  * add ability to turn body around to show back
-  * remove distinction between left and right
-* fix user demographics showing in chat
+* ~~For body map selection:~~
+  * ~~add more options to list (e.g. ear, armpit, etc.)~~
+  * ~~add ability to turn body around to show back~~
+  * ~~remove distinction between left and right~~
+* ~~fix user demographics showing in chat~~
 * ~~fix error messages when navigating between pages (`Cannot access 'hasPredictionTextRef' before initialization`)~~
 * ~~In the startup flow, when you add the first disease, the UI goes to the body map picker while analyzing~~
 
@@ -31,19 +31,17 @@
 
 ## Training
 
-* get a better model (the current one sucks!) - JR
+* ~~get a better model (the current one sucks!) - JR~~
 
 ## Inference
 
-* if the model is not confident about anything, return "unknown" - R
+* ~~if the model is not confident about anything, return "unknown" - R~~
 
 ## Deployment
 
-* CI/CD
-* Pulumi/Kubernetes deployment (for cloud stuff) (oh boy!) - JR
-* set up CI pipeline to auto build DMG images on push to main - N
+* ~~Pulumi/Kubernetes deployment (for cloud stuff) (oh boy!) - JR~~
+* Set up CI pipeline to auto build DMG images on push to main and deploy updates to the Kubernetes cluster upon merging changes into the main branch. - N
 * demonstrate scaling (e.g. simulate many users calling our cloud API) - JR
-* Deploy updates to the Kubernetes cluster upon merging changes into the main branch. - JR
 * Validation checks to ensure only models meeting performance thresholds are deployed. - JR
 
 ## Other Milestone 5
