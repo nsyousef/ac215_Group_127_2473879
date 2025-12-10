@@ -71,7 +71,7 @@ jobs:
         run: |
           docker run --rm \
             -u root \
-            -v "$(pwd):/app" \
+            -v "${{ github.workspace }}:/workspace" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
             -v "/var/run/docker.sock:/var/run/docker.sock" \
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
@@ -79,9 +79,10 @@ jobs:
             -e GCP_REGION="$GCP_REGION" \
             -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
             -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
+            -e DOCKER_BUILD_CONTEXT="/workspace/src" \
             -e DOCKER_HOST="unix:///var/run/docker.sock" \
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
-            --workdir /app \
+            --workdir /workspace/src/deployment \
             pibu-ai-deployment:latest \
             bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && \
               pulumi config set --secret pibu-ai-deployment:modal_token_id '${{ secrets.MODAL_TOKEN_ID }}' && \
@@ -92,18 +93,18 @@ jobs:
         run: |
           docker run --rm \
             -u root \
-            -v "$(pwd):/app" \
+            -v "${{ github.workspace }}:/workspace" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
             -v "/var/run/docker.sock:/var/run/docker.sock" \
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
-            -e DOCKER_BUILD_CONTEXT="/app" \
+            -e DOCKER_BUILD_CONTEXT="/workspace/src" \
             -e GCP_PROJECT="$GCP_PROJECT" \
             -e GCP_REGION="$GCP_REGION" \
             -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
             -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
             -e DOCKER_HOST="unix:///var/run/docker.sock" \
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
-            --workdir /app \
+            --workdir /workspace/src/deployment \
             pibu-ai-deployment:latest \
             bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && \
               pulumi refresh --yes && \
@@ -114,7 +115,7 @@ jobs:
         run: |
           docker run --rm \
             -u root \
-            -v "$(pwd):/app" \
+            -v "${{ github.workspace }}:/workspace" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
             -v "/var/run/docker.sock:/var/run/docker.sock" \
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
@@ -122,9 +123,10 @@ jobs:
             -e GCP_REGION="$GCP_REGION" \
             -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
             -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
+            -e DOCKER_BUILD_CONTEXT="/workspace/src" \
             -e DOCKER_HOST="unix:///var/run/docker.sock" \
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
-            --workdir /app \
+            --workdir /workspace/src/deployment \
             pibu-ai-deployment:latest \
             bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && pulumi stack output frontend_config --json > frontend-config.json && cat frontend-config.json"
 
