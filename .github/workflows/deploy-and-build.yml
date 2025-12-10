@@ -182,12 +182,7 @@ jobs:
         env:
           FRONTEND_CONFIG_B64: ${{ needs.deploy-infrastructure.outputs.frontend_config_b64 }}
         run: |
-          python - <<'PY'
-            import base64, os, pathlib
-            data = os.environ["FRONTEND_CONFIG_B64"]
-            path = pathlib.Path("src/frontend-react/.pulumi-config.json")
-            path.write_bytes(base64.b64decode(data))
-            PY
+          python -c "import base64, os, pathlib; data=os.environ['FRONTEND_CONFIG_B64']; pathlib.Path('src/frontend-react/.pulumi-config.json').write_bytes(base64.b64decode(data))"
           echo "Pulumi config:"
           cat src/frontend-react/.pulumi-config.json | jq '.'
 
