@@ -61,6 +61,10 @@ jobs:
       - name: Save Docker image
         run: |
           docker save ${{ matrix.service }}:${{ github.sha }} -o /tmp/${{ matrix.service }}.tar || true
+      - name: Cleanup old workflow artifacts
+        run: ./delete-all-artifacts.sh --keep 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload Docker image artifact
         uses: actions/upload-artifact@v4
         with:
@@ -226,6 +230,11 @@ jobs:
               ;;
           esac
         continue-on-error: true
+
+      - name: Cleanup old workflow artifacts
+        run: ./delete-all-artifacts.sh --keep 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

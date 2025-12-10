@@ -1,42 +1,91 @@
 #!/bin/bash
+set -euo pipefail
 
-echo "Fetching all your repositories..."
+KEEP_COUNT=10
+REPO=""
 
-# Get all repos (owned + org + collaborator)
-ALL_REPOS=$(gh api user/repos --paginate --jq '.[] | select(.permissions.push == true) | .full_name' 2>&1)
+usage() {
+  cat <<'EOF'
+delete-all-artifacts.sh [--repo owner/name] [--keep N]
 
-if [ -z "$ALL_REPOS" ]; then
-  echo "❌ No repositories found"
+Deletes GitHub Actions artifacts for a single repository, removing the oldest
+artifacts first until only N remain (default: 10). Set --keep 0 to delete all.
+Requires the GitHub CLI (`gh`) to be authenticated (GITHUB_TOKEN works).
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)
+      REPO="$2"
+      shift 2
+      ;;
+    --keep)
+      KEEP_COUNT="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if ! command -v gh >/dev/null 2>&1; then
+  echo "❌ GitHub CLI (gh) is required."
   exit 1
 fi
 
-echo "Found $(echo "$ALL_REPOS" | wc -l | xargs) repositories with write access"
-echo ""
+if [[ -z "$REPO" ]]; then
+  REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+fi
 
-for REPO in $ALL_REPOS; do
-  [ -z "$REPO" ] && continue
+if [[ -z "$REPO" ]]; then
+  echo "❌ Unable to determine repository."
+  exit 1
+fi
 
-  echo "================================"
-  echo "Processing: $REPO"
+if [[ "$KEEP_COUNT" =~ [^0-9] ]]; then
+  echo "--keep must be a non-negative integer." >&2
+  exit 1
+fi
 
-  # Get ALL artifacts (including expired ones!)
-  ARTIFACT_IDS=$(gh api "repos/$REPO/actions/artifacts" --paginate --jq '.artifacts[]? | .id' 2>/dev/null)
+echo "📦 Managing artifacts for $REPO (keeping latest $KEEP_COUNT)"
 
-  if [ $? -ne 0 ]; then
-    echo "⚠️  Cannot access artifacts"
-    continue
-  fi
+ARTIFACT_LINES=$(gh api "repos/$REPO/actions/artifacts" --paginate \
+  --jq '.artifacts[]? | select(.expired == false) | "\(.created_at)\t\(.id)\t\(.name)"' | sort)
 
-  if [ -z "$ARTIFACT_IDS" ]; then
-    echo "✅ No artifacts"
+if [[ -z "$ARTIFACT_LINES" ]]; then
+  echo "✅ No artifacts to delete."
+  exit 0
+fi
+
+TOTAL=$(echo "$ARTIFACT_LINES" | wc -l | xargs)
+echo "Found $TOTAL artifact(s)."
+
+KEEP_INT=$((KEEP_COUNT))
+if [[ "$KEEP_INT" -ge "$TOTAL" ]]; then
+  echo "Nothing to delete (total <= keep)."
+  exit 0
+fi
+
+DELETE_COUNT=$((TOTAL - KEEP_INT))
+[[ "$KEEP_INT" -eq 0 ]] && DELETE_COUNT=$TOTAL
+
+echo "🗑️  Deleting $DELETE_COUNT oldest artifact(s)..."
+
+echo "$ARTIFACT_LINES" | head -n "$DELETE_COUNT" | while IFS=$'\t' read -r CREATED ID NAME; do
+  echo "  • $NAME ($ID) created $CREATED"
+  if gh api -X DELETE "repos/$REPO/actions/artifacts/$ID" >/dev/null; then
+    echo "    ✓ deleted"
   else
-    COUNT=$(echo "$ARTIFACT_IDS" | wc -l | xargs)
-    echo "🗑️  Deleting $COUNT artifact(s) (including expired)..."
-
-    echo "$ARTIFACT_IDS" | while read -r ID; do
-      gh api -X DELETE "repos/$REPO/actions/artifacts/$ID" 2>/dev/null && echo "  ✓ Deleted $ID"
-    done
+    echo "    ⚠️  failed to delete"
   fi
 done
 
-echo "================================"
+echo "✅ Cleanup complete."
