@@ -263,12 +263,8 @@ def handle_message(msg):
                                     coin_overlay[coin_mask_original > 0] = [0, 0, 255]  # Red in BGR
                                     overlay_img = cv2.addWeighted(overlay_img, 0.7, coin_overlay, 0.3, 0)
 
-                                cv2.imwrite("/Users/tk20/Downloads/coin_mask_overlay.png", overlay_img)
-                                debug_log("  → ✅ Saved mask overlay to /Users/tk20/Downloads/coin_mask_overlay.png")
 
                                 # Save cropped image (from PIL, preserving quality)
-                                processed_image.save("/Users/tk20/Downloads/processed_image.png", "PNG")
-                                debug_log("  → ✅ Saved cropped image to /Users/tk20/Downloads/processed_image.png")
                             except Exception as e:
                                 debug_log(f"  → ❌ Failed to save overlay/processed image: {e}")
                         else:

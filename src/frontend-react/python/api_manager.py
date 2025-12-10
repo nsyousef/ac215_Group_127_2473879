@@ -881,8 +881,6 @@ class APIManager:
 
                 # Save processed image for debugging
                 try:
-                    cv2.imwrite("/Users/tk20/Downloads/processed_image.png", img_rgb)
-                    debug_log("  → ✅ Saved cropped image to /Users/tk20/Downloads/processed_image.png")
                 except Exception as e:
                     debug_log(f"  → ❌ Failed to save processed image: {e}")
             else:

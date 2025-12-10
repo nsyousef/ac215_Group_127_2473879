@@ -628,7 +628,6 @@ def run_cv_analysis(image_path: str, bbox: Tuple[int, int, int, int] = None) -> 
     full_image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
 
     # Save image to downloads
-    cv2.imwrite("/Users/tk20/Downloads/tmp.png", full_image)
 
     # Initialize bbox with full image boundaries if not provided
     full_h, full_w = full_image.shape[:2]
