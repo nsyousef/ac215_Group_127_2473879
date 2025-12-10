@@ -131,7 +131,20 @@ class GKECluster(pulumi.ComponentResource):
                 auto_repair=True,
                 auto_upgrade=True,
             ),
-            opts=pulumi.ResourceOptions(parent=self),
+            opts=pulumi.ResourceOptions(
+                parent=self,
+                # Ignore server-managed fields to avoid unnecessary drift updates.
+                # When you need to intentionally change any of these (e.g., machine type,
+                # autoscaling bounds), temporarily remove the relevant entry before pulumi up.
+                ignore_changes=[
+                    "node_config",
+                    "node_config.workload_metadata_config",
+                    "node_config.oauth_scopes",
+                    "node_config.labels",
+                    "management",
+                    "autoscaling",
+                ],
+            ),
         )
 
         # Export cluster details
