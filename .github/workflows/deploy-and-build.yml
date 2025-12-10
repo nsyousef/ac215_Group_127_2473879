@@ -72,11 +72,13 @@ jobs:
           docker run --rm \
             -v "$(pwd):/app" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
+            -v "/var/run/docker.sock:/var/run/docker.sock" \
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
             -e GCP_PROJECT="$GCP_PROJECT" \
             -e GCP_REGION="$GCP_REGION" \
             -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
             -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
+            -e DOCKER_HOST="unix:///var/run/docker.sock" \
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
@@ -90,12 +92,14 @@ jobs:
           docker run --rm \
             -v "$(pwd):/app" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
+            -v "/var/run/docker.sock:/var/run/docker.sock" \
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
             -e DOCKER_BUILD_CONTEXT="/app" \
             -e GCP_PROJECT="$GCP_PROJECT" \
             -e GCP_REGION="$GCP_REGION" \
             -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
             -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
+            -e DOCKER_HOST="unix:///var/run/docker.sock" \
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
@@ -109,11 +113,13 @@ jobs:
           docker run --rm \
             -v "$(pwd):/app" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
+            -v "/var/run/docker.sock:/var/run/docker.sock" \
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
             -e GCP_PROJECT="$GCP_PROJECT" \
             -e GCP_REGION="$GCP_REGION" \
             -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
             -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
+            -e DOCKER_HOST="unix:///var/run/docker.sock" \
             -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
