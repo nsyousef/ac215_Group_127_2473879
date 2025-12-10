@@ -19,6 +19,9 @@ jobs:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.stack || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+    env:
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT || 'level-scheme-471117-i9' }}
+      GCP_REGION: ${{ secrets.GCP_REGION || 'us-east1' }}
 
     steps:
       - name: Checkout code
@@ -66,7 +69,9 @@ jobs:
             -v "$HOME/.pulumi:/home/app/.pulumi" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
-            -e PULUMI_BUCKET="gs://${{ secrets.GCP_PROJECT || 'level-scheme-471117-i9' }}-pulumi-state" \
+            -e GCP_PROJECT="$GCP_PROJECT" \
+            -e GCP_REGION="$GCP_REGION" \
+            -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
             bash -c "source .venv/bin/activate && \
@@ -83,6 +88,9 @@ jobs:
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
             -e DOCKER_BUILD_CONTEXT="/app" \
+            -e GCP_PROJECT="$GCP_PROJECT" \
+            -e GCP_REGION="$GCP_REGION" \
+            -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
             bash -c "source .venv/bin/activate && \
@@ -98,6 +106,9 @@ jobs:
             -v "$HOME/.pulumi:/home/app/.pulumi" \
             -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
             -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
+            -e GCP_PROJECT="$GCP_PROJECT" \
+            -e GCP_REGION="$GCP_REGION" \
+            -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
             --workdir /app \
             pibu-ai-deployment:latest \
             bash -c "source .venv/bin/activate && pulumi stack select ${{ steps.stack.outputs.stack }} && pulumi stack output frontend_config --json > frontend-config.json && cat frontend-config.json"
