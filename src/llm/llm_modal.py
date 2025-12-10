@@ -42,7 +42,7 @@ app = modal.App(
 )
 
 
-@app.cls(gpu=GPU, min_containers=0, max_containers=1, scaledown_window=200)
+@app.cls(gpu=GPU, min_containers=0, max_containers=1, scaledown_window=43200)
 class DermatologyLLM:
     """Modal class for dermatology LLM assistant."""
 
