@@ -1,0 +1,218 @@
+name: Deploy Infrastructure & Build Electron App
+
+on:
+  # Automatic triggers on code changes
+  push:
+    branches:
+      - dev # TODO: delete this one
+      - main
+    paths:
+      # Trigger on changes to deployment, inference, ml_workflow or LLM code
+      - 'src/deployment/**'
+      - 'src/inference-cloud/**'
+      - 'src/llm/**'
+      - 'src/ml_workflow/**'
+      - '.github/workflows/deploy-and-build.yml'
+
+jobs:
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.stack || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine stack name
+        id: stack
+        run: |
+          if [ -n "${{ github.event.inputs.stack }}" ]; then
+            STACK="${{ github.event.inputs.stack }}"
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            STACK="prod"
+          else
+            STACK="dev"
+          fi
+          echo "stack=$STACK" >> $GITHUB_OUTPUT
+          echo "Deploying to stack: $STACK"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build deployment container
+        working-directory: src/deployment
+        run: ./docker-build.sh
+
+      - name: Configure GCP credentials
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Create GCP credentials file for container
+        run: |
+          mkdir -p /tmp/gcp-creds
+          echo '${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}' > /tmp/gcp-creds/gcp-key.json
+
+      - name: Setup Pulumi state directory
+        run: |
+          mkdir -p $HOME/.pulumi
+
+      - name: Set Pulumi secrets from GitHub Secrets
+        working-directory: src/deployment
+        run: |
+          docker run --rm \
+            -v "$(pwd):/app" \
+            -v "$HOME/.pulumi:/home/app/.pulumi" \
+            -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
+            -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
+            -e PULUMI_BUCKET="gs://${{ secrets.GCP_PROJECT || 'level-scheme-471117-i9' }}-pulumi-state" \
+            --workdir /app \
+            pibu-ai-deployment:latest \
+            bash -c "source .venv/bin/activate && \
+              pulumi stack select ${{ steps.stack.outputs.stack }} && \
+              pulumi config set --secret pibu-ai-deployment:modal_token_id '${{ secrets.MODAL_TOKEN_ID }}' && \
+              pulumi config set --secret pibu-ai-deployment:modal_token_secret '${{ secrets.MODAL_TOKEN_SECRET }}'"
+
+      - name: Pulumi Up (in container)
+        working-directory: src/deployment
+        run: |
+          docker run --rm \
+            -v "$(pwd):/app" \
+            -v "$HOME/.pulumi:/home/app/.pulumi" \
+            -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
+            -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
+            -e DOCKER_BUILD_CONTEXT="/app" \
+            --workdir /app \
+            pibu-ai-deployment:latest \
+            bash -c "source .venv/bin/activate && \
+              pulumi stack select ${{ steps.stack.outputs.stack }} && \
+              pulumi refresh --yes && \
+              pulumi up --yes"
+
+      - name: Export frontend config (in container)
+        working-directory: src/deployment
+        run: |
+          docker run --rm \
+            -v "$(pwd):/app" \
+            -v "$HOME/.pulumi:/home/app/.pulumi" \
+            -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
+            -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
+            --workdir /app \
+            pibu-ai-deployment:latest \
+            bash -c "source .venv/bin/activate && pulumi stack select ${{ steps.stack.outputs.stack }} && pulumi stack output frontend_config --json > frontend-config.json && cat frontend-config.json"
+
+      - name: Upload Pulumi outputs
+        uses: actions/upload-artifact@v3
+        with:
+          name: pulumi-outputs
+          path: src/deployment/frontend-config.json
+          retention-days: 7
+
+  build-electron-app:
+    name: Build macOS Electron App
+    needs: deploy-infrastructure
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine stack name
+        id: stack
+        run: |
+          if [ -n "${{ github.event.inputs.stack }}" ]; then
+            STACK="${{ github.event.inputs.stack }}"
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            STACK="prod"
+          else
+            STACK="dev"
+          fi
+          echo "stack=$STACK" >> $GITHUB_OUTPUT
+          echo "Building for stack: $STACK"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Download Pulumi outputs
+        uses: actions/download-artifact@v3
+        with:
+          name: pulumi-outputs
+          path: ./pulumi-outputs
+
+      - name: Inject Pulumi config into frontend
+        run: |
+          cp ./pulumi-outputs/frontend-config.json src/frontend-react/.pulumi-config.json
+          echo "Pulumi config:"
+          cat src/frontend-react/.pulumi-config.json | jq '.'
+
+      - name: Install frontend dependencies
+        working-directory: src/frontend-react
+        run: npm install
+
+      - name: Bundle Python
+        working-directory: src/frontend-react
+        run: npm run bundle-python
+
+      - name: Build Next.js
+        working-directory: src/frontend-react
+        run: npm run build
+
+      - name: Create DMG
+        working-directory: src/frontend-react
+        run: npm run make-dmg
+
+      - name: Get version from package.json
+        id: package-version
+        working-directory: src/frontend-react
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: pibu-ai-macos-${{ steps.package-version.outputs.VERSION }}-${{ steps.stack.outputs.stack }}
+          path: src/frontend-react/dist/pibu_ai.dmg
+          retention-days: 30
+
+      - name: Create GitHub Release (if prod)
+        if: steps.stack.outputs.stack == 'prod'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.package-version.outputs.VERSION }}-${{ github.sha }}
+          name: Pibu.AI v${{ steps.package-version.outputs.VERSION }}
+          files: src/frontend-react/dist/Pibu.dmg
+          body: |
+            ## Pibu.AI Desktop Application
+
+            ### Installation
+            1. Download `Pibu.dmg`
+            2. Open the DMG file
+            3. Drag `Pibu.app` to Applications folder
+            4. Launch from Applications
+
+            ### Services
+            - Environment: ${{ github.event.inputs.stack }}
+            - Built from commit: ${{ github.sha }}
+
+            ### System Requirements
+            - macOS 11.0 or later
+            - Apple Silicon (M1/M2/M3/M4) or Intel
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deployment Summary
+        run: |
+          echo "Deployment and build complete!"
+          echo ""
+          echo "Stack: ${{ steps.stack.outputs.stack }}"
+          echo "Version: ${{ steps.package-version.outputs.VERSION }}"
+          echo "DMG: Pibu.dmg"
