@@ -5,8 +5,7 @@ import shutil
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Callable
-from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Any, List, Optional, Tuple
 
 import requests
 from prediction_texts import get_prediction_text
@@ -27,14 +26,14 @@ else:
     SAVE_DIR = Path(os.getcwd())
 
 # Cloud ML API URLs (can be overridden with environment variables)
-BASE_URL = os.getenv("BASE_URL", "https://inference-cloud-469023639150.us-east4.run.app")
+BASE_URL = os.getenv("BASE_URL", "http://35.231.234.99")
 TEXT_EMBEDDING_URL = os.getenv("TEXT_EMBEDDING_URL", f"{BASE_URL}/embed-text")
 PREDICTION_URL = os.getenv("PREDICTION_URL", f"{BASE_URL}/predict")
 
 # LLM API URLs (can be overridden with environment variables for testing)
-DEFAULT_LLM_FOLLOWUP_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-fo-8013b2.modal.run"
-DEFAULT_LLM_EXPLAIN_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explai-0d573f.modal.run"
-LLM_TIME_TRACKING_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-time-t-f8b7ef.modal.run"
+DEFAULT_LLM_FOLLOWUP_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-ask-followu-41c84a.modal.run/"
+DEFAULT_LLM_EXPLAIN_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-explain-stream.modal.run/"
+LLM_TIME_TRACKING_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-time-tracki-2d32a8.modal.run/"
 
 
 def debug_log(msg: str):
