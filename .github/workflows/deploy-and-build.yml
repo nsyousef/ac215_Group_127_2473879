@@ -100,7 +100,7 @@ jobs:
           else
             echo "Weights: Not specified (will use config's checkpoint.load_from setting)"
           fi
-          echo "Minimum accuracy threshold: $MIN_ACCURACY%"
+          echo "Minimum f1 threshold: $MIN_ACCURACY"
 
           # Run evaluation and capture output
           # Only pass --weights-path if it's set
@@ -115,11 +115,11 @@ jobs:
 
           echo "$OUTPUT"
 
-          # Extract accuracy from output (look for "Test Accuracy: XX.XX%")
-          ACCURACY=$(echo "$OUTPUT" | grep -oP 'Test Accuracy: \K[0-9.]+' | head -1)
+          # Extract f1 from output (look for "Test Macro F1: XX.XX%")
+          F1=$(echo "$OUTPUT" | grep -oP 'Test Macro F1: \K[0-9.]+' | head -1)
 
-          if [ -z "$ACCURACY" ]; then
-            echo "ERROR: Could not extract accuracy from output"
+          if [ -z "$F1" ]; then
+            echo "ERROR: Could not extract f1 from output"
             echo "Full output:"
             echo "$OUTPUT"
             exit 1
