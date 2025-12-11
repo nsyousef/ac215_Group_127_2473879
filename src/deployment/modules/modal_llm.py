@@ -87,14 +87,18 @@ modal deploy llm_modal.py
         app_suffix = model_size  # "4b" or "27b"
         base_url = f"https://{modal_username}--dermatology-llm-{app_suffix}-dermatologyllm"
 
-        self.explain_url = f"{base_url}-explain.modal.run"
-        self.followup_url = f"{base_url}-ask-followup.modal.run"
+        # Modal generates stable FastAPI endpoint subdomains using the function name.
+        # We expose the streaming explain/follow-up endpoints plus the time tracking summary.
+        self.explain_url = f"{base_url}-explain-stream.modal.run"
+        self.followup_url = f"{base_url}-ask-followup-stream.modal.run"
+        self.time_tracking_url = f"{base_url}-time-tracking-summary.modal.run"
 
         self.register_outputs(
             {
                 "deployment": self.deployment,
                 "explain_url": self.explain_url,
                 "followup_url": self.followup_url,
+                "time_tracking_url": self.time_tracking_url,
                 "model_size": model_size,
                 "gpu_type": gpu_type,
             }

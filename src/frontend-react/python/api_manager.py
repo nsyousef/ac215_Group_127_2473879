@@ -10,9 +10,14 @@ from typing import Dict, Any, List, Optional, Tuple, Callable
 import requests
 from prediction_texts import get_prediction_text
 from model_manager import get_model_path
+from config_loader import get_config
 
 # Disclaimer appended to all LLM responses
-DISCLAIMER = "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. This information is for general knowledge, and a doctor is the best person to give you a proper diagnosis and treatment plan."
+DISCLAIMER = (
+    "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. "
+    "This information is for general knowledge, and a doctor is the best person to give you "
+    "a proper diagnosis and treatment plan."
+)
 
 # Shared vision encoder instance (lazy-loaded)
 _VISION_ENCODER = None
@@ -25,15 +30,36 @@ if APP_DATA_DIR:
 else:
     SAVE_DIR = Path(os.getcwd())
 
+CONFIG_FROM_DEPLOYMENT = get_config()
+
+
+def _resolve_config_value(env_name: str, config_key: str, default: str) -> str:
+    """Prefer env var override, else Pulumi-injected config, else default."""
+    env_value = os.getenv(env_name)
+    if env_value:
+        return env_value
+    config_value = CONFIG_FROM_DEPLOYMENT.get(config_key)
+    if config_value:
+        return config_value
+    return default
+
+
 # Cloud ML API URLs (can be overridden with environment variables)
-BASE_URL = os.getenv("BASE_URL", "http://35.231.234.99")
-TEXT_EMBEDDING_URL = os.getenv("TEXT_EMBEDDING_URL", f"{BASE_URL}/embed-text")
-PREDICTION_URL = os.getenv("PREDICTION_URL", f"{BASE_URL}/predict")
+DEFAULT_BASE_URL = "http://35.231.234.99"
+BASE_URL = _resolve_config_value("BASE_URL", "BASE_URL", DEFAULT_BASE_URL)
+TEXT_EMBEDDING_URL = _resolve_config_value("TEXT_EMBEDDING_URL", "TEXT_EMBEDDING_URL", f"{BASE_URL}/embed-text")
+PREDICTION_URL = _resolve_config_value("PREDICTION_URL", "PREDICTION_URL", f"{BASE_URL}/predict")
 
 # LLM API URLs (can be overridden with environment variables for testing)
 DEFAULT_LLM_FOLLOWUP_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-ask-followu-41c84a.modal.run/"
 DEFAULT_LLM_EXPLAIN_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-explain-stream.modal.run/"
-LLM_TIME_TRACKING_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-time-tracki-2d32a8.modal.run/"
+DEFAULT_LLM_TIME_TRACKING_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-time-tracki-2d32a8.modal.run/"
+
+LLM_EXPLAIN_URL = _resolve_config_value("LLM_EXPLAIN_URL", "LLM_EXPLAIN_URL", DEFAULT_LLM_EXPLAIN_URL)
+LLM_FOLLOWUP_URL = _resolve_config_value("LLM_FOLLOWUP_URL", "LLM_FOLLOWUP_URL", DEFAULT_LLM_FOLLOWUP_URL)
+LLM_TIME_TRACKING_URL = _resolve_config_value(
+    "LLM_TIME_TRACKING_URL", "LLM_TIME_TRACKING_URL", DEFAULT_LLM_TIME_TRACKING_URL
+)
 
 
 def debug_log(msg: str):
@@ -125,9 +151,9 @@ class APIManager:
             file_path=self.demographics_file, default_value={}, description="demographics"
         )
 
-        # Set API URLs (can be overridden with environment variables)
-        self.llm_explain_url = os.getenv("LLM_EXPLAIN_URL", DEFAULT_LLM_EXPLAIN_URL)
-        self.llm_followup_url = os.getenv("LLM_FOLLOWUP_URL", DEFAULT_LLM_FOLLOWUP_URL)
+        # Set API URLs (can be overridden with environment variables or Pulumi config)
+        self.llm_explain_url = LLM_EXPLAIN_URL
+        self.llm_followup_url = LLM_FOLLOWUP_URL
         self.text_embed_url = TEXT_EMBEDDING_URL
         self.prediction_url = PREDICTION_URL
 
@@ -780,9 +806,8 @@ class APIManager:
 
             # Remove coin from image if detected
             coin_mask_full = cv_result.get("masks", {}).get("coin_mask_full")
-            debug_log(
-                f"  → Coin mask check: mask is None={coin_mask_full is None}, has_data={coin_mask_full is not None and coin_mask_full.any() if coin_mask_full is not None else False}"
-            )
+            has_mask_data = coin_mask_full is not None and coin_mask_full.any()
+            debug_log(f"  → Coin mask check: mask is None={coin_mask_full is None}, has_data={has_mask_data}")
 
             if coin_mask_full is not None and coin_mask_full.any():
                 debug_log("  → Cropping coin from image...")
@@ -1517,7 +1542,10 @@ class APIManager:
         """
         if self.dummy:
             debug_log("    [DUMMY MODE] Returning dummy tracking summary...")
-            return "The affected area measures roughly 2.5 cm² with moderate color variation. The shape appears fairly regular."
+            return (
+                "The affected area measures roughly 2.5 cm² with moderate color variation. "
+                "The shape appears fairly regular."
+            )
 
         debug_log("Calling LLM time tracking summary API...")
 
@@ -1587,7 +1615,6 @@ class APIManager:
                 area = cv_analysis.get("area_cm2") or cv_analysis.get("area_cm2_uncorrected")
                 irregularity = cv_analysis.get("irregularity_index")
                 color = cv_analysis.get("color_stats_lab") or {}
-                mean_L = color.get("mean_L")
                 mean_A = color.get("mean_A")
 
                 sentences = []
@@ -1607,7 +1634,8 @@ class APIManager:
                     )
                 if not sentences:
                     sentences.append(
-                        "We have recorded this image for tracking. Future images will help show whether the spot is getting larger, smaller, or staying stable."
+                        "We have recorded this image for tracking. Future images will help show whether the spot is "
+                        "getting larger, smaller, or staying stable."
                     )
 
                 summary = " ".join(sentences[:3])
