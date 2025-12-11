@@ -257,16 +257,16 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
         logger.info("=" * 70)
 
         # Use the evaluate method if available, otherwise use test method
-        test_results = trainer.validate()
-        accuracy = test_results[1]
+        test_results = trainer.test()
+        macro_f1 = test_results["macro_f1"]
 
         logger.info("=" * 70)
         logger.info("EVALUATION COMPLETE!")
         logger.info("=" * 70)
-        logger.info(f"  Test Accuracy: {accuracy:.2f}%")
+        logger.info(f"  Test Macro F1: {macro_f1:.2f}%")
         logger.info("=" * 70)
 
-        return accuracy
+        return macro_f1
     finally:
         # Clean up temporary config file if it was created
         if temp_config_path is not None and os.path.exists(temp_config_path):

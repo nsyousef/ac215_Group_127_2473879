@@ -26,7 +26,7 @@ jobs:
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-      MIN_ACCURACY: ${{ secrets.MIN_MODEL_ACCURACY || '50.0' }}
+      MIN_ACCURACY: ${{ secrets.MIN_MODEL_ACCURACY || '0.5' }}
 
     steps:
       - name: Checkout code
