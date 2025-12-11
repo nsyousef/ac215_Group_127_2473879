@@ -4,7 +4,6 @@ on:
   # Automatic triggers on code changes
   push:
     branches:
-      - dev # TODO: delete this one
       - main
     paths:
       # Trigger on changes to deployment, inference, ml_workflow or LLM code
