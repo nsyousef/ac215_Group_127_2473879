@@ -211,7 +211,7 @@ jobs:
       - name: Publish DMG to public release repository
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
-          PUBLIC_RELEASE_REPO: ${{ secrets.PUBLIC_RELEASE_REPO }}
+          PUBLIC_RELEASE_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
           STACK_NAME: ${{ steps.stack.outputs.stack }}
           VERSION: ${{ steps.package-version.outputs.VERSION }}
         run: |
