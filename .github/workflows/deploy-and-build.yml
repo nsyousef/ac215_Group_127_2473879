@@ -100,7 +100,7 @@ jobs:
           else
             echo "Weights: Not specified (will use config's checkpoint.load_from setting)"
           fi
-          echo "Minimum f1 threshold: $MIN_ACCURACY"
+          echo "Minimum F1 threshold: $MIN_ACCURACY"
 
           # Run evaluation and capture output
           # Only pass --weights-path if it's set
@@ -125,23 +125,27 @@ jobs:
             exit 1
           fi
 
-          echo "ACCURACY=$ACCURACY" >> $GITHUB_ENV
-          echo "accuracy=$ACCURACY" >> $GITHUB_OUTPUT
-          echo "Extracted accuracy: $ACCURACY%"
+          echo "F1_SCORE=$F1" >> $GITHUB_ENV
+          echo "f1_score=$F1" >> $GITHUB_OUTPUT
+          echo "Extracted F1: $F1%"
 
       - name: Check Accuracy Threshold
         run: |
-          echo "Model accuracy: ${ACCURACY}%"
+          if [ -z "${F1_SCORE}" ]; then
+            echo "ERROR: No F1 score available from evaluation step."
+            exit 1
+          fi
+          echo "Model F1: ${F1_SCORE}%"
           echo "Required threshold: ${MIN_ACCURACY}%"
 
           # Use awk for floating point comparison (more reliable than bc)
-          PASS=$(awk "BEGIN {print ($ACCURACY >= $MIN_ACCURACY)}")
+          PASS=$(awk "BEGIN {print (${F1_SCORE} >= $MIN_ACCURACY)}")
 
           if [ "$PASS" = "1" ]; then
-            echo "Model passes threshold (${ACCURACY}% >= ${MIN_ACCURACY}%)"
+            echo "Model passes threshold (${F1_SCORE}% >= ${MIN_ACCURACY}%)"
             echo "status=pass" >> $GITHUB_OUTPUT
           else
-            echo "ERROR: Model fails threshold (${ACCURACY}% < ${MIN_ACCURACY}%)"
+            echo "ERROR: Model fails threshold (${F1_SCORE}% < ${MIN_ACCURACY}%)"
             echo "status=fail" >> $GITHUB_OUTPUT
             exit 1
           fi
