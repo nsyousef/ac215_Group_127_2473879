@@ -7,4 +7,8 @@ config_path: "configs/experiments/exp_arch_dv2_40_FINAL_MODEL.yaml"
 
 # Optional: Path to model weights/checkpoint in Modal volume
 # If not specified, will use checkpoint.load_from from the config file
-# weights_path: "/checkpoints/best_model.pth"
+weights_path: "/checkpoints/test_best.pth"
+
+# Optional: GCS URI for the weights file. When provided the CI pipeline will
+# download the blob and place it at weights_path before evaluation.
+weights_gcs_uri: "gs://apcomp215-datasets/test_best.pth"

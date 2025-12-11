@@ -46,6 +46,7 @@ jobs:
             echo "WARNING: Deploy config file not found, using defaults"
             CONFIG_PATH="configs/experiments/final_run.yaml"
             WEIGHTS_PATH=""
+            WEIGHTS_GCS_URI="gs://apcomp215-datasets/test_best.pth"
           else
             echo "Reading deployment config from $DEPLOY_CONFIG"
             # Extract config_path (remove quotes and handle YAML)
@@ -57,17 +58,28 @@ jobs:
             else
               WEIGHTS_PATH=""
             fi
+
+            # Extract weights_gcs_uri if present (optional)
+            if grep -qE "^weights_gcs_uri:" "$DEPLOY_CONFIG"; then
+              WEIGHTS_GCS_URI=$(grep -E "^weights_gcs_uri:" "$DEPLOY_CONFIG" | sed 's/^weights_gcs_uri:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//" || echo "")
+            else
+              WEIGHTS_GCS_URI="gs://apcomp215-datasets/test_best.pth"
+            fi
           fi
 
           # Default to final_run.yaml if empty
           if [ -z "$CONFIG_PATH" ]; then
             CONFIG_PATH="configs/experiments/final_run.yaml"
           fi
+          if [ -z "$WEIGHTS_GCS_URI" ]; then
+            WEIGHTS_GCS_URI="gs://apcomp215-datasets/test_best.pth"
+          fi
 
           echo "Config path: $CONFIG_PATH"
           echo "Weights path: ${WEIGHTS_PATH:-'(not specified)'}"
           echo "config_path=$CONFIG_PATH" >> $GITHUB_OUTPUT
           echo "weights_path=$WEIGHTS_PATH" >> $GITHUB_OUTPUT
+          echo "weights_gcs_uri=$WEIGHTS_GCS_URI" >> $GITHUB_OUTPUT
 
       - name: Install Modal CLI
         run: pip install modal
@@ -78,6 +90,8 @@ jobs:
 
       - name: Evaluate Model
         id: evaluate
+        env:
+          MODEL_WEIGHTS_GCS_URI: ${{ steps.deploy-config.outputs.weights_gcs_uri }}
         run: |
           echo "Evaluating model..."
           echo "Config: ${{ steps.deploy-config.outputs.config_path }}"

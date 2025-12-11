@@ -9,12 +9,14 @@ Usage:
 """
 
 import logging
+import json
 from pathlib import Path
 
 import modal
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+DEFAULT_WEIGHTS_GCS_URI = "gs://apcomp215-datasets/test_best.pth"
 
 # Get paths - need to mount src/ directory so ml_workflow package structure works
 SRC_DIR = Path(__file__).parent.parent  # Goes up to src/
@@ -82,6 +84,10 @@ app = modal.App("skin-disease-evaluation-volume", image=image)
     cpu=20.0,
     timeout=50000,
     region="us-east",
+    secrets=[
+        modal.Secret.from_name("gcs-secret"),
+        modal.Secret.from_name("gcp-project-secret"),
+    ],
     volumes={
         "/checkpoints": modal.Volume.from_name("training-checkpoints", create_if_missing=True),
         "/data": modal.Volume.from_name("training-data", create_if_missing=True),
@@ -108,6 +114,47 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
 
     # Disable wandb for evaluation (no logging needed)
     os.environ["WANDB_MODE"] = "disabled"
+
+    def _configure_gcs_credentials():
+        if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
+            creds_path = "/tmp/gcs_credentials.json"
+            try:
+                creds_data = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+                with open(creds_path, "w") as f:
+                    json.dump(creds_data, f)
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
+                logger.info("GCS credentials configured for evaluation download")
+            except Exception as exc:
+                logger.error(f"Failed to configure GCS credentials: {exc}")
+                raise
+
+    def _download_weights_if_missing(local_path: str, gcs_uri: str):
+        if not local_path:
+            logger.warning("No weights path provided; skipping download.")
+            return
+        if os.path.exists(local_path):
+            logger.info("Weights already present at %s", local_path)
+            return
+        if not gcs_uri:
+            logger.warning("Weights file %s missing and no GCS URI supplied.", local_path)
+            return
+        if not gcs_uri.startswith("gs://"):
+            logger.warning("Unsupported weights URI %s; expected gs://", gcs_uri)
+            return
+
+        _configure_gcs_credentials()
+        from google.cloud import storage
+
+        bucket_name, object_name = gcs_uri[5:].split("/", 1)
+        destination_dir = os.path.dirname(local_path)
+        if destination_dir:
+            os.makedirs(destination_dir, exist_ok=True)
+        logger.info("Downloading weights from %s to %s", gcs_uri, local_path)
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+        blob.download_to_filename(local_path)
+        logger.info("Weights download complete.")
 
     # Set up Python path FIRST, before ANY other imports
     src_path = "/app/src"
@@ -161,6 +208,15 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
     if not config_path.startswith("/"):
         config_path = os.path.join(ml_workflow_path, config_path)
 
+    with open(config_path, "r") as f:
+        config_data = yaml.safe_load(f) or {}
+
+    checkpoint_cfg = config_data.get("checkpoint", {}) if isinstance(config_data, dict) else {}
+    weights_gcs_uri = (
+        os.environ.get("MODEL_WEIGHTS_GCS_URI") or checkpoint_cfg.get("gcs_uri") or DEFAULT_WEIGHTS_GCS_URI
+    )
+    effective_weights_path = weights_path or checkpoint_cfg.get("load_from")
+
     # Load and modify config if weights_path is provided
     temp_config_path = None
     if weights_path is not None:
@@ -170,25 +226,20 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
         logger.info(f"  Weights path: {weights_path}")
         logger.info("=" * 70)
 
-        # Load the config
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
-
-        # Ensure checkpoint section exists
-        if "checkpoint" not in config:
-            config["checkpoint"] = {}
-
-        # Set the load_from path
-        config["checkpoint"]["load_from"] = weights_path
+        if not isinstance(config_data, dict):
+            config_data = {}
+        config_data.setdefault("checkpoint", {})["load_from"] = weights_path
         logger.info(f"Updated checkpoint.load_from to: {weights_path}")
 
-        # Write modified config to a temporary file
         temp_config = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, dir=ml_workflow_path)
-        yaml.dump(config, temp_config, default_flow_style=False)
+        yaml.dump(config_data, temp_config, default_flow_style=False)
         temp_config.close()
         temp_config_path = temp_config.name
         config_path = temp_config_path
         logger.info(f"Created temporary config: {config_path}")
+        effective_weights_path = weights_path
+
+    _download_weights_if_missing(effective_weights_path, weights_gcs_uri)
 
     logger.info("Starting evaluation with volume data...")
     logger.info("  Config: %s", config_path)
