@@ -130,13 +130,13 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
     if os.path.exists(data_dir):
         file_count = len([f for f in Path(data_dir).rglob("*") if f.is_file()])
         logger.info("=" * 70)
-        logger.info("✓ Data volume mounted and ready!")
+        logger.info("Data volume mounted and ready!")
         logger.info(f"  Files: {file_count:,}")
         logger.info(f"  Location: {data_dir}")
         logger.info("=" * 70)
     else:
         logger.error("=" * 70)
-        logger.error(f"❌ Data directory not found: {data_dir}")
+        logger.error(f"ERROR: Data directory not found: {data_dir}")
         logger.error("=" * 70)
         logger.error("You need to sync data to the volume first!")
         logger.error("Run: modal run modal_training_volume.py::sync_data_from_gcs")
@@ -180,7 +180,7 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
 
         # Set the load_from path
         config["checkpoint"]["load_from"] = weights_path
-        logger.info(f"✓ Updated checkpoint.load_from to: {weights_path}")
+        logger.info(f"Updated checkpoint.load_from to: {weights_path}")
 
         # Write modified config to a temporary file
         temp_config = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, dir=ml_workflow_path)
@@ -188,7 +188,7 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
         temp_config.close()
         temp_config_path = temp_config.name
         config_path = temp_config_path
-        logger.info(f"✓ Created temporary config: {config_path}")
+        logger.info(f"Created temporary config: {config_path}")
 
     logger.info("Starting evaluation with volume data...")
     logger.info("  Config: %s", config_path)
@@ -210,7 +210,7 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
         accuracy = test_results[1]
 
         logger.info("=" * 70)
-        logger.info("✓ EVALUATION COMPLETE!")
+        logger.info("EVALUATION COMPLETE!")
         logger.info("=" * 70)
         logger.info(f"  Test Accuracy: {accuracy:.2f}%")
         logger.info("=" * 70)
@@ -220,7 +220,7 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
         # Clean up temporary config file if it was created
         if temp_config_path is not None and os.path.exists(temp_config_path):
             os.remove(temp_config_path)
-            logger.info(f"✓ Cleaned up temporary config: {temp_config_path}")
+            logger.info(f"Cleaned up temporary config: {temp_config_path}")
 
 
 # ============================================================================
@@ -239,5 +239,5 @@ def main(config_path: str = "configs/modal_template.yaml", weights_path: str = N
                      override the checkpoint.load_from setting in the config.
     """
     accuracy = evaluate_with_volume.remote(config_path=config_path, weights_path=weights_path)
-    logger.info(f"✓ Evaluation completed! Test Accuracy: {accuracy:.2f}%")
+    logger.info(f"Evaluation completed! Test Accuracy: {accuracy:.2f}%")
     return accuracy

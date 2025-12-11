@@ -111,13 +111,13 @@ def sync_data_from_gcs():
             with open(creds_path, "w") as f:
                 json.dump(creds_data, f)
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
-            logger.info("✓ GCS credentials configured")
+            logger.info("GCS credentials configured")
         except Exception as e:
-            logger.error(f"❌ Error setting up GCS credentials: {e}")
+            logger.error(f"ERROR: Error setting up GCS credentials: {e}")
             raise
 
     bucket_name = "apcomp215-datasets"
-    gcs_prefix = "dataset_v1/"
+    gcs_prefix = "dataset_v2/"
     data_dir = "/data/dataset_v2"
     os.makedirs(data_dir, exist_ok=True)
 
@@ -152,7 +152,7 @@ def sync_data_from_gcs():
     # Mount adapter on primary GCS HTTP session
     try:
         client._http.mount("https://", adapter)
-        logger.info(f"✓ Increased HTTP pool size to {POOL_SIZE}")
+        logger.info(f"Increased HTTP pool size to {POOL_SIZE}")
     except Exception as e:
         logger.warning(f"Could not mount adapter on client._http: {e}")
 
@@ -160,7 +160,7 @@ def sync_data_from_gcs():
     try:
         auth_sess = client._http._auth_request.session
         auth_sess.mount("https://", adapter)
-        logger.info("✓ Mounted adapter on internal auth session")
+        logger.info("Mounted adapter on internal auth session")
     except Exception:
         pass
 
@@ -212,7 +212,7 @@ def sync_data_from_gcs():
     total_size_gb = total_bytes / (1024**3)
 
     logger.info("=" * 70)
-    logger.info("✓ SYNC COMPLETE!")
+    logger.info("SYNC COMPLETE!")
     logger.info("=" * 70)
     logger.info(f"  Files transferred: {file_count:,}")
     logger.info(f"  Total size: {total_size_gb:.2f} GB")
@@ -223,7 +223,7 @@ def sync_data_from_gcs():
 
     volume = Volume.from_name("training-data")
     volume.commit()
-    logger.info("✓ Volume committed - data persisted!")
+    logger.info("Volume committed - data persisted!")
 
     return f"Data sync successful: {file_count:,} files, {total_size_gb:.2f} GB"
 
@@ -288,13 +288,13 @@ def train_with_volume(config_path: str = "configs/modal_template.yaml"):
     if os.path.exists(data_dir):
         file_count = len([f for f in Path(data_dir).rglob("*") if f.is_file()])
         logger.info("=" * 70)
-        logger.info("✓ Data volume mounted and ready!")
+        logger.info("Data volume mounted and ready!")
         logger.info(f"  Files: {file_count:,}")
         logger.info(f"  Location: {data_dir}")
         logger.info("=" * 70)
     else:
         logger.error("=" * 70)
-        logger.error(f"❌ Data directory not found: {data_dir}")
+        logger.error(f"ERROR: Data directory not found: {data_dir}")
         logger.error("=" * 70)
         logger.error("You need to sync data to the volume first!")
         logger.error("Run: modal run modal_training_volume.py::sync_data_from_gcs")
@@ -363,25 +363,25 @@ def test_gcs_credentials():
 
     # Check if secret is set
     if "GOOGLE_APPLICATION_CREDENTIALS_JSON" not in os.environ:
-        logger.error("❌ GOOGLE_APPLICATION_CREDENTIALS_JSON not found in environment")
+        logger.error("ERROR: GOOGLE_APPLICATION_CREDENTIALS_JSON not found in environment")
         return {"status": "error", "message": "Secret not found"}
 
     creds_json = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"]
-    logger.info(f"✓ Secret found (length: {len(creds_json)} chars)")
+    logger.info(f"Secret found (length: {len(creds_json)} chars)")
 
     # Check if it's empty
     if not creds_json or creds_json.strip() == "":
-        logger.error("❌ GOOGLE_APPLICATION_CREDENTIALS_JSON is empty")
+        logger.error("ERROR: GOOGLE_APPLICATION_CREDENTIALS_JSON is empty")
         return {"status": "error", "message": "Secret is empty"}
 
     # Try to parse JSON
     try:
         creds_data = json.loads(creds_json)
-        logger.info("✓ JSON is valid")
+        logger.info("JSON is valid")
         logger.info(f"  Project ID: {creds_data.get('project_id', 'N/A')}")
         logger.info(f"  Client Email: {creds_data.get('client_email', 'N/A')}")
     except json.JSONDecodeError as e:
-        logger.error(f"❌ JSON parse error: {e}")
+        logger.error(f"ERROR: JSON parse error: {e}")
         logger.error(f"  First 100 chars: {creds_json[:100]}")
         return {"status": "error", "message": f"JSON parse error: {e}"}
 
@@ -391,7 +391,7 @@ def test_gcs_credentials():
         with open(creds_path, "w") as f:
             json.dump(creds_data, f)
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
-        logger.info(f"✓ Credentials written to {creds_path}")
+        logger.info(f"Credentials written to {creds_path}")
 
         # Test GCS client
         client = storage.Client()
@@ -399,9 +399,9 @@ def test_gcs_credentials():
         bucket = client.bucket(bucket_name)
 
         # Try to list a few blobs to verify access
-        logger.info(f"✓ Testing access to bucket: {bucket_name}")
-        blobs = list(bucket.list_blobs(prefix="dataset_v1/", max_results=5))
-        logger.info(f"✓ Successfully accessed bucket! Found {len(blobs)} sample blobs")
+        logger.info(f"Testing access to bucket: {bucket_name}")
+        blobs = list(bucket.list_blobs(prefix="dataset_v2/", max_results=5))
+        logger.info(f"Successfully accessed bucket! Found {len(blobs)} sample blobs")
 
         return {
             "status": "success",
@@ -410,7 +410,7 @@ def test_gcs_credentials():
             "sample_blobs": len(blobs),
         }
     except Exception as e:
-        logger.error(f"❌ GCS access error: {e}")
+        logger.error(f"ERROR: GCS access error: {e}")
         return {"status": "error", "message": f"GCS access error: {e}"}
 
 
@@ -423,4 +423,4 @@ def test_gcs_credentials():
 def main(config_path: str = "configs/modal_template.yaml"):
     """Local entrypoint to run training on Modal with cached data volume"""
     result = train_with_volume.remote(config_path=config_path)
-    logger.info(f"✓ {result}")
+    logger.info(f"{result}")

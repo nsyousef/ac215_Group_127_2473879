@@ -16,14 +16,14 @@ download_model_from_gcs() {
     local local_path="${2}"
 
     if [ -z "$gcs_path" ]; then
-        echo "⚠️  MODEL_GCS_PATH not set, skipping model download"
+        echo "WARNING: MODEL_GCS_PATH not set, skipping model download"
         return 0
     fi
 
     # Create directory
     mkdir -p "$(dirname "$local_path")"
 
-    echo "📥 Downloading model from $gcs_path to $local_path..."
+    echo "Downloading model from $gcs_path to $local_path..."
 
     # Use Python with google-cloud-storage
     python3 << 'EOF'
@@ -73,10 +73,10 @@ try:
     Path(local_path).parent.mkdir(parents=True, exist_ok=True)
     blob.download_to_filename(local_path)
 
-    print(f"✓ Model downloaded to {local_path}")
+    print(f"Model downloaded to {local_path}")
 
 except Exception as e:
-    print(f"❌ Failed to download model: {e}")
+    print(f"ERROR: Failed to download model: {e}")
     print("Proceeding with baseline model")
 
 EOF

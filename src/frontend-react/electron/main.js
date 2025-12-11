@@ -9,8 +9,8 @@ try {
   fs_immediate.writeFileSync('/tmp/pibu_main_js_loaded.txt', `Main.js loaded at ${new Date().toISOString()}\n`);
 } catch (e) {}
 
-console.log('🚀 Pibu Electron main process starting...');
-console.error('🚀 Pibu Electron main process starting (stderr)...');
+console.log('Pibu Electron main process starting...');
+console.error('Pibu Electron main process starting (stderr)...');
 console.error('TEST_ERROR_OUTPUT_001');
 process.stderr.write('STDERR_TEST_002\n');
 
@@ -41,18 +41,18 @@ function debugLog(...args) {
   }
 }
 
-debugLog('🚀 Main process loaded, modules imported, logFile at:', logFile);
+debugLog('Main process loaded, modules imported, logFile at:', logFile);
 
 // Global error handlers
 process.on('uncaughtException', (error) => {
-  console.error('💥 Uncaught exception:', error);
-  if (logFile) debugLog('💥 Uncaught exception:', error);
+  console.error('Uncaught exception:', error);
+  if (logFile) debugLog('Uncaught exception:', error);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('💥 Unhandled rejection:', reason);
-  if (logFile) debugLog('💥 Unhandled rejection at:', promise, 'reason:', reason);
+  console.error('Unhandled rejection:', reason);
+  if (logFile) debugLog('Unhandled rejection at:', promise, 'reason:', reason);
   process.exit(1);
 });
 const { spawn } = require('child_process');
@@ -210,7 +210,7 @@ function resolvePythonBin() {
       'python'
     );
     if (fsSync.existsSync(bundledPython)) {
-      console.log('✅ Using bundled Python:', bundledPython);
+      console.log('Using bundled Python:', bundledPython);
       return bundledPython;
     }
   }
@@ -218,14 +218,14 @@ function resolvePythonBin() {
   // Dev path to repo-local venv
   const devVenvPy = path.join(__dirname, '..', 'resources', 'python-bundle', 'venv', 'bin', 'python');
   if (fsSync.existsSync(devVenvPy)) {
-    console.log('✅ Using dev venv Python:', devVenvPy);
+    console.log('Using dev venv Python:', devVenvPy);
     return devVenvPy;
   }
 
   // Fallback dev path
   const fallbackVenv = path.join(__dirname, '..', 'python', '.venv', 'bin', 'python3');
   if (fsSync.existsSync(fallbackVenv)) {
-    console.log('✅ Using fallback venv Python:', fallbackVenv);
+    console.log('Using fallback venv Python:', fallbackVenv);
     return fallbackVenv;
   }
 
@@ -235,7 +235,7 @@ function resolvePythonBin() {
     if (fsSync.existsSync(metaPath)) {
       const { python } = JSON.parse(fsSync.readFileSync(metaPath, 'utf8'));
       if (python && fsSync.existsSync(python)) {
-        console.log('✅ Using Python from meta file:', python);
+        console.log('Using Python from meta file:', python);
         return python;
       }
     }
@@ -243,7 +243,7 @@ function resolvePythonBin() {
 
   // Fallback to system Python
   const systemPython = process.env.PYTHON || 'python3';
-  console.log('⚠️  Falling back to system Python:', systemPython);
+  console.log('WARNING: Falling back to system Python:', systemPython);
   return systemPython;
 }
 
@@ -737,7 +737,7 @@ function startProductionServer() {
     const outDir = path.join(__dirname, '..', 'out');
     const publicDir = path.join(__dirname, '..', 'public');
 
-    debugLog(`🔧 Setting up production server:`);
+    debugLog(`Setting up production server:`);
     debugLog(`   __dirname: ${__dirname}`);
     debugLog(`   outDir: ${outDir}`);
     debugLog(`   publicDir: ${publicDir}`);
@@ -745,7 +745,7 @@ function startProductionServer() {
 
     const server = http.createServer(async (req, res) => {
       try {
-        debugLog(`📡 HTTP request: ${req.url}`);
+        debugLog(`HTTP request: ${req.url}`);
         // Normalize the request path
         let filePath = req.url;
         if (filePath === '/') {
@@ -777,10 +777,10 @@ function startProductionServer() {
             const content = await fs.readFile(indexPath);
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(content);
-            debugLog(`✅ Served index.html for route: ${req.url}`);
+            debugLog(`Served index.html for route: ${req.url}`);
             return;
           } catch (err) {
-            debugLog(`❌ Failed to read index.html:`, err);
+            debugLog(`ERROR: Failed to read index.html:`, err);
             res.writeHead(404);
             res.end('Not found');
             return;
@@ -808,21 +808,21 @@ function startProductionServer() {
           'Cache-Control': 'no-cache'
         });
         res.end(content);
-        debugLog(`✅ Served file: ${filePath} (${content.length} bytes)`);
+        debugLog(`Served file: ${filePath} (${content.length} bytes)`);
       } catch (err) {
-        debugLog(`❌ Server error for ${req.url}:`, err);
+        debugLog(`ERROR: Server error for ${req.url}:`, err);
         res.writeHead(500);
         res.end('Internal server error');
       }
     });
 
     server.listen(4000, '127.0.0.1', () => {
-      debugLog('✅ Production static server running on http://127.0.0.1:4000');
+      debugLog('Production static server running on http://127.0.0.1:4000');
       resolve(server);
     });
 
     server.on('error', (err) => {
-      debugLog('❌ Server startup error:', err);
+      debugLog('ERROR: Server startup error:', err);
       reject(err);
     });
   });
@@ -846,19 +846,19 @@ function createWindow() {
   let startURL;
   if (isDev) {
     startURL = 'http://127.0.0.1:3000';
-    debugLog('🔧 Development mode - loading from:', startURL);
+    debugLog('Development mode - loading from:', startURL);
   } else {
     // In production, use local HTTP server to serve static files
     startURL = 'http://127.0.0.1:4000';
-    debugLog('🔧 Production mode - loading from:', startURL);
+    debugLog('Production mode - loading from:', startURL);
   }
 
-  debugLog(`📱 Loading URL: ${startURL}`);
+  debugLog(`Loading URL: ${startURL}`);
   mainWindow.loadURL(startURL);
 
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
-    debugLog('✅ Main window ready to show');
+    debugLog('Main window ready to show');
     mainWindow.show();
   });
 
@@ -877,30 +877,30 @@ function createWindow() {
 // ============================================================================
 
 app.on('ready', async () => {
-  debugLog('📍 app.on(ready) event triggered');
+  debugLog('app.on(ready) event triggered');
 
   // 1. Show splash screen immediately
   const splash = createSplashScreen();
-  debugLog('✅ Splash screen shown');
+  debugLog('Splash screen shown');
 
   await ensureDataDirExists();
-  debugLog('📍 Data directory ensured');
+  debugLog('Data directory ensured');
 
   // Start production server if not in dev mode
-  debugLog('📍 isDev:', isDev);
+  debugLog('isDev:', isDev);
   if (!isDev) {
-    debugLog('📍 Production mode detected - starting HTTP server');
+    debugLog('Production mode detected - starting HTTP server');
     try {
       productionServer = await startProductionServer();
-      debugLog('✅ Production server started');
+      debugLog('Production server started');
       // Give server a moment to be fully ready
       await new Promise(resolve => setTimeout(resolve, 100));
     } catch (error) {
-      debugLog('❌ Failed to start production server:', error);
+      debugLog('ERROR: Failed to start production server:', error);
       // Still try to create the window and hope the server will start in time
     }
   } else {
-    debugLog('📍 Development mode detected - skipping HTTP server');
+    debugLog('Development mode detected - skipping HTTP server');
   }
 
   // On macOS, BrowserWindow.icon is ignored; set Dock icon explicitly in dev
@@ -915,12 +915,12 @@ app.on('ready', async () => {
     }
   }
 
-  debugLog('📍 Creating main window');
+  debugLog('Creating main window');
   createWindow();
 
   // 2. Close splash screen once main window is ready
   mainWindow.once('ready-to-show', () => {
-    debugLog('✅ Main window ready, closing splash screen');
+    debugLog('Main window ready, closing splash screen');
     splash.destroy();
   });
 });

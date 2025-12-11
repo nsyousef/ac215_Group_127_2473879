@@ -5,7 +5,9 @@ The purpose of this microservice is to convert the raw datasets into a standardi
 ## Instructions to Run the data-processor Pipeline
 
 1) `cd` into the `src/data-processor/` folder.
-2) Run `./data_processor.sh`
+2) Run `./data-processor.sh`
+
+This script will automatically run all dataset processors in sequence (DDI, Fitzpatrick, SkinCap, ISIC, Derm1M), then harmonize labels and filter descriptions, and finally verify the output. The complete pipeline processes all datasets and produces `metadata_all_harmonized.csv` in the `final/` directory of the GCS bucket.
 
 ## Instructions to Create a Processor Script
 
@@ -32,18 +34,12 @@ To run your code:
 
 `update_data`: This function adds your data to the `metadata_all` CSV containing the pooled metadata from all datasets. If you implemented `format_metadata_csv` correctly, you should be able to just call the base class version of this function without modification. This function will add your images to the `metadata_all.csv` file in the `final` directory of the GCP bucket. It will not duplicate entries that already exist in that file, so if you run it multiple times on the same images, it will not duplicate those image entries. It will update the metadata for existing images if it is changed, however. This function also copies your images into the `final/imgs` folder and copies your dataset-specific metadata file to the `final` folder. It will override any image or metadata files that already exist there, as long as the filenames remain consistent.
 
-## Building and Running the Docker Image
-
-### Build Image
+Use the provided helper script:
 ```bash
-docker build -t data-processor -f ac215_Group_127_2473879/src/data-processor/Dockerfile .
-```
-
-### Run Container
-```bash
-docker run --rm -ti data-processor
+./docker-shell.sh
 ```
 
 ### Notes
-- Run commands from root directory (one level above repo)
-- Ensure `secrets/` folder exists in root
+- The Dockerfile automatically runs all processors in sequence: `processor_ddi.py`, `processor_fitz.py`, `processor_skincap.py`, `processor_isic.py`, `processor_derm1m.py`, followed by `harmonize_labels_filter_desc.py`, and finally `verify_output.py`
+- Ensure `secrets/` folder exists in the repository root
+- The build command should be run from the `src/data-processor/` directory

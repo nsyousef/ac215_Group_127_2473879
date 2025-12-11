@@ -17,7 +17,7 @@ elif [ "$MODEL" = "27b" ]; then
     MAX_TOKENS=400
     GPU_DEFAULT="H200"
 else
-    echo "❌ Invalid model. Use '4b' or '27b'"
+    echo "ERROR: Invalid model. Use '4b' or '27b'"
     echo "Usage: ./deploy.sh [4b|27b] [gpu_type]"
     exit 1
 fi
@@ -41,7 +41,7 @@ modal deploy llm_modal.py
 
 if [ $? -eq 0 ]; then
     echo ""
-    echo "✅ Deployment successful!"
+    echo "Deployment successful!"
     echo ""
     echo "Model: $MODEL_NAME"
     echo "GPU: $GPU"
@@ -51,6 +51,6 @@ if [ $? -eq 0 ]; then
     echo "  /ask_followup - Answer follow-up questions"
 else
     echo ""
-    echo "❌ Deployment failed!"
+    echo "ERROR: Deployment failed!"
     exit 1
 fi

@@ -91,9 +91,9 @@ try:
     from module import run_cv_analysis as cv_run_analysis
 
     CV_ANALYSIS_AVAILABLE = True
-    debug_log("✓ CV analysis module loaded successfully")
+    debug_log("CV analysis module loaded successfully")
 except ImportError as e:
-    debug_log(f"⚠ Warning: CV analysis module not available: {e}")
+    debug_log(f"WARNING: CV analysis module not available: {e}")
     CV_ANALYSIS_AVAILABLE = False
 
 
@@ -195,7 +195,7 @@ class APIManager:
             try:
                 _VISION_ENCODER = VisionEncoder(checkpoint_path=str(checkpoint_path))
                 info = _VISION_ENCODER.get_model_info()
-                debug_log(f"✓ Vision encoder initialized: {info}")
+                debug_log(f"Vision encoder initialized: {info}")
             except Exception as e:
                 debug_log(f"✗ Error initializing vision encoder: {e}")
                 import traceback
@@ -560,7 +560,7 @@ class APIManager:
 
         # Save updated case history
         APIManager.save_case_history(case_id, api.case_history)
-        debug_log(f"✅ Added timeline entry for case {case_id} on date {date}")
+        debug_log(f"Added timeline entry for case {case_id} on date {date}")
 
     @staticmethod
     def delete_cases(case_ids: List[str]) -> None:
@@ -893,18 +893,18 @@ class APIManager:
                     if crop_w > 0 and crop_h > 0:
                         # Perform the crop
                         img_bgr = img_bgr[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
-                        debug_log(f"  → ✅ Cropped image to size: {img_bgr.shape[1]}x{img_bgr.shape[0]}")
+                        debug_log(f"  -> Cropped image to size: {img_bgr.shape[1]}x{img_bgr.shape[0]}")
                     else:
-                        debug_log("  → ⚠️ Invalid crop dimensions, skipping crop")
+                        debug_log("  -> WARNING: Invalid crop dimensions, skipping crop")
                 else:
-                    debug_log("  → ⚠️ Could not find coin coordinates in mask")
+                    debug_log("  -> WARNING: Could not find coin coordinates in mask")
 
                 # Convert back to PIL Image
                 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
                 processed_image = Image.fromarray(img_rgb)
 
             else:
-                debug_log("  → ⚠️ No coin detected or coin mask is empty, skipping coin removal")
+                debug_log("  -> WARNING: No coin detected or coin mask is empty, skipping coin removal")
 
         # Step 2: Run local ML model for embeddings (using coin-removed image)
         debug_log("  → Running local ML model for embeddings...")
@@ -983,7 +983,7 @@ class APIManager:
             "enriched_disease": enriched_disease,  # NEW: Complete disease object with all UI fields
         }
 
-        debug_log(f"✓ Initial prediction complete for case {self.case_id}")
+        debug_log(f"Initial prediction complete for case {self.case_id}")
         return results
 
     def update_text_input(self, text_input: str) -> str:
@@ -1134,7 +1134,7 @@ class APIManager:
             if not destination_path.exists():
                 raise FileNotFoundError(f"Image save failed: file not found at {destination_path}")
 
-            debug_log(f"    ✓ Image saved to: {destination_path}")
+            debug_log(f"    Image saved to: {destination_path}")
             return str(destination_path)
 
         except Exception as exc:
@@ -1182,7 +1182,7 @@ class APIManager:
             embedding_array = encoder.encode(image_path)
             embedding_list = embedding_array.tolist()
 
-            debug_log(f"    ✓ Embedding extracted (dim={len(embedding_list)})")
+            debug_log(f"    Embedding extracted (dim={len(embedding_list)})")
             return embedding_list
 
         except Exception as e:
@@ -1239,7 +1239,7 @@ class APIManager:
                 return result
 
             except Exception as e:
-                debug_log(f"    ⚠ CV analysis failed: {e}")
+                debug_log(f"    WARNING: CV analysis failed: {e}")
                 import traceback
 
                 debug_log(traceback.format_exc())
@@ -1326,7 +1326,7 @@ class APIManager:
 
         # Check if model is uncertain about the prediction
         if result.get("predicted_class") == "UNCERTAIN":
-            debug_log("⚠️ Model returned UNCERTAIN prediction")
+            debug_log("WARNING: Model returned UNCERTAIN prediction")
             # Still log the top k predictions for debugging
             if top_k_predictions:
                 debug_log("Top K predictions (even though uncertain):")
@@ -1358,7 +1358,7 @@ class APIManager:
 
         # Log the full prompt/payload being sent to the LLM
         debug_log("\n" + "=" * 80)
-        debug_log("📤 FULL PROMPT SENT TO LLM EXPLAIN API:")
+        debug_log("FULL PROMPT SENT TO LLM EXPLAIN API:")
         debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
         debug_log("=" * 80 + "\n")
@@ -1453,7 +1453,7 @@ class APIManager:
 
         # Log the full prompt/payload being sent to the LLM
         debug_log("\n" + "=" * 80)
-        debug_log("📤 FULL PROMPT SENT TO LLM FOLLOWUP API:")
+        debug_log("FULL PROMPT SENT TO LLM FOLLOWUP API:")
         debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
         debug_log("=" * 80 + "\n")
@@ -1590,7 +1590,7 @@ class APIManager:
 
         # Log the full payload
         debug_log("\n" + "=" * 80)
-        debug_log("📤 TIME TRACKING SUMMARY REQUEST:")
+        debug_log("TIME TRACKING SUMMARY REQUEST:")
         debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
         debug_log("=" * 80 + "\n")
@@ -1611,7 +1611,7 @@ class APIManager:
 
             # Guard against empty/missing summaries – synthesize a simple one from CV metrics
             if not summary.strip():
-                debug_log("⚠ LLM returned empty tracking summary; generating fallback from CV metrics")
+                debug_log("WARNING: LLM returned empty tracking summary; generating fallback from CV metrics")
                 area = cv_analysis.get("area_cm2") or cv_analysis.get("area_cm2_uncorrected")
                 irregularity = cv_analysis.get("irregularity_index")
                 color = cv_analysis.get("color_stats_lab") or {}
@@ -1640,11 +1640,11 @@ class APIManager:
 
                 summary = " ".join(sentences[:3])
 
-            debug_log(f"✅ Time tracking summary received (or synthesized): {summary[:100]}...")
+            debug_log(f"Time tracking summary received (or synthesized): {summary[:100]}...")
             return summary
 
         except requests.exceptions.RequestException as e:
-            debug_log(f"⚠ Error calling time tracking summary API: {e}")
+            debug_log(f"WARNING: Error calling time tracking summary API: {e}")
             # Return a generic fallback
             return (
                 "We have recorded this image for tracking, but were unable to generate a detailed summary right now. "
@@ -1701,7 +1701,7 @@ class APIManager:
             llm_timestamp=llm_timestamp,
         )
 
-        debug_log(f"✓ Chat message processed for case {self.case_id}")
+        debug_log(f"Chat message processed for case {self.case_id}")
         return {
             "answer": response["answer"],
             "conversation_history": response.get("conversation_history", []),

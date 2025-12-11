@@ -7,7 +7,7 @@ set -e
 BUNDLE_DIR="resources/python-bundle"
 VENV_DIR="$BUNDLE_DIR/venv"
 
-echo "🐍 Bundling Python for macOS..."
+echo "Bundling Python for macOS..."
 
 # Create bundle directory
 mkdir -p "$BUNDLE_DIR"
@@ -24,7 +24,7 @@ if command -v python3 &> /dev/null; then
 elif command -v python &> /dev/null; then
   PYTHON_CMD="python"
 else
-  echo "❌ Python not found! Please install Python 3.11 or later."
+  echo "ERROR: Python not found! Please install Python 3.11 or later."
   exit 1
 fi
 
@@ -59,7 +59,7 @@ case "$ARCHITECTURE" in
     TORCHVISION_VERSION="0.24.1"
     ;;
   *)
-    echo "⚠️  Unknown architecture ($ARCHITECTURE). Defaulting to torch $TORCH_VERSION."
+    echo "WARNING: Unknown architecture ($ARCHITECTURE). Defaulting to torch $TORCH_VERSION."
     ;;
 esac
 
@@ -78,7 +78,7 @@ elif [ -f "python/requirements-ci.txt" ]; then
   "$VENV_DIR/bin/pip" install --no-cache-dir \
     --requirement python/requirements-ci.txt
 else
-  echo "⚠️  No requirements files found"
+  echo "WARNING: No requirements files found"
   echo "Installing minimal dependencies..."
   "$VENV_DIR/bin/pip" install --no-cache-dir \
     requests pillow modal numpy
@@ -149,9 +149,9 @@ if [ -n "$CERTIFI_PEM" ] && [ -f "$CERTIFI_PEM" ]; then
   echo "Bundling certifi CA store..."
   cp "$CERTIFI_PEM" "$BUNDLE_DIR/cacert.pem"
 else
-  echo "⚠️  Could not locate certifi certificate bundle; HTTPS requests may fail."
+  echo "WARNING: Could not locate certifi certificate bundle; HTTPS requests may fail."
 fi
 
 FINAL_SIZE=$(du -sh "$VENV_DIR" | awk '{print $1}')
-echo "✅ Python bundle created at $BUNDLE_DIR/venv"
+echo "Python bundle created at $BUNDLE_DIR/venv"
 echo "Final bundle size: $FINAL_SIZE (optimized)"

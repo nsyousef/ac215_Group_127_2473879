@@ -749,14 +749,14 @@ class Trainer:
 
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch+1} - Training")
 
-        for batch_idx, (images, targets, text_embeddings, text_content_flags) in enumerate(pbar):  # ✅ Unpack 4 items
+        for batch_idx, (images, targets, text_embeddings, text_content_flags) in enumerate(pbar):  # Unpack 4 items
 
             # Move data to device
             images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
             if not isinstance(text_embeddings, torch.Tensor):
                 text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
             text_embeddings = text_embeddings.to(self.device, non_blocking=True)
-            text_content_flags = text_content_flags.to(self.device, non_blocking=True)  # ✅ Boolean tensor
+            text_content_flags = text_content_flags.to(self.device, non_blocking=True)  # Boolean tensor
 
             # Apply masking (if enabled)
             images, text_embeddings, modality_mask_info = self._apply_masking(
@@ -1092,7 +1092,7 @@ class Trainer:
                 "targets": [],
                 "macro_f1": None,
             }
-        
+
         logger.info("Starting test evaluation...")
 
         self.vision_model.eval()
@@ -1110,21 +1110,21 @@ class Trainer:
 
         with torch.no_grad():
             pbar = tqdm(self.test_loader, desc="Testing")
-            # ✅ Unpack 4 items now
+            # Unpack 4 items now
             for images, targets, text_embeddings, text_content_flags in pbar:
                 # Move data to device
                 images, targets = images.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
                 if not isinstance(text_embeddings, torch.Tensor):
                     text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
                 text_embeddings = text_embeddings.to(self.device, non_blocking=True)
-                text_content_flags = text_content_flags.to(self.device, non_blocking=True)  # ✅ Move to device
+                text_content_flags = text_content_flags.to(self.device, non_blocking=True)  # Move to device
 
                 # Apply masking
                 images, text_embeddings, modality_mask_info = self._apply_masking(
                     images, text_embeddings, self.current_epoch
                 )
 
-                # ✅ Use pre-computed flag (only if needed)
+                # Use pre-computed flag (only if needed)
                 if text_aux_enabled:
                     if modality_mask_info is None:
                         modality_mask_info = {"text_valid_mask": text_content_flags}

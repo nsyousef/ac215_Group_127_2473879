@@ -8,7 +8,11 @@ from api_manager import APIManager
 manager = None
 
 # Disclaimer appended to all LLM responses
-DISCLAIMER = "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. This information is for general knowledge, and a doctor is the best person to give you a proper diagnosis and treatment plan."
+DISCLAIMER = (
+    "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. "
+    "This information is for general knowledge, and a doctor is the best person to give you "
+    "a proper diagnosis and treatment plan."
+)
 
 
 def debug_log(msg: str):
@@ -169,8 +173,11 @@ def handle_message(msg):
                 # Crop to lesion bounding box
                 lesion_mask_full = cv_result.get("masks", {}).get("final_mask")
                 coin_mask_full = cv_result.get("masks", {}).get("coin_mask_full")
+                has_mask_data = (
+                    lesion_mask_full is not None and lesion_mask_full.any() if lesion_mask_full is not None else False
+                )
                 debug_log(
-                    f"  → Lesion mask check: mask is None={lesion_mask_full is None}, has_data={lesion_mask_full is not None and lesion_mask_full.any() if lesion_mask_full is not None else False}"
+                    f"  → Lesion mask check: mask is None={lesion_mask_full is None}, " f"has_data={has_mask_data}"
                 )
 
                 if lesion_mask_full is not None and lesion_mask_full.any():
@@ -221,10 +228,14 @@ def handle_message(msg):
                         crop_h = min(original_h, lesion_y_max + padding) - crop_y
 
                         debug_log(
-                            f"  → Lesion bounding box (mask space): x=[{lesion_x_min_mask}, {lesion_x_max_mask}], y=[{lesion_y_min_mask}, {lesion_y_max_mask}]"
+                            f"  → Lesion bounding box (mask space): "
+                            f"x=[{lesion_x_min_mask}, {lesion_x_max_mask}], "
+                            f"y=[{lesion_y_min_mask}, {lesion_y_max_mask}]"
                         )
                         debug_log(
-                            f"  → Lesion bounding box (original space): x=[{lesion_x_min}, {lesion_x_max}], y=[{lesion_y_min}, {lesion_y_max}]"
+                            f"  → Lesion bounding box (original space): "
+                            f"x=[{lesion_x_min}, {lesion_x_max}], "
+                            f"y=[{lesion_y_min}, {lesion_y_max}]"
                         )
                         debug_log(f"  → Crop region (original space): x={crop_x}, y={crop_y}, w={crop_w}, h={crop_h}")
 
@@ -233,7 +244,8 @@ def handle_message(msg):
                             # Crop directly from original PIL image (preserves quality and color space)
                             processed_image = image.crop((crop_x, crop_y, crop_x + crop_w, crop_y + crop_h))
                             debug_log(
-                                f"  → ✅ Cropped image to lesion bounding box: {crop_w}x{crop_h} (original quality preserved)"
+                                f"  -> Cropped image to lesion bounding box: {crop_w}x{crop_h} "
+                                f"(original quality preserved)"
                             )
 
                             # Save overlay and processed image for debugging (convert to OpenCV only for visualization)
@@ -263,13 +275,13 @@ def handle_message(msg):
 
                                 # Save cropped image (from PIL, preserving quality)
                             except Exception as e:
-                                debug_log(f"  → ❌ Failed to save overlay/processed image: {e}")
+                                debug_log(f"  -> ERROR: Failed to save overlay/processed image: {e}")
                         else:
-                            debug_log("  → ⚠️ Invalid crop dimensions, skipping crop")
+                            debug_log("  -> WARNING: Invalid crop dimensions, skipping crop")
                     else:
-                        debug_log("  → ⚠️ Could not find lesion coordinates in mask")
+                        debug_log("  -> WARNING: Could not find lesion coordinates in mask")
                 else:
-                    debug_log("  → ⚠️ No coin detected or coin mask is empty, skipping coin removal")
+                    debug_log("  -> WARNING: No coin detected or coin mask is empty, skipping coin removal")
 
             # Step 2: Run local ML model for embeddings (using coin-removed image)
             embedding = manager._run_local_ml_model(processed_image)
@@ -286,7 +298,7 @@ def handle_message(msg):
 
             # Check if model returned UNCERTAIN
             if "UNCERTAIN" in predictions:
-                debug_log("⚠️ Model is uncertain about this prediction")
+                debug_log("WARNING: Model is uncertain about this prediction")
                 # Log the top predictions even when uncertain (excluding UNCERTAIN itself)
                 other_predictions = {k: v for k, v in predictions.items() if k != "UNCERTAIN"}
                 if other_predictions:
@@ -298,7 +310,11 @@ def handle_message(msg):
                         "id": req_id,
                         "ok": False,
                         "error": "UNCERTAIN",
-                        "message": "Unable to determine the condition from this image. Please try again with better lighting, a clearer photo, or more descriptive text. It's also possible that there's nothing concerning to identify.",
+                        "message": (
+                            "Unable to determine the condition from this image. "
+                            "Please try again with better lighting, a clearer photo, or more descriptive text. "
+                            "It's also possible that there's nothing concerning to identify."
+                        ),
                     }
                 )
                 return
