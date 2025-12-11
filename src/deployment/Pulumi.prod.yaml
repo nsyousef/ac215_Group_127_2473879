@@ -1,0 +1,10 @@
+config:
+  gcp:project: level-scheme-471117-i9
+  gcp:region: us-east1
+  pibu-ai-deployment:modal_username: nsyousef
+  pibu-ai-deployment:llm_model_size: 27b
+  pibu-ai-deployment:modal_token_id:
+    secure: v1:5nMv4GQVkxXUiENW:/cMi2CNfgbabwSRuN/h1JAytHpGcDcecCVsGbLJ5qEZvBYBPLT79A6E=
+  pibu-ai-deployment:modal_token_secret:
+    secure: v1:jIk/+ovmfGMSy6KE:nPz+cZRq/uUlQVXrd/kLtZNMpsv5hHXGrEslKYlUgkwv+AxniJr4D50=
+encryptionsalt: v1:6DTOAsG1ucU=:v1:kTIuP4jXmbKE36PT:44w2DNjYcf3BZjCtBvTbS7V37ikygQ==
