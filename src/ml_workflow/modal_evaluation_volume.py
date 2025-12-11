@@ -105,6 +105,9 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
 
     # Suppress HuggingFace tokenizers parallelism warning (safe to disable with multiprocessing)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    
+    # Disable wandb for evaluation (no logging needed)
+    os.environ["WANDB_MODE"] = "disabled"
 
     # Set up Python path FIRST, before ANY other imports
     src_path = "/app/src"
