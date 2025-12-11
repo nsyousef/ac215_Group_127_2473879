@@ -254,6 +254,11 @@ modal deploy llm_modal.py
 5. **Track Over Time**: Add follow-up photos to track progression
 6. **Ask Questions**: Chat with AI about your condition
 
+![](docs/example_screenshots/example_1.jpeg)
+![](docs/example_screenshots/example_2.jpeg)
+![](docs/example_screenshots/example_3.jpeg)
+![](docs/example_screenshots/example_4.jpeg)
+
 ### API Endpoints
 
 #### Inference Service
