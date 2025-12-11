@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ml_workflow"
+version = "1.0.0"
+description = "ML training workflow package for skin disease classification"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "Pibu.AI Team"}]
+
+# No dependencies here - inference-cloud will handle all ML/training dependencies
+# This package only provides the shared model code (no runtime dependencies)
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/nsyousef/ac215_Group_127_2473879"
+
+[tool.setuptools]
+packages = { find = {} }
+
+[tool.setuptools.package-data]
+ml_workflow = ["configs/**/*.yaml", "py.typed"]

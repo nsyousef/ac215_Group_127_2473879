@@ -35,3 +35,6 @@ python/diseases.json
 
 # make sure lib folder is tracked
 !src/lib/
+
+# CA certificate
+resources/python-bundle/cacert.pem

@@ -1,0 +1,391 @@
+name: Deploy Infrastructure & Build Electron App
+
+on:
+  # Automatic triggers on code changes
+  push:
+    branches:
+      - main
+    paths:
+      # Trigger on changes to deployment, inference, ml_workflow or LLM code
+      - 'src/deployment/**'
+      - 'src/inference-cloud/**'
+      - 'src/llm/**'
+      - 'src/ml_workflow/**'
+      - '.github/workflows/deploy-and-build.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  evaluate-model:
+    name: Evaluate Model
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.stack || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      MIN_ACCURACY: ${{ secrets.MIN_MODEL_ACCURACY || '0.5' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Read deployment config
+        id: deploy-config
+        run: |
+          DEPLOY_CONFIG=".github/deploy-config.yaml"
+
+          if [ ! -f "$DEPLOY_CONFIG" ]; then
+            echo "WARNING: Deploy config file not found, using defaults"
+            CONFIG_PATH="configs/experiments/final_run.yaml"
+            WEIGHTS_PATH=""
+            WEIGHTS_GCS_URI="gs://apcomp215-datasets/test_best.pth"
+          else
+            echo "Reading deployment config from $DEPLOY_CONFIG"
+            # Extract config_path (remove quotes and handle YAML)
+            CONFIG_PATH=$(grep -E "^config_path:" "$DEPLOY_CONFIG" | sed 's/^config_path:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//" || echo "configs/experiments/final_run.yaml")
+
+            # Extract weights_path if present (optional)
+            if grep -qE "^weights_path:" "$DEPLOY_CONFIG"; then
+              WEIGHTS_PATH=$(grep -E "^weights_path:" "$DEPLOY_CONFIG" | sed 's/^weights_path:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//" || echo "")
+            else
+              WEIGHTS_PATH=""
+            fi
+
+            # Extract weights_gcs_uri if present (optional)
+            if grep -qE "^weights_gcs_uri:" "$DEPLOY_CONFIG"; then
+              WEIGHTS_GCS_URI=$(grep -E "^weights_gcs_uri:" "$DEPLOY_CONFIG" | sed 's/^weights_gcs_uri:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//" || echo "")
+            else
+              WEIGHTS_GCS_URI="gs://apcomp215-datasets/test_best.pth"
+            fi
+          fi
+
+          # Default to final_run.yaml if empty
+          if [ -z "$CONFIG_PATH" ]; then
+            CONFIG_PATH="configs/experiments/final_run.yaml"
+          fi
+          if [ -z "$WEIGHTS_GCS_URI" ]; then
+            WEIGHTS_GCS_URI="gs://apcomp215-datasets/test_best.pth"
+          fi
+
+          echo "Config path: $CONFIG_PATH"
+          echo "Weights path: ${WEIGHTS_PATH:-'(not specified)'}"
+          echo "config_path=$CONFIG_PATH" >> $GITHUB_OUTPUT
+          echo "weights_path=$WEIGHTS_PATH" >> $GITHUB_OUTPUT
+          echo "weights_gcs_uri=$WEIGHTS_GCS_URI" >> $GITHUB_OUTPUT
+
+      - name: Install Modal CLI
+        run: pip install modal
+
+      - name: Authenticate Modal
+        run: |
+          modal token set --token-id "$MODAL_TOKEN_ID" --token-secret "$MODAL_TOKEN_SECRET"
+
+      - name: Evaluate Model
+        id: evaluate
+        env:
+          MODEL_WEIGHTS_GCS_URI: ${{ steps.deploy-config.outputs.weights_gcs_uri }}
+        run: |
+          echo "Evaluating model..."
+          echo "Config: ${{ steps.deploy-config.outputs.config_path }}"
+          if [ -n "${{ steps.deploy-config.outputs.weights_path }}" ]; then
+            echo "Weights: ${{ steps.deploy-config.outputs.weights_path }}"
+          else
+            echo "Weights: Not specified (will use config's checkpoint.load_from setting)"
+          fi
+          echo "Minimum F1 threshold: $MIN_ACCURACY"
+
+          # Run evaluation and capture output
+          # Only pass --weights-path if it's set
+          if [ -n "${{ steps.deploy-config.outputs.weights_path }}" ]; then
+            OUTPUT=$(modal run src/ml_workflow/modal_evaluation_volume.py \
+              --config-path "${{ steps.deploy-config.outputs.config_path }}" \
+              --weights-path "${{ steps.deploy-config.outputs.weights_path }}" 2>&1) || true
+          else
+            OUTPUT=$(modal run src/ml_workflow/modal_evaluation_volume.py \
+              --config-path "${{ steps.deploy-config.outputs.config_path }}" 2>&1) || true
+          fi
+
+          echo "$OUTPUT"
+
+          # Extract f1 from output (look for "Test Macro F1: XX.XX%")
+          F1=$(echo "$OUTPUT" | grep -oP 'Test Macro F1: \K[0-9.]+' | head -1)
+
+          if [ -z "$F1" ]; then
+            echo "ERROR: Could not extract f1 from output"
+            echo "Full output:"
+            echo "$OUTPUT"
+            exit 1
+          fi
+
+          echo "F1_SCORE=$F1" >> $GITHUB_ENV
+          echo "f1_score=$F1" >> $GITHUB_OUTPUT
+          echo "Extracted F1: $F1%"
+
+      - name: Check Accuracy Threshold
+        run: |
+          if [ -z "${F1_SCORE}" ]; then
+            echo "ERROR: No F1 score available from evaluation step."
+            exit 1
+          fi
+          echo "Model F1: ${F1_SCORE}%"
+          echo "Required threshold: ${MIN_ACCURACY}%"
+
+          # Use awk for floating point comparison (more reliable than bc)
+          PASS=$(awk "BEGIN {print (${F1_SCORE} >= $MIN_ACCURACY)}")
+
+          if [ "$PASS" = "1" ]; then
+            echo "Model passes threshold (${F1_SCORE}% >= ${MIN_ACCURACY}%)"
+            echo "status=pass" >> $GITHUB_OUTPUT
+          else
+            echo "ERROR: Model fails threshold (${F1_SCORE}% < ${MIN_ACCURACY}%)"
+            echo "status=fail" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Evaluation Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Model Evaluation Summary"
+          echo "=========================================="
+          echo "Accuracy: ${ACCURACY}%"
+          echo "Threshold: ${MIN_ACCURACY}%"
+          echo "Status: ${{ steps.evaluate.outputs.status || 'unknown' }}"
+          echo "=========================================="
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    needs: evaluate-model
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.stack || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+    outputs:
+      stack: ${{ steps.stack.outputs.stack }}
+      frontend_config_b64: ${{ steps.frontend-config.outputs.frontend_config }}
+    env:
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT || 'level-scheme-471117-i9' }}
+      GCP_REGION: ${{ secrets.GCP_REGION || 'us-east1' }}
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fix permissions for deployment directory
+        run: sudo chown -R 1000:1000 src/deployment
+
+      - name: Determine stack name
+        id: stack
+        run: |
+          if [ -n "${{ github.event.inputs.stack }}" ]; then
+            STACK="${{ github.event.inputs.stack }}"
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            STACK="prod"
+          else
+            STACK="dev"
+          fi
+          echo "stack=$STACK" >> $GITHUB_OUTPUT
+          echo "Deploying to stack: $STACK"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build deployment container
+        working-directory: src/deployment
+        run: ./docker-build.sh
+
+      - name: Configure GCP credentials
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Create GCP credentials file for container
+        run: |
+          mkdir -p /tmp/gcp-creds
+          echo '${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}' > /tmp/gcp-creds/gcp-key.json
+
+      - name: Setup Pulumi state directory
+        run: |
+          mkdir -p $HOME/.pulumi
+
+      - name: Set Pulumi secrets from GitHub Secrets
+        working-directory: src/deployment
+        run: |
+          docker run --rm \
+            -u root \
+            -v "${{ github.workspace }}:/workspace" \
+            -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
+            -v "/var/run/docker.sock:/var/run/docker.sock" \
+            -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
+            -e GCP_PROJECT="$GCP_PROJECT" \
+            -e GCP_REGION="$GCP_REGION" \
+            -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
+            -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
+            -e DOCKER_BUILD_CONTEXT="/workspace/src" \
+            -e DOCKER_HOST="unix:///var/run/docker.sock" \
+            -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
+            --workdir /workspace/src/deployment \
+            pibu-ai-deployment:latest \
+            bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && \
+              pulumi config set --secret pibu-ai-deployment:modal_token_id '${{ secrets.MODAL_TOKEN_ID }}' && \
+              pulumi config set --secret pibu-ai-deployment:modal_token_secret '${{ secrets.MODAL_TOKEN_SECRET }}'"
+
+      - name: Pulumi Up (in container)
+        working-directory: src/deployment
+        run: |
+          docker run --rm \
+            -u root \
+            -v "${{ github.workspace }}:/workspace" \
+            -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
+            -v "/var/run/docker.sock:/var/run/docker.sock" \
+            -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
+            -e DOCKER_BUILD_CONTEXT="/workspace/src" \
+            -e GCP_PROJECT="$GCP_PROJECT" \
+            -e GCP_REGION="$GCP_REGION" \
+            -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
+            -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
+            -e DOCKER_HOST="unix:///var/run/docker.sock" \
+            -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
+            --workdir /workspace/src/deployment \
+            pibu-ai-deployment:latest \
+            bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && \
+              pulumi refresh --yes && \
+              pulumi up --yes"
+
+      - name: Export frontend config (in container)
+        working-directory: src/deployment
+        run: |
+          docker run --rm \
+            -u root \
+            -v "${{ github.workspace }}:/workspace" \
+            -v "/tmp/gcp-creds:/tmp/gcp-creds:ro" \
+            -v "/var/run/docker.sock:/var/run/docker.sock" \
+            -e GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-creds/gcp-key.json" \
+            -e GCP_PROJECT="$GCP_PROJECT" \
+            -e GCP_REGION="$GCP_REGION" \
+            -e MODAL_TOKEN_ID="$MODAL_TOKEN_ID" \
+            -e MODAL_TOKEN_SECRET="$MODAL_TOKEN_SECRET" \
+            -e DOCKER_BUILD_CONTEXT="/workspace/src" \
+            -e DOCKER_HOST="unix:///var/run/docker.sock" \
+            -e PULUMI_BUCKET="gs://${{ env.GCP_PROJECT }}-pulumi-state" \
+            --workdir /workspace/src/deployment \
+            pibu-ai-deployment:latest \
+            bash -c "pulumi stack select ${{ steps.stack.outputs.stack }} && pulumi stack output frontend_config --json > frontend-config.json && cat frontend-config.json"
+
+      - name: Encode frontend config for downstream job
+        id: frontend-config
+        working-directory: src/deployment
+        run: |
+          ENCODED=$(base64 frontend-config.json | tr -d '\n')
+          echo "frontend_config=$ENCODED" >> $GITHUB_OUTPUT
+
+  build-electron-app:
+    name: Build macOS Electron App
+    needs: deploy-infrastructure
+    runs-on: macos-latest
+    environment: ${{ github.event.inputs.stack || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+    env:
+      PUBLIC_RELEASE_REPO: ${{ secrets.PUBLIC_RELEASE_REPO }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine stack name
+        id: stack
+        run: |
+          if [ -n "${{ github.event.inputs.stack }}" ]; then
+            STACK="${{ github.event.inputs.stack }}"
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            STACK="prod"
+          else
+            STACK="dev"
+          fi
+          echo "stack=$STACK" >> $GITHUB_OUTPUT
+          echo "Building for stack: $STACK"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Write Pulumi config from upstream job
+        env:
+          FRONTEND_CONFIG_B64: ${{ needs.deploy-infrastructure.outputs.frontend_config_b64 }}
+        run: |
+          python -c "import base64, os, pathlib; data=os.environ['FRONTEND_CONFIG_B64']; pathlib.Path('src/frontend-react/.pulumi-config.json').write_bytes(base64.b64decode(data))"
+          echo "Pulumi config:"
+          cat src/frontend-react/.pulumi-config.json | jq '.'
+
+      - name: Install frontend dependencies
+        working-directory: src/frontend-react
+        run: npm install
+
+      - name: Bundle Python
+        working-directory: src/frontend-react
+        run: npm run bundle-python
+
+      - name: Build Next.js
+        working-directory: src/frontend-react
+        run: npm run build
+
+      - name: Create DMG
+        working-directory: src/frontend-react
+        run: npm run make-dmg
+
+      - name: Get version from package.json
+        id: package-version
+        working-directory: src/frontend-react
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Publish DMG to public release repository
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          PUBLIC_RELEASE_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
+          STACK_NAME: ${{ steps.stack.outputs.stack }}
+          VERSION: ${{ steps.package-version.outputs.VERSION }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "PUBLIC_RELEASE_TOKEN secret is required to publish the DMG." >&2
+            exit 1
+          fi
+          if [ -z "$PUBLIC_RELEASE_REPO" ]; then
+            echo "PUBLIC_RELEASE_REPO secret (owner/name) is required." >&2
+            exit 1
+          fi
+          TAG="v${VERSION}-${STACK_NAME}"
+          TITLE="Pibu Desktop ${VERSION} (${STACK_NAME})"
+          BODY=$(cat <<'EOF'
+            ## Pibu.AI Desktop Application
+            - Build commit: GITHUB_SHA_PLACEHOLDER
+            - Stack: STACK_PLACEHOLDER
+            EOF
+            )
+          BODY="${BODY/GITHUB_SHA_PLACEHOLDER/${GITHUB_SHA}}"
+          BODY="${BODY/STACK_PLACEHOLDER/${STACK_NAME}}"
+          if gh release view "$TAG" --repo "$PUBLIC_RELEASE_REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists in $PUBLIC_RELEASE_REPO; uploading asset."
+          else
+            gh release create "$TAG" --repo "$PUBLIC_RELEASE_REPO" --title "$TITLE" --notes "$BODY"
+          fi
+          gh release upload "$TAG" "src/frontend-react/dist/Pibu.dmg" --repo "$PUBLIC_RELEASE_REPO" --clobber
+
+      - name: Deployment Summary
+        run: |
+          echo "Deployment and build complete!"
+          echo ""
+          echo "Stack: ${{ steps.stack.outputs.stack }}"
+          echo "Version: ${{ steps.package-version.outputs.VERSION }}"
+          echo "DMG: Pibu.dmg"

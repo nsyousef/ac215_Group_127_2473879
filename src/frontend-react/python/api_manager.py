@@ -6,14 +6,18 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Callable
-from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from prediction_texts import get_prediction_text
 from model_manager import get_model_path
+from config_loader import get_config
 
 # Disclaimer appended to all LLM responses
-DISCLAIMER = "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. This information is for general knowledge, and a doctor is the best person to give you a proper diagnosis and treatment plan."
+DISCLAIMER = (
+    "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. "
+    "This information is for general knowledge, and a doctor is the best person to give you "
+    "a proper diagnosis and treatment plan."
+)
 
 # Shared vision encoder instance (lazy-loaded)
 _VISION_ENCODER = None
@@ -26,20 +30,59 @@ if APP_DATA_DIR:
 else:
     SAVE_DIR = Path(os.getcwd())
 
+CONFIG_FROM_DEPLOYMENT = get_config()
+
+
+def _resolve_config_value(env_name: str, config_key: str, default: str) -> str:
+    """Prefer env var override, else Pulumi-injected config, else default."""
+    env_value = os.getenv(env_name)
+    if env_value:
+        return env_value
+    config_value = CONFIG_FROM_DEPLOYMENT.get(config_key)
+    if config_value:
+        return config_value
+    return default
+
+
 # Cloud ML API URLs (can be overridden with environment variables)
-BASE_URL = os.getenv("BASE_URL", "https://inference-cloud-469023639150.us-east4.run.app")
-TEXT_EMBEDDING_URL = os.getenv("TEXT_EMBEDDING_URL", f"{BASE_URL}/embed-text")
-PREDICTION_URL = os.getenv("PREDICTION_URL", f"{BASE_URL}/predict")
+DEFAULT_BASE_URL = "http://35.231.234.99"
+BASE_URL = _resolve_config_value("BASE_URL", "BASE_URL", DEFAULT_BASE_URL)
+TEXT_EMBEDDING_URL = _resolve_config_value("TEXT_EMBEDDING_URL", "TEXT_EMBEDDING_URL", f"{BASE_URL}/embed-text")
+PREDICTION_URL = _resolve_config_value("PREDICTION_URL", "PREDICTION_URL", f"{BASE_URL}/predict")
 
 # LLM API URLs (can be overridden with environment variables for testing)
-DEFAULT_LLM_FOLLOWUP_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-ask-fo-8013b2.modal.run"
-DEFAULT_LLM_EXPLAIN_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-explai-0d573f.modal.run"
-LLM_TIME_TRACKING_URL = "https://tanushkmr2001--dermatology-llm-27b-dermatologyllm-time-t-f8b7ef.modal.run"
+DEFAULT_LLM_FOLLOWUP_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-ask-followu-41c84a.modal.run/"
+DEFAULT_LLM_EXPLAIN_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-explain-stream.modal.run/"
+DEFAULT_LLM_TIME_TRACKING_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-time-tracki-2d32a8.modal.run/"
+
+LLM_EXPLAIN_URL = _resolve_config_value("LLM_EXPLAIN_URL", "LLM_EXPLAIN_URL", DEFAULT_LLM_EXPLAIN_URL)
+LLM_FOLLOWUP_URL = _resolve_config_value("LLM_FOLLOWUP_URL", "LLM_FOLLOWUP_URL", DEFAULT_LLM_FOLLOWUP_URL)
+LLM_TIME_TRACKING_URL = _resolve_config_value(
+    "LLM_TIME_TRACKING_URL", "LLM_TIME_TRACKING_URL", DEFAULT_LLM_TIME_TRACKING_URL
+)
 
 
 def debug_log(msg: str):
     """Print to stderr so it doesn't interfere with stdout JSON protocol"""
     print(msg, file=sys.stderr, flush=True)
+
+
+def _convert_numpy_types(obj):
+    """Recursively convert numpy types to Python native types for JSON serialization."""
+    import numpy as np
+
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: _convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_convert_numpy_types(item) for item in obj]
+    else:
+        return obj
 
 
 # Import CV analysis module (after debug_log is defined)
@@ -48,9 +91,9 @@ try:
     from module import run_cv_analysis as cv_run_analysis
 
     CV_ANALYSIS_AVAILABLE = True
-    debug_log("✓ CV analysis module loaded successfully")
+    debug_log("CV analysis module loaded successfully")
 except ImportError as e:
-    debug_log(f"⚠ Warning: CV analysis module not available: {e}")
+    debug_log(f"WARNING: CV analysis module not available: {e}")
     CV_ANALYSIS_AVAILABLE = False
 
 
@@ -108,9 +151,9 @@ class APIManager:
             file_path=self.demographics_file, default_value={}, description="demographics"
         )
 
-        # Set API URLs (can be overridden with environment variables)
-        self.llm_explain_url = os.getenv("LLM_EXPLAIN_URL", DEFAULT_LLM_EXPLAIN_URL)
-        self.llm_followup_url = os.getenv("LLM_FOLLOWUP_URL", DEFAULT_LLM_FOLLOWUP_URL)
+        # Set API URLs (can be overridden with environment variables or Pulumi config)
+        self.llm_explain_url = LLM_EXPLAIN_URL
+        self.llm_followup_url = LLM_FOLLOWUP_URL
         self.text_embed_url = TEXT_EMBEDDING_URL
         self.prediction_url = PREDICTION_URL
 
@@ -152,7 +195,7 @@ class APIManager:
             try:
                 _VISION_ENCODER = VisionEncoder(checkpoint_path=str(checkpoint_path))
                 info = _VISION_ENCODER.get_model_info()
-                debug_log(f"✓ Vision encoder initialized: {info}")
+                debug_log(f"Vision encoder initialized: {info}")
             except Exception as e:
                 debug_log(f"✗ Error initializing vision encoder: {e}")
                 import traceback
@@ -454,7 +497,7 @@ class APIManager:
 
         # Create temporary APIManager instance to use its methods
         api = APIManager(case_id, dummy=False)
-        
+
         debug_log(f"[api_manager] add_timeline_entry called with has_coin={has_coin} (type: {type(has_coin).__name__})")
         debug_log(f"Adding timeline entry for case {case_id} (has_coin={has_coin})")
 
@@ -487,6 +530,22 @@ class APIManager:
         else:
             debug_log(f"  → Skipping CV analysis (has_coin={has_coin}, top_prediction={top_prediction_label})")
 
+        # Clean cv_analysis to remove numpy arrays for JSON serialization
+        cv_analysis_clean = {}
+        if cv_analysis:
+            for key, value in cv_analysis.items():
+                if key == "masks" or key == "images":
+                    # Skip numpy arrays (masks and images)
+                    continue
+                elif key == "coin_data" and value is not None:
+                    # Convert tuple to list for JSON serialization
+                    cv_analysis_clean[key] = list(value) if isinstance(value, tuple) else value
+                else:
+                    cv_analysis_clean[key] = value
+
+        # Convert numpy types (int64, float64, etc.) to Python native types
+        cv_analysis_clean = _convert_numpy_types(cv_analysis_clean)
+
         # Add new entry to dates using the provided date as key
         if "dates" not in api.case_history:
             api.case_history["dates"] = {}
@@ -494,14 +553,14 @@ class APIManager:
         api.case_history["dates"][date] = {
             "image_path": image_path,
             "text_summary": note or "",
-            "cv_analysis": cv_analysis,
+            "cv_analysis": cv_analysis_clean,
             "predictions": predictions,  # Use predictions from initial entry
             "tracking_summary": tracking_summary,
         }
 
         # Save updated case history
         APIManager.save_case_history(case_id, api.case_history)
-        debug_log(f"✅ Added timeline entry for case {case_id} on date {date}")
+        debug_log(f"Added timeline entry for case {case_id} on date {date}")
 
     @staticmethod
     def delete_cases(case_ids: List[str]) -> None:
@@ -689,6 +748,7 @@ class APIManager:
         text_description: str,
         user_timestamp: Optional[str] = None,
         on_chunk: Optional[Callable[[str], None]] = None,
+        has_coin: bool = False,
     ) -> Dict[str, Any]:
         """
         Process initial image and text input to generate predictions and LLM analysis.
@@ -735,20 +795,125 @@ class APIManager:
         if saved_image_path and not Path(saved_image_path).exists():
             raise FileNotFoundError(f"Saved image not found at: {saved_image_path}")
 
-        # Step 1: Run local ML model for embeddings
+        # Step 1: Run CV analysis first if needed, then remove coin from image
+        cv_analysis = {}
+        processed_image = image
+        debug_log(f"  → has_coin={has_coin}")
+        if has_coin:
+            debug_log("  → Running CV analysis to detect coin...")
+            cv_result = self._run_cv_analysis(saved_image_path)
+            cv_analysis = cv_result
+
+            # Remove coin from image if detected
+            coin_mask_full = cv_result.get("masks", {}).get("coin_mask_full")
+            has_mask_data = coin_mask_full is not None and coin_mask_full.any()
+            debug_log(f"  → Coin mask check: mask is None={coin_mask_full is None}, has_data={has_mask_data}")
+
+            if coin_mask_full is not None and coin_mask_full.any():
+                debug_log("  → Cropping coin from image...")
+                import cv2
+                import numpy as np
+
+                # Convert PIL image to OpenCV format
+                img_array = np.array(image.convert("RGB"))
+                img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+
+                # Ensure image is 8-bit 3-channel BGR
+                if img_bgr.dtype != np.uint8:
+                    img_bgr = img_bgr.astype(np.uint8)
+                if len(img_bgr.shape) == 2:
+                    img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
+                elif img_bgr.shape[2] == 4:
+                    img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_BGRA2BGR)
+
+                # Resize coin mask to match image if needed (CV analysis may downscale)
+                h, w = img_bgr.shape[:2]
+                if coin_mask_full.shape[:2] != (h, w):
+                    coin_mask_full = cv2.resize(coin_mask_full, (w, h), interpolation=cv2.INTER_NEAREST)
+
+                # Ensure mask is 8-bit 1-channel
+                if coin_mask_full.dtype != np.uint8:
+                    coin_mask_full = coin_mask_full.astype(np.uint8)
+                if len(coin_mask_full.shape) > 2:
+                    coin_mask_full = cv2.cvtColor(coin_mask_full, cv2.COLOR_BGR2GRAY)
+
+                # Find bounding box of coin
+                coin_coords = np.where(coin_mask_full > 0)
+                if len(coin_coords[0]) > 0:
+                    coin_y_min, coin_y_max = coin_coords[0].min(), coin_coords[0].max()
+                    coin_x_min, coin_x_max = coin_coords[1].min(), coin_coords[1].max()
+
+                    # Add padding to coin bounding box to ensure full removal
+                    padding = 15
+                    coin_y_min = max(0, coin_y_min - padding)
+                    coin_y_max = min(h, coin_y_max + padding)
+                    coin_x_min = max(0, coin_x_min - padding)
+                    coin_x_max = min(w, coin_x_max + padding)
+
+                    # Calculate distances from coin to each edge
+                    dist_left = coin_x_min
+                    dist_right = w - coin_x_max
+                    dist_top = coin_y_min
+                    dist_bottom = h - coin_y_max
+
+                    # Find the edge closest to the coin (coin is likely near that edge)
+                    min_dist = min(dist_left, dist_right, dist_top, dist_bottom)
+
+                    # Crop from the edge closest to the coin
+                    if min_dist == dist_left:
+                        # Coin is on left, crop from left (keep right side)
+                        crop_x = coin_x_max
+                        crop_y = 0
+                        crop_w = w - coin_x_max
+                        crop_h = h
+                        debug_log(f"  → Coin on left edge, cropping from x={crop_x}, keeping {crop_w}x{crop_h}")
+                    elif min_dist == dist_right:
+                        # Coin is on right, crop from right (keep left side)
+                        crop_x = 0
+                        crop_y = 0
+                        crop_w = coin_x_min
+                        crop_h = h
+                        debug_log(f"  → Coin on right edge, cropping to x={crop_w}, keeping {crop_w}x{crop_h}")
+                    elif min_dist == dist_top:
+                        # Coin is on top, crop from top (keep bottom side)
+                        crop_x = 0
+                        crop_y = coin_y_max
+                        crop_w = w
+                        crop_h = h - coin_y_max
+                        debug_log(f"  → Coin on top edge, cropping from y={crop_y}, keeping {crop_w}x{crop_h}")
+                    else:  # dist_bottom
+                        # Coin is on bottom, crop from bottom (keep top side)
+                        crop_x = 0
+                        crop_y = 0
+                        crop_w = w
+                        crop_h = coin_y_min
+                        debug_log(f"  → Coin on bottom edge, cropping to y={crop_h}, keeping {crop_w}x{crop_h}")
+
+                    # Ensure we have a valid crop (at least some pixels)
+                    if crop_w > 0 and crop_h > 0:
+                        # Perform the crop
+                        img_bgr = img_bgr[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
+                        debug_log(f"  -> Cropped image to size: {img_bgr.shape[1]}x{img_bgr.shape[0]}")
+                    else:
+                        debug_log("  -> WARNING: Invalid crop dimensions, skipping crop")
+                else:
+                    debug_log("  -> WARNING: Could not find coin coordinates in mask")
+
+                # Convert back to PIL Image
+                img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+                processed_image = Image.fromarray(img_rgb)
+
+            else:
+                debug_log("  -> WARNING: No coin detected or coin mask is empty, skipping coin removal")
+
+        # Step 2: Run local ML model for embeddings (using coin-removed image)
         debug_log("  → Running local ML model for embeddings...")
-        embedding = self._run_local_ml_model(image)
+        embedding = self._run_local_ml_model(processed_image)
 
-        # Step 2: Get predictions from cloud ML model AND run CV analysis in parallel
-        debug_log("  → Getting cloud predictions and running CV analysis in parallel...")
+        # Step 3: Get predictions from cloud ML model
+        debug_log("  → Getting cloud predictions...")
         updated_text_description = self.update_text_input(text_description)
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            fut_preds = executor.submit(self._run_cloud_ml_model, embedding, updated_text_description)
-            fut_cv = executor.submit(self._run_cv_analysis, saved_image_path)
-
-            predictions_raw = fut_preds.result()
-            cv_analysis = fut_cv.result()
+        predictions_raw = self._run_cloud_ml_model(embedding, updated_text_description)
 
         # Step 2.5: Reformat predictions for explain LLM
         predictions = {item["class"]: item["probability"] for item in predictions_raw}
@@ -818,7 +983,7 @@ class APIManager:
             "enriched_disease": enriched_disease,  # NEW: Complete disease object with all UI fields
         }
 
-        debug_log(f"✓ Initial prediction complete for case {self.case_id}")
+        debug_log(f"Initial prediction complete for case {self.case_id}")
         return results
 
     def update_text_input(self, text_input: str) -> str:
@@ -969,7 +1134,7 @@ class APIManager:
             if not destination_path.exists():
                 raise FileNotFoundError(f"Image save failed: file not found at {destination_path}")
 
-            debug_log(f"    ✓ Image saved to: {destination_path}")
+            debug_log(f"    Image saved to: {destination_path}")
             return str(destination_path)
 
         except Exception as exc:
@@ -1017,7 +1182,7 @@ class APIManager:
             embedding_array = encoder.encode(image_path)
             embedding_list = embedding_array.tolist()
 
-            debug_log(f"    ✓ Embedding extracted (dim={len(embedding_list)})")
+            debug_log(f"    Embedding extracted (dim={len(embedding_list)})")
             return embedding_list
 
         except Exception as e:
@@ -1036,7 +1201,7 @@ class APIManager:
 
         Returns:
             Dictionary containing CV analysis metrics:
-                - compactness_index: Shape metric (circularity)
+                - irregularity_index: Shape metric (circularity)
                 - color_stats_lab: LAB color space statistics
                 - area_cm2: Lesion area in cm² (if coin detected)
                 - tilt_correction_factor: Correction factor for tilted coins
@@ -1044,7 +1209,7 @@ class APIManager:
         if self.dummy:
             debug_log("    [DUMMY MODE] Returning dummy CV analysis...")
             return {
-                "compactness_index": 1.2,
+                "irregularity_index": 1.2,
                 "color_stats_lab": {
                     "mean_L": 67.2,
                     "mean_A": 18.4,
@@ -1063,14 +1228,18 @@ class APIManager:
                 debug_log(f"    Running CV analysis on: {image_path}")
                 cv_results = cv_run_analysis(image_path, bbox=None)
 
-                # Extract only the metrics dict (not the images/masks)
+                # Return full result including masks (needed for coin removal)
+                # Flatten metrics at top level for backward compatibility with existing code
                 metrics = cv_results.get("metrics", {})
+                result = dict(metrics)  # Start with flattened metrics
+                result["masks"] = cv_results.get("masks", {})
+                result["coin_data"] = cv_results.get("coin_data")
 
                 debug_log(f"    CV analysis completed. Metrics: {json.dumps(metrics, indent=2)}")
-                return metrics
+                return result
 
             except Exception as e:
-                debug_log(f"    ⚠ CV analysis failed: {e}")
+                debug_log(f"    WARNING: CV analysis failed: {e}")
                 import traceback
 
                 debug_log(traceback.format_exc())
@@ -1079,7 +1248,7 @@ class APIManager:
         # Fallback to dummy data if CV analysis not available or failed
         debug_log("    [FALLBACK] Using dummy CV analysis...")
         return {
-            "compactness_index": 1.2,
+            "irregularity_index": 1.2,
             "color_stats_lab": {
                 "mean_L": 67.2,
                 "mean_A": 18.4,
@@ -1090,6 +1259,8 @@ class APIManager:
             },
             "area_cm2": None,  # No coin detected
             "tilt_correction_factor": None,
+            "masks": {},  # No masks in dummy mode
+            "coin_data": None,
         }
 
     def _run_cloud_ml_model(self, embedding: List[float], text_description: str) -> Dict[str, float]:
@@ -1139,13 +1310,31 @@ class APIManager:
         )
         response.raise_for_status()
         result = response.json()
-        
+
+        # Get top_k predictions (even if uncertain)
+        # Handle both list and dict formats
+        top_k_raw = result.get("top_k", {})
+
+        # Convert list format to dict if needed
+        if isinstance(top_k_raw, list):
+            top_k_predictions = {
+                item.get("class", item.get("disease", "")): item.get("probability", item.get("prob", 0.0))
+                for item in top_k_raw
+            }
+        else:
+            top_k_predictions = top_k_raw if isinstance(top_k_raw, dict) else {}
+
         # Check if model is uncertain about the prediction
         if result.get("predicted_class") == "UNCERTAIN":
-            debug_log("⚠️ Model returned UNCERTAIN prediction")
+            debug_log("WARNING: Model returned UNCERTAIN prediction")
+            # Still log the top k predictions for debugging
+            if top_k_predictions:
+                debug_log("Top K predictions (even though uncertain):")
+                for disease, prob in sorted(top_k_predictions.items(), key=lambda x: x[1], reverse=True):
+                    debug_log(f"  - {disease}: {prob:.4f}")
             return {"UNCERTAIN": 1.0}
-        
-        return result.get("top_k", {})
+
+        return top_k_predictions
 
     def _call_llm_explain(
         self,
@@ -1169,7 +1358,7 @@ class APIManager:
 
         # Log the full prompt/payload being sent to the LLM
         debug_log("\n" + "=" * 80)
-        debug_log("📤 FULL PROMPT SENT TO LLM EXPLAIN API:")
+        debug_log("FULL PROMPT SENT TO LLM EXPLAIN API:")
         debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
         debug_log("=" * 80 + "\n")
@@ -1264,7 +1453,7 @@ class APIManager:
 
         # Log the full prompt/payload being sent to the LLM
         debug_log("\n" + "=" * 80)
-        debug_log("📤 FULL PROMPT SENT TO LLM FOLLOWUP API:")
+        debug_log("FULL PROMPT SENT TO LLM FOLLOWUP API:")
         debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
         debug_log("=" * 80 + "\n")
@@ -1353,7 +1542,10 @@ class APIManager:
         """
         if self.dummy:
             debug_log("    [DUMMY MODE] Returning dummy tracking summary...")
-            return "The affected area measures roughly 2.5 cm² with moderate color variation. The shape appears fairly regular."
+            return (
+                "The affected area measures roughly 2.5 cm² with moderate color variation. "
+                "The shape appears fairly regular."
+            )
 
         debug_log("Calling LLM time tracking summary API...")
 
@@ -1361,15 +1553,29 @@ class APIManager:
         cv_analysis_history = {}
         for date, entry in self.case_history.get("dates", {}).items():
             if "cv_analysis" in entry:
-                cv_analysis_history[date] = entry["cv_analysis"]
+                # Convert numpy types in existing history entries
+                cv_analysis_history[date] = _convert_numpy_types(entry["cv_analysis"])
 
-        # Add current analysis
+        # Add current analysis (exclude numpy arrays/masks for JSON serialization)
         current_date = datetime.now().strftime("%Y-%m-%d")
-        cv_analysis_history[current_date] = cv_analysis
-        
+        # Create a JSON-serializable version of cv_analysis (exclude masks and images)
+        cv_analysis_serializable = {}
+        for key, value in cv_analysis.items():
+            if key == "masks" or key == "images":
+                # Skip numpy arrays (masks and images)
+                continue
+            elif key == "coin_data" and value is not None:
+                # Convert tuple to list for JSON serialization
+                cv_analysis_serializable[key] = list(value) if isinstance(value, tuple) else value
+            else:
+                cv_analysis_serializable[key] = value
+
+        # Convert numpy types in the serializable version
+        cv_analysis_history[current_date] = _convert_numpy_types(cv_analysis_serializable)
+
         # Determine if this is the first entry
         is_first_entry = len(cv_analysis_history) == 1
-        
+
         # For first entry, augment user text with demographics
         # For subsequent entries, just use the note as-is
         if is_first_entry:
@@ -1378,15 +1584,13 @@ class APIManager:
             user_input_with_context = text_description
 
         payload = {
-            "predictions": predictions,
-            "user_demographics": self.demographics,
             "user_input": user_input_with_context,
             "cv_analysis_history": cv_analysis_history,
         }
 
         # Log the full payload
         debug_log("\n" + "=" * 80)
-        debug_log("📤 TIME TRACKING SUMMARY REQUEST:")
+        debug_log("TIME TRACKING SUMMARY REQUEST:")
         debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
         debug_log("=" * 80 + "\n")
@@ -1407,11 +1611,10 @@ class APIManager:
 
             # Guard against empty/missing summaries – synthesize a simple one from CV metrics
             if not summary.strip():
-                debug_log("⚠ LLM returned empty tracking summary; generating fallback from CV metrics")
+                debug_log("WARNING: LLM returned empty tracking summary; generating fallback from CV metrics")
                 area = cv_analysis.get("area_cm2") or cv_analysis.get("area_cm2_uncorrected")
-                compactness = cv_analysis.get("compactness_index")
+                irregularity = cv_analysis.get("irregularity_index")
                 color = cv_analysis.get("color_stats_lab") or {}
-                mean_L = color.get("mean_L")
                 mean_A = color.get("mean_A")
 
                 sentences = []
@@ -1423,24 +1626,25 @@ class APIManager:
                         if mean_A < 25
                         else "The redness level appears relatively high and should be monitored over time."
                     )
-                if compactness:
+                if irregularity:
                     sentences.append(
                         "The shape is reasonably regular for this type of spot."
-                        if compactness < 3.0
+                        if irregularity < 3.0
                         else "The shape is a bit irregular, so changes in the edges should be watched."
                     )
                 if not sentences:
                     sentences.append(
-                        "We have recorded this image for tracking. Future images will help show whether the spot is getting larger, smaller, or staying stable."
+                        "We have recorded this image for tracking. Future images will help show whether the spot is "
+                        "getting larger, smaller, or staying stable."
                     )
 
                 summary = " ".join(sentences[:3])
 
-            debug_log(f"✅ Time tracking summary received (or synthesized): {summary[:100]}...")
+            debug_log(f"Time tracking summary received (or synthesized): {summary[:100]}...")
             return summary
 
         except requests.exceptions.RequestException as e:
-            debug_log(f"⚠ Error calling time tracking summary API: {e}")
+            debug_log(f"WARNING: Error calling time tracking summary API: {e}")
             # Return a generic fallback
             return (
                 "We have recorded this image for tracking, but were unable to generate a detailed summary right now. "
@@ -1487,7 +1691,7 @@ class APIManager:
 
         # Append disclaimer to the response
         response["answer"] = response["answer"] + DISCLAIMER
-        
+
         # Step 4: Save new conversation entry
         debug_log("  → Saving conversation...")
         self._save_conversation_entry(
@@ -1497,7 +1701,7 @@ class APIManager:
             llm_timestamp=llm_timestamp,
         )
 
-        debug_log(f"✓ Chat message processed for case {self.case_id}")
+        debug_log(f"Chat message processed for case {self.case_id}")
         return {
             "answer": response["answer"],
             "conversation_history": response.get("conversation_history", []),

@@ -1,0 +1,14 @@
+# Deployment Configuration
+# Update this file before pushing to deploy with specific model config and weights
+# This file is read by the deploy-and-build.yml workflow
+
+# Path to the training config YAML file (relative to src/ml_workflow/)
+config_path: "configs/experiments/exp_arch_dv2_40_FINAL_MODEL.yaml"
+
+# Optional: Path to model weights/checkpoint in Modal volume
+# If not specified, will use checkpoint.load_from from the config file
+weights_path: "/checkpoints/test_best.pth"
+
+# Optional: GCS URI for the weights file. When provided the CI pipeline will
+# download the blob and place it at weights_path before evaluation.
+weights_gcs_uri: "gs://apcomp215-datasets/test_best.pth"

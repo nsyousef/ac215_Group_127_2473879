@@ -7,7 +7,7 @@ RUN set -ex; \
     for i in $(seq 1 8); do mkdir -p "/usr/share/man/man${i}"; done && \
     apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends $DEBIAN_PACKAGES && \
+    apt-get install -y --no-install-recommends build-essential && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     pip install --no-cache-dir --upgrade pip && \
@@ -19,26 +19,30 @@ RUN set -ex; \
 USER app
 WORKDIR /app
 
-# Copy ml_workflow first (from parent context)
-COPY --chown=app:app ac215_Group_127_2473879/src/ml_workflow/ ./ml_workflow/
+# Copy both ml_workflow and inference-cloud to the same level
+COPY --chown=app:app ml_workflow/ ./ml_workflow/
+COPY --chown=app:app inference-cloud/ ./inference-cloud/
 
-# Copy inference-cloud contents (includes docker-entrypoint.sh and tests/)
-COPY --chown=app:app ac215_Group_127_2473879/src/inference-cloud/ ./
-
-# Install dependencies
-RUN uv sync
+# Run from inference-cloud directory where pyproject.toml is located
+WORKDIR /app/inference-cloud
+# Ensure venv is created in /app/.venv (as specified by UV_PROJECT_ENVIRONMENT)
+RUN uv sync --python python3.11
 
 # Set environment variables
 ENV PORT=8080
-ENV MODEL_CHECKPOINT_PATH=/app/models/test_best.pth
+ENV MODEL_CHECKPOINT_PATH=/tmp/models/test_best.pth
+ENV MODEL_GCS_PATH=gs://apcomp215-datasets/test_best.pth
 ENV DEVICE=cpu
 ENV DEV=0
+# Add parent directory to PYTHONPATH so ml_workflow can be imported
+ENV PYTHONPATH=/app:$PYTHONPATH
+
+# Make entrypoint executable
+RUN chmod +x docker-entrypoint.sh
 
 # Expose port
 EXPOSE 8080
 
-# Make entrypoint executable (already copied above)
-RUN chmod +x /app/docker-entrypoint.sh
-
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+# Stay in /app/inference-cloud where main.py is located
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["serve"]

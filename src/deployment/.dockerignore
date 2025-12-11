@@ -1,0 +1,74 @@
+# Exclude large directories not needed for inference service build
+
+# Node modules and package managers
+node_modules/
+npm-debug.log
+yarn.lock
+package-lock.json
+
+# Python caches and environments
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.tox/
+
+# Git and version control
+.git/
+.gitignore
+.github/
+.gitattributes
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+*.log
+*.tmp
+
+# Tests (not needed in production container)
+tests/
+test_*.py
+conftest.py
+
+# Frontend (not needed for inference service)
+frontend-react/
+
+# Data processor (not needed for inference)
+data-processor/
+
+# LLM service (not needed for inference)
+llm/
+
+# ML workflow configs and logs (reduce image size)
+ml_workflow/configs/
+ml_workflow/logs/
+ml_workflow/model/vision
+ml_workflow/train
+ml_workflow/main.py
+ml_workflow/modal_training_gcs.py
+ml_workflow/modal_training_volume.py
+ml_workflow/README.md
+
+# Documentation and mockups
+docs/
+eda/
+README.md
+
+# Other services
+model-training/
+model-deploy/
+postgres-db/
+vector-db/

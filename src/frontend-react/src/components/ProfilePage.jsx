@@ -28,6 +28,7 @@ export default function ProfilePage({ onBack, showActions = true }) {
     country: '',
   });
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isDateOfBirthValid, setIsDateOfBirthValid] = useState(true);
 
   // Load profile data into form when component mounts or profile changes
   useEffect(() => {
@@ -46,6 +47,7 @@ export default function ProfilePage({ onBack, showActions = true }) {
   };
 
   const handleSave = async () => {
+    if (!isDateOfBirthValid) return;
     await updateProfile(formData);
     // Navigate back after saving
     if (onBack) onBack();
@@ -98,7 +100,11 @@ export default function ProfilePage({ onBack, showActions = true }) {
           </Typography>
 
           <Stack spacing={3}>
-            <ProfileFields value={formData} onChange={setFormData} />
+            <ProfileFields
+              value={formData}
+              onChange={setFormData}
+              onDateValidityChange={setIsDateOfBirthValid}
+            />
 
             {showActions && (
               <>
@@ -107,6 +113,7 @@ export default function ProfilePage({ onBack, showActions = true }) {
                   onClick={handleSave}
                   fullWidth
                   sx={{ mt: 2 }}
+                  disabled={!isDateOfBirthValid}
                 >
                   Save Profile
                 </Button>

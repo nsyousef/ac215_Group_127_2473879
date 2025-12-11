@@ -5,5 +5,7 @@ pytest>=7.4.0
 pytest-mock>=3.11.0
 pytest-cov>=4.1.0
 modal>=0.56.0  # For deploying LLM APIs during integration tests
+opencv-python
+scikit-learn
 # torch and torchvision excluded in CI to save disk space
 # Add future deps here (numpy, pillow, etc.)

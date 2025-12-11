@@ -7,7 +7,7 @@ set -e
 BUNDLE_DIR="resources/python-bundle"
 VENV_DIR="$BUNDLE_DIR/venv"
 
-echo "🐍 Bundling Python for macOS..."
+echo "Bundling Python for macOS..."
 
 # Create bundle directory
 mkdir -p "$BUNDLE_DIR"
@@ -24,7 +24,7 @@ if command -v python3 &> /dev/null; then
 elif command -v python &> /dev/null; then
   PYTHON_CMD="python"
 else
-  echo "❌ Python not found! Please install Python 3.11 or later."
+  echo "ERROR: Python not found! Please install Python 3.11 or later."
   exit 1
 fi
 
@@ -42,11 +42,30 @@ echo "Upgrading pip..."
 # Install Python dependencies
 echo "Installing dependencies..."
 
-# Step 1: Install CPU-only PyTorch first with strict index constraint
-echo "Installing CPU-only PyTorch..."
+# Step 1: Install the right PyTorch version for the host architecture
+ARCHITECTURE=$(uname -m)
+TORCH_VERSION="2.9.1"
+TORCHVISION_VERSION="0.24.1"
+
+case "$ARCHITECTURE" in
+  x86_64)
+    # Intel Macs need a downlevel PyTorch build to avoid segfaults
+    TORCH_VERSION="2.2.2"
+    TORCHVISION_VERSION="0.17.2"
+    ;;
+  arm64)
+    # Apple Silicon Macs can use the newer, M-series verified build
+    TORCH_VERSION="2.9.1"
+    TORCHVISION_VERSION="0.24.1"
+    ;;
+  *)
+    echo "WARNING: Unknown architecture ($ARCHITECTURE). Defaulting to torch $TORCH_VERSION."
+    ;;
+esac
+
+echo "Installing PyTorch $TORCH_VERSION for $ARCHITECTURE..."
 "$VENV_DIR/bin/pip" install --no-cache-dir \
-  --index-url https://download.pytorch.org/whl/cpu \
-  torch torchvision
+  torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION}
 
 # Step 2: Install remaining dependencies from requirements-build.txt (excludes torch & test deps)
 # Falls back to requirements-ci.txt if build version doesn't exist
@@ -59,7 +78,7 @@ elif [ -f "python/requirements-ci.txt" ]; then
   "$VENV_DIR/bin/pip" install --no-cache-dir \
     --requirement python/requirements-ci.txt
 else
-  echo "⚠️  No requirements files found"
+  echo "WARNING: No requirements files found"
   echo "Installing minimal dependencies..."
   "$VENV_DIR/bin/pip" install --no-cache-dir \
     requests pillow modal numpy
@@ -82,9 +101,17 @@ find "$VENV_DIR/lib" -type d -name "*_test" -exec rm -rf {} + 2>/dev/null || tru
 # Remove PyTorch test files and unnecessary subdirectories
 echo "  Removing PyTorch test and non-essential files..."
 if [ -d "$VENV_DIR/lib/python*/site-packages/torch" ]; then
-  find "$VENV_DIR/lib/python*/site-packages/torch" -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
+  # Remove test directories (safe to remove)
+  find "$VENV_DIR/lib/python"*/site-packages/torch -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
+  find "$VENV_DIR/lib/python"*/site-packages/torch -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
+
+  # Remove bin directory (executables not needed at runtime)
   rm -rf "$VENV_DIR/lib/python"*/site-packages/torch/bin 2>/dev/null || true
-  rm -rf "$VENV_DIR/lib/python"*/site-packages/torch/share 2>/dev/null || true
+
+  # Remove only specific large cmake files (keep the directory structure)
+  find "$VENV_DIR/lib/python"*/site-packages/torch/share/cmake -name "*.cmake" -size +1M -delete 2>/dev/null || true
+
+  echo "  PyTorch optimization complete (kept runtime dependencies)"
 fi
 
 # Remove transformers test files if installed
@@ -93,8 +120,9 @@ if [ -d "$VENV_DIR/lib/python*/site-packages/transformers" ]; then
 fi
 
 # Strip debug symbols from compiled libraries (.so files)
-echo "  Stripping debug symbols from compiled libraries..."
-find "$VENV_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*/bin/*" -exec strip -x {} + 2>/dev/null || true
+# DISABLED: Breaks PyTorch on M-series
+# echo "  Stripping debug symbols from compiled libraries..."
+# find "$VENV_DIR" -type f \( -name "*.so" -o -name "*.dylib" \) ! -path "*/bin/*" -exec strip -x {} + 2>/dev/null || true
 
 # Remove pip cache
 rm -rf "$VENV_DIR/lib/python"*/site-packages/pip* 2>/dev/null || true
@@ -110,6 +138,20 @@ rm -rf "$VENV_DIR/lib/python"*/site-packages/easy_install.py 2>/dev/null || true
 echo "Verifying Python bundle..."
 "$VENV_DIR/bin/python" --version
 
+# Export certifi bundle for use at runtime (fixes SSL in production)
+CERTIFI_PEM=$("$VENV_DIR/bin/python" - <<'PY'
+import certifi
+print(certifi.where())
+PY
+)
+
+if [ -n "$CERTIFI_PEM" ] && [ -f "$CERTIFI_PEM" ]; then
+  echo "Bundling certifi CA store..."
+  cp "$CERTIFI_PEM" "$BUNDLE_DIR/cacert.pem"
+else
+  echo "WARNING: Could not locate certifi certificate bundle; HTTPS requests may fail."
+fi
+
 FINAL_SIZE=$(du -sh "$VENV_DIR" | awk '{print $1}')
-echo "✅ Python bundle created at $BUNDLE_DIR/venv"
+echo "Python bundle created at $BUNDLE_DIR/venv"
 echo "Final bundle size: $FINAL_SIZE (optimized)"

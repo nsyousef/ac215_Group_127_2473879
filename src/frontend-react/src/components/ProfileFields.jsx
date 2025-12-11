@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { TextField, MenuItem, Stack } from '@mui/material';
 
 const SEX_OPTIONS = [
@@ -38,20 +39,38 @@ const COUNTRY_OPTIONS = [
   { value: 'prefer-not-to-say', label: 'Prefer not to say' },
 ];
 
-export default function ProfileFields({ value, onChange }) {
+export default function ProfileFields({ value, onChange, onDateValidityChange }) {
   const handleChange = (field) => (event) => {
     onChange({ ...value, [field]: event.target.value });
   };
+
+  const today = new Date();
+  const maxDate = today.toISOString().split('T')[0];
+  const minDateObj = new Date(today);
+  minDateObj.setFullYear(minDateObj.getFullYear() - 200);
+  const minDate = minDateObj.toISOString().split('T')[0];
+  const dateOfBirth = value.dateOfBirth || '';
+  const isDateInvalid =
+    Boolean(dateOfBirth) && (dateOfBirth < minDate || dateOfBirth > maxDate);
+
+  useEffect(() => {
+    if (onDateValidityChange) {
+      onDateValidityChange(!isDateInvalid);
+    }
+  }, [isDateInvalid, onDateValidityChange]);
 
   return (
     <Stack spacing={3}>
       <TextField
         label="Date of Birth"
         type="date"
-        value={value.dateOfBirth || ''}
+        value={dateOfBirth}
         onChange={handleChange('dateOfBirth')}
         fullWidth
         InputLabelProps={{ shrink: true }}
+        inputProps={{ min: minDate, max: maxDate }}
+        error={isDateInvalid}
+        helperText={isDateInvalid ? 'Invalid date' : undefined}
       />
 
       <TextField

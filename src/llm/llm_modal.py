@@ -2,7 +2,6 @@
 
 import os
 import modal
-from fastapi.responses import StreamingResponse
 import json
 import asyncio
 
@@ -23,6 +22,7 @@ llm_image = (
         "sentencepiece",
         "bitsandbytes",
         "huggingface-hub==0.36.0",
+        "hf_transfer",
         "fastapi[standard]",
     )
     .env({"HF_XET_HIGH_PERFORMANCE": "1", "HF_HOME": "/root/.cache/huggingface", "HF_HUB_ENABLE_HF_TRANSFER": "1"})
@@ -42,7 +42,7 @@ app = modal.App(
 )
 
 
-@app.cls(gpu=GPU, min_containers=0, max_containers=1, scaledown_window=200)
+@app.cls(gpu=GPU, min_containers=0, max_containers=1, scaledown_window=3600)
 class DermatologyLLM:
     """Modal class for dermatology LLM assistant."""
 
@@ -83,6 +83,8 @@ class DermatologyLLM:
 
     @modal.fastapi_endpoint(method="POST")
     async def ask_followup_stream(self, json_data: dict):
+        from fastapi.responses import StreamingResponse
+
         initial_answer = json_data["initial_answer"]
         question = json_data["question"]
         history = json_data.get("conversation_history", [])
@@ -115,6 +117,8 @@ class DermatologyLLM:
             {"delta": "..."}\n
             ...
         """
+        from fastapi.responses import StreamingResponse
+
         predictions = json_data["predictions"]
         metadata = json_data["metadata"]
 
@@ -139,8 +143,6 @@ class DermatologyLLM:
 
         Expects:
             {
-                "predictions": {"disease1": 0.78, ...},
-                "user_demographics": {...},
                 "user_input": "text description",
                 "cv_analysis_history": {
                     "2024-12-01": {"area_cm2": 2.5, "color_stats_lab": {...}, ...},
@@ -152,8 +154,6 @@ class DermatologyLLM:
             {"summary": "3-4 sentence summary text"}
         """
         return self.llm.time_tracking_summary(
-            predictions=json_data["predictions"],
-            user_demographics=json_data.get("user_demographics", {}),
             user_input=json_data.get("user_input", ""),
             cv_analysis_history=json_data["cv_analysis_history"],
             temperature=0.3,

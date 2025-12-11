@@ -25,7 +25,7 @@ SECURITY:
 =========
 - GitHub Release URLs are PUBLIC (no credentials needed)
 - Safe for production apps (no token exposure)
-- Models cached locally to ~/.cache/pibu_ai/models/
+- Models cached locally to ~/.cache/Pibu/models/
 - Optional fallback to HuggingFace or other sources
 
 ARCHITECTURE:
@@ -101,7 +101,7 @@ def get_model_path(
     Raises:
         FileNotFoundError: If model cannot be downloaded from any source
     """
-    cache_dir = Path.home() / ".cache" / "pibu_ai" / "models"
+    cache_dir = Path.home() / ".cache" / "Pibu" / "models"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     sources = MODEL_SOURCES.get(model_type, [])
@@ -120,7 +120,7 @@ def get_model_path(
             )
         except Exception as e:
             last_error = e
-            debug_log(f"⚠️  Source failed ({source['backend']}): {e}")
+            debug_log(f"WARNING: Source failed ({source['backend']}): {e}")
             continue
 
     # All sources failed
@@ -194,10 +194,10 @@ def _download_github_release(
 
     # Return if already cached
     if cache_path.exists():
-        debug_log(f"✓ Using cached model: {cache_path}")
+        debug_log(f"Using cached model: {cache_path}")
         return cache_path
 
-    debug_log(f"⬇️  Downloading {model_type} model from GitHub Release...")
+    debug_log(f"Downloading {model_type} model from GitHub Release...")
     debug_log(f"    URL: {url}")
 
     try:
@@ -238,7 +238,7 @@ def _download_github_release(
 
         print("", file=sys.stderr)  # Newline after progress
         size_mb = cache_path.stat().st_size / (1024 * 1024)
-        debug_log(f"✓ Model downloaded: {cache_path} ({size_mb:.1f} MB)")
+        debug_log(f"Model downloaded: {cache_path} ({size_mb:.1f} MB)")
         return cache_path
 
     except requests.exceptions.RequestException as e:
@@ -276,7 +276,7 @@ def _download_huggingface(
     except ImportError:
         raise ImportError("huggingface_hub not installed. " "Install with: pip install huggingface-hub")
 
-    debug_log(f"⬇️  Downloading {model_type} model from Hugging Face...")
+    debug_log(f"Downloading {model_type} model from Hugging Face...")
     debug_log(f"    Repo: {repo_id}")
 
     try:
@@ -291,7 +291,7 @@ def _download_huggingface(
             resume_download=True,
         )
 
-        debug_log(f"✓ Model downloaded from HF: {model_path}")
+        debug_log(f"Model downloaded from HF: {model_path}")
         return Path(model_path)
 
     except Exception as e:

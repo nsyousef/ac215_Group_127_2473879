@@ -1,10 +1,11 @@
 [project]
-name = "app"
+name = "inference-cloud"
 version = "0.1.0"
-description = "Add your description here"
+description = "FastAPI inference service for skin disease classification"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "ml_workflow",  # Local package for shared ML code
     "fastapi>=0.121.3",
     "gcsfs>=2025.10.0",
     "google-cloud-storage>=3.6.0",
@@ -33,5 +34,6 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.uv.sources]
+ml_workflow = { path = "../ml_workflow", editable = true }
 torch = { index = "pytorch-cpu" }
 torchvision = { index = "pytorch-cpu" }

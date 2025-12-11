@@ -1,0 +1,28 @@
+encryptionsalt: v1:smdosQitcrs=:v1:rUFnNFAp8e3z4j/w:MvKTdXcdj9z01FPBSV9/WWmHtocH+g==
+config:
+  gcp:project: level-scheme-471117-i9
+  gcp:region: us-east1
+  # GKE cluster configuration
+  pibu-ai-deployment:gke_node_count: "1"
+  pibu-ai-deployment:gke_min_node_count: "1"
+  pibu-ai-deployment:gke_max_node_count: "3"
+  pibu-ai-deployment:gke_machine_type: e2-standard-4
+  pibu-ai-deployment:gke_disk_size_gb: "30"  # Disk size in GB for GKE node VMs (default: 30)
+  # Inference service configuration
+  pibu-ai-deployment:inference_memory: 4Gi  # Memory limit for inference containers
+  pibu-ai-deployment:inference_cpu: "2"  # CPU limit for inference containers
+  pibu-ai-deployment:inference_min_replicas: "1"  # Minimum number of inference pods
+  pibu-ai-deployment:inference_max_replicas: "10"  # Maximum number of inference pods
+  pibu-ai-deployment:inference_target_cpu: "70"  # Target CPU utilization for HPA (%)
+  pibu-ai-deployment:inference_target_memory: "80"  # Target memory utilization for HPA (%)
+  pibu-ai-deployment:inference_model_gcs_path: gs://apcomp215-datasets/test_best.pth  # GCS path to model checkpoint
+  pibu-ai-deployment:inference_model_checkpoint_path: /tmp/models/test_best.pth  # Local path where model is downloaded in container
+  pibu-ai-deployment:inference_device: cpu  # Device for inference (cpu or cuda)
+  pibu-ai-deployment:inference_port: "8080"  # Port for inference service
+  # Modal LLM configuration
+  pibu-ai-deployment:modal_username: nsyousef
+  pibu-ai-deployment:llm_model_size: 27b
+  pibu-ai-deployment:modal_token_id:
+    secure: v1:NGyYKyZFWCeil705:WbJFG5JM4Sh5+SghNkmh8jEU+zyuU83nYfGwWy99wQauHR7Bkd4nFK8=
+  pibu-ai-deployment:modal_token_secret:
+    secure: v1:hlcLDYpnikyFG8p0:KwjMNVtafD/8Trdt+OjmFF06K3EvDG3dh02O9mqmqkpiuU+lSjvpxLo=

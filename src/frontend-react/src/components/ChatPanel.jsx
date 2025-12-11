@@ -9,6 +9,7 @@ import {
   TextField,
   IconButton,
   useTheme,
+  LinearProgress,
   CircularProgress,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
@@ -26,6 +27,7 @@ export default function ChatPanel({ conditionId, refreshKey }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const listRef = useRef(null);
   const { diseases, reload: reloadDiseases } = useDiseaseContext();
 
@@ -40,6 +42,7 @@ export default function ChatPanel({ conditionId, refreshKey }) {
   useEffect(() => {
     if (!conditionId) {
       setMessages([]);
+      setHistoryLoading(false);
       return;
     }
 
@@ -48,6 +51,7 @@ export default function ChatPanel({ conditionId, refreshKey }) {
 
     // Clear messages immediately when condition changes to show loading state
     setMessages([]);
+    setHistoryLoading(true);
 
     async function load() {
       try {
@@ -55,7 +59,10 @@ export default function ChatPanel({ conditionId, refreshKey }) {
         const condition = (diseases || []).find((d) => d.id === conditionId);
         if (!condition) {
           console.log('[ChatPanel] Condition not found for id:', conditionId);
-          if (mounted) setMessages([]);
+          if (mounted) {
+            setMessages([]);
+            setHistoryLoading(false);
+          }
           return;
         }
 
@@ -83,11 +90,12 @@ export default function ChatPanel({ conditionId, refreshKey }) {
 
         const msgs = [];
         (conversationData || []).forEach((entry, idx) => {
-          if (entry.user) {
+          const trimmedUser = entry?.user?.message?.trim();
+          if (entry.user && trimmedUser) {
             msgs.push({
               id: `u_${idx}`,
               role: 'user',
-              text: entry.user.message,
+              text: trimmedUser,
               time: entry.user.timestamp,
               conditionId,
             });
@@ -125,6 +133,10 @@ export default function ChatPanel({ conditionId, refreshKey }) {
         }
       } catch (e) {
         console.error('Failed to load chat history', e);
+      } finally {
+        if (mounted) {
+          setHistoryLoading(false);
+        }
       }
     }
 
@@ -260,8 +272,20 @@ export default function ChatPanel({ conditionId, refreshKey }) {
   return (
     <Card
       id="chat-panel"
-      sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}
     >
+      {historyLoading && conditionId && (
+        <LinearProgress
+          color="primary"
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+          }}
+        />
+      )}
       <CardContent sx={{ flex: 1, overflow: 'auto', p: 2 }} ref={listRef}>
         <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
           Chat with Pibu
@@ -277,29 +301,31 @@ export default function ChatPanel({ conditionId, refreshKey }) {
         )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {messages.map((m) => (
-            <Box
-              key={m.id}
-              sx={{
-                alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                maxWidth: '80%',
-              }}
-            >
+          {messages
+            .filter((m) => (m.text || '').trim().length > 0)
+            .map((m) => (
               <Box
+                key={m.id}
                 sx={{
-                  bgcolor: m.role === 'user' ? primary : '#eee',
-                  color: m.role === 'user' ? primaryContrast : '#000',
-                  p: 1.5,
-                  borderRadius: 2,
+                  alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                  maxWidth: '80%',
                 }}
               >
-                <Typography variant="body2" dangerouslySetInnerHTML={{ __html: markdownToHtml(m.text) }} />
+                <Box
+                  sx={{
+                    bgcolor: m.role === 'user' ? primary : '#eee',
+                    color: m.role === 'user' ? primaryContrast : '#000',
+                    p: 1.5,
+                    borderRadius: 2,
+                  }}
+                >
+                  <Typography variant="body2" dangerouslySetInnerHTML={{ __html: markdownToHtml(m.text) }} />
+                </Box>
+                <Typography variant="caption" sx={{ color: '#999' }}>
+                  {new Date(m.time).toLocaleString()}
+                </Typography>
               </Box>
-              <Typography variant="caption" sx={{ color: '#999' }}>
-                {new Date(m.time).toLocaleString()}
-              </Typography>
-            </Box>
-          ))}
+            ))}
         </Box>
       </CardContent>
 

@@ -2,7 +2,7 @@ const path = require('path');
 
 module.exports = {
   packagerConfig: {
-    name: 'pibu_ai',
+    name: 'Pibu',
     productName: 'pibu.ai',
     icon: path.join(__dirname, 'build-resources/icon.icns'),
     // Explicitly set the main entry point
@@ -44,10 +44,17 @@ module.exports = {
       '^/scripts',
       '^/public',
       '^/dist',
-      // Python development files
-      '^/python/.*\\.py$',
+      // Python development artifacts (keep runtime modules)
+      '^/python/tests($|/)',
+      '^/python/test_.*',
+      '^/python/run_.*',
+      '^/python/.*\\.ipynb$',
       '^/python/\\.venv',
       '^/python/__pycache__',
+      '^/python/inference_local/tests($|/)',
+      '^/python/inference_local/.*\\.ipynb$',
+      '^/python/Dockerfile',
+      '^/python/docker-shell\\.sh$',
       '^/python/\\.env',
       // node_modules cleanup
       '/node_modules/.bin',
@@ -67,7 +74,7 @@ module.exports = {
       config: {
         format: 'ULFO',
         contents: [
-          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/pibu_ai-darwin-x64/pibu_ai.app') },
+          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/Pibu-darwin-x64/Pibu.app') },
           { x: 470, y: 150, type: 'link', path: '/Applications' },
         ],
       },
@@ -77,7 +84,7 @@ module.exports = {
       config: {
         format: 'ULFO',
         contents: [
-          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/pibu_ai-darwin-arm64/pibu_ai.app') },
+          { x: 220, y: 150, type: 'file', path: path.join(__dirname, 'out/Pibu-darwin-arm64/Pibu.app') },
           { x: 470, y: 150, type: 'link', path: '/Applications' },
         ],
       },

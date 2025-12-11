@@ -299,20 +299,11 @@ class LLM:
             if delta:
                 yield {"delta": delta}
 
-    def time_tracking_summary(
-        self,
-        predictions: dict,
-        user_demographics: dict,
-        user_input: str,
-        cv_analysis_history: dict,
-        temperature: float = 0.3,
-    ) -> dict:
+    def time_tracking_summary(self, user_input: str, cv_analysis_history: dict, temperature: float = 0.3) -> dict:
         """
         Generate a brief summary of time tracking data changes.
 
         Args:
-            predictions: Top disease predictions {"disease": confidence, ...}
-            user_demographics: User demographic information
             user_input: User's text description of the condition
             cv_analysis_history: Date-keyed CV metrics {"2024-12-01": {...}, ...}
             temperature: Generation temperature
@@ -321,37 +312,28 @@ class LLM:
             {"summary": "3-4 sentence summary text"}
         """
         # Build prompt for time tracking
-        top_pred = max(predictions.items(), key=lambda x: x[1])[0] if predictions else "Unknown"
-        pred_str = f"{top_pred} ({predictions.get(top_pred, 0)*100:.1f}%)"
-
-        prompt = f"{self.time_tracking_prompt}\n\nINPUT DATA:\n"
-        prompt += f"Predicted condition: {pred_str}\n"
+        prompt = f"{self.time_tracking_prompt}\n\n"
 
         if user_input:
-            prompt += f"User description: {user_input}\n"
+            prompt += f"User description: {user_input}\n\n"
 
-        if user_demographics:
-            demo_parts = []
-            if "age" in user_demographics:
-                demo_parts.append(f"age {user_demographics['age']}")
-            if "skin_type" in user_demographics:
-                demo_parts.append(f"skin type {user_demographics['skin_type']}")
-            if demo_parts:
-                prompt += f"Demographics: {', '.join(demo_parts)}\n"
-
-        prompt += "\nTracking Data:\n"
+        prompt += "Tracking Data:\n"
         sorted_dates = sorted(cv_analysis_history.keys())
 
         for i, date in enumerate(sorted_dates):
             metrics = cv_analysis_history[date]
-            prompt += f"\n{'First entry' if i == 0 else f'Entry {i+1}'} ({date}):\n"
+            # Label as Entry 1, Entry 2, etc. (no dates)
+            prompt += f"\nEntry {i+1}:\n"
 
+            # Only include area_cm2
             if "area_cm2" in metrics and metrics["area_cm2"] is not None:
                 prompt += f"  - Area: {metrics['area_cm2']:.2f} cm²\n"
 
-            if "compactness_index" in metrics:
-                prompt += f"  - Shape compactness: {metrics['compactness_index']:.2f}\n"
+            # Only include irregularity (compactness_index)
+            if "compactness_index" in metrics and metrics["compactness_index"] is not None:
+                prompt += f"  - Irregularity: {metrics['compactness_index']:.2f}\n"
 
+            # Only include color (LAB)
             if "color_stats_lab" in metrics:
                 color = metrics["color_stats_lab"]
                 prompt += f"  - Color (LAB): L={color.get('mean_L', 0):.1f}, A={color.get('mean_A', 0):.1f}, B={color.get('mean_B', 0):.1f}\n"
