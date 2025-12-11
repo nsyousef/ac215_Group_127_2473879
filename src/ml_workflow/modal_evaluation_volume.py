@@ -105,7 +105,7 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
 
     # Suppress HuggingFace tokenizers parallelism warning (safe to disable with multiprocessing)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    
+
     # Disable wandb for evaluation (no logging needed)
     os.environ["WANDB_MODE"] = "disabled"
 
@@ -206,8 +206,8 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
         logger.info("=" * 70)
 
         # Use the evaluate method if available, otherwise use test method
-        test_results = trainer.test()
-        accuracy = test_results["test_accuracy"]
+        test_results = trainer.validate()
+        accuracy = test_results[1]
 
         logger.info("=" * 70)
         logger.info("✓ EVALUATION COMPLETE!")
