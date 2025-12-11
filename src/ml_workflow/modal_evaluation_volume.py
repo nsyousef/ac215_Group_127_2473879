@@ -82,9 +82,6 @@ app = modal.App("skin-disease-evaluation-volume", image=image)
     cpu=20.0,
     timeout=50000,
     region="us-east",
-    secrets=[
-        modal.Secret.from_name("wandb-secret"),
-    ],
     volumes={
         "/checkpoints": modal.Volume.from_name("training-checkpoints", create_if_missing=True),
         "/data": modal.Volume.from_name("training-data", create_if_missing=True),
@@ -141,14 +138,6 @@ def evaluate_with_volume(config_path: str = "configs/modal_template.yaml", weigh
         logger.error("You need to sync data to the volume first!")
         logger.error("Run: modal run modal_training_volume.py::sync_data_from_gcs")
         raise RuntimeError("Data volume not populated. Run sync_data_from_gcs first")
-
-    # Login to wandb (optional for evaluation, but may be needed for checkpoint loading)
-    import wandb
-
-    if "WANDB_API_KEY" in os.environ:
-        wandb.login(key=os.environ["WANDB_API_KEY"])
-    else:
-        logger.warning("WANDB_API_KEY not found. Wandb logging may fail.")
 
     # Import using absolute import - this should work now that path is set
     # The package structure is: /app/src/ml_workflow/
