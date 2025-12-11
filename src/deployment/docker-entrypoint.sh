@@ -64,13 +64,15 @@ fi
 # Initialize and configure Pulumi stack
 echo "Configuring Pulumi stack..."
 
-# Create dev stack if it doesn't exist
-if ! pulumi stack select dev 2>/dev/null; then
-    echo "Creating dev stack..."
-    pulumi stack init dev
-else
-    echo "Dev stack already exists."
-fi
+# Ensure required stacks exist
+for STACK_NAME in dev prod; do
+    if ! pulumi stack select "$STACK_NAME" >/dev/null 2>&1; then
+        echo "Creating $STACK_NAME stack..."
+        pulumi stack init "$STACK_NAME"
+    else
+        echo "$STACK_NAME stack already exists."
+    fi
+done
 
 # Check and set/update GCP project
 CURRENT_PROJECT=$(pulumi config get gcp:project 2>/dev/null || echo "")
