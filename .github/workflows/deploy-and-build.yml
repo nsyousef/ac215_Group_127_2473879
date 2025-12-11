@@ -238,7 +238,7 @@ jobs:
           else
             gh release create "$TAG" --repo "$PUBLIC_RELEASE_REPO" --title "$TITLE" --notes "$BODY"
           fi
-          gh release upload "$TAG" src/frontend-react/dist/pibu_ai.dmg --repo "$PUBLIC_RELEASE_REPO" --clobber
+          gh release upload "$TAG" "src/frontend-react/dist/Pibu.dmg" --repo "$PUBLIC_RELEASE_REPO" --clobber
 
       - name: Deployment Summary
         run: |
