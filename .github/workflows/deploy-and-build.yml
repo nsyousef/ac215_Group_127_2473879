@@ -148,6 +148,7 @@ jobs:
     name: Build macOS Electron App
     needs: deploy-infrastructure
     runs-on: macos-latest
+    environment: ${{ github.event.inputs.stack || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
     env:
       PUBLIC_RELEASE_REPO: ${{ secrets.PUBLIC_RELEASE_REPO }}
 
