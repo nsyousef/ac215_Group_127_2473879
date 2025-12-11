@@ -55,7 +55,7 @@ jobs:
             docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile.ci ../../..
           elif [ "${{ matrix.service }}" = "inference-cloud" ]; then
             cd src/${{ matrix.service }}
-            docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile ../../..
+            docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile.ci ../../..
           else
             cd src/${{ matrix.service }}
             docker build -t ${{ matrix.service }}:${{ github.sha }} -f Dockerfile .
