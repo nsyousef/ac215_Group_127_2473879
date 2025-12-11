@@ -43,3 +43,30 @@ Use the provided helper script:
 - The Dockerfile automatically runs all processors in sequence: `processor_ddi.py`, `processor_fitz.py`, `processor_skincap.py`, `processor_isic.py`, `processor_derm1m.py`, followed by `harmonize_labels_filter_desc.py`, and finally `verify_output.py`
 - Ensure `secrets/` folder exists in the repository root
 - The build command should be run from the `src/data-processor/` directory
+
+## What Remains Untested
+
+<table class="index" data-sortable>
+    <thead>
+        <tr class="tablehead" title="Click to sort">
+            <th id="file" class="name" aria-sort="none" data-shortcut="f">File<span class="arrows"></span></th>
+            <th class="spacer">&nbsp;</th>
+            <th id="statements" aria-sort="none" data-default-sort-order="descending" data-shortcut="s">statements<span class="arrows"></span></th>
+            <th id="missing" aria-sort="none" data-default-sort-order="descending" data-shortcut="m">missing<span class="arrows"></span></th>
+            <th id="excluded" aria-sort="none" data-default-sort-order="descending" data-shortcut="x">excluded<span class="arrows"></span></th>
+            <th class="spacer">&nbsp;</th>
+            <th id="coverage" aria-sort="none" data-shortcut="c">coverage<span class="arrows"></span></th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr class="region">
+            <td class="name"><a href="processor_py.html">processor.py</a></td>
+            <td class="spacer">&nbsp;</td>
+            <td>138</td>
+            <td>6</td>
+            <td>0</td>
+            <td class="spacer">&nbsp;</td>
+            <td data-ratio="132 138">96%</td>
+        </tr>
+    </tbody>
+</table>

@@ -66,6 +66,60 @@ export MODAL_GPU="H200"  # GPU type for Modal
 ./run_system_tests.sh
 ```
 
+## What Remains Untested
+
+<table class="index" data-sortable>
+    <thead>
+        <tr class="tablehead" title="Click to sort">
+            <th id="file" class="name" aria-sort="none" data-shortcut="f">File<span class="arrows"></span></th>
+            <th class="spacer">&nbsp;</th>
+            <th id="statements" aria-sort="none" data-default-sort-order="descending" data-shortcut="s">statements<span class="arrows"></span></th>
+            <th id="missing" aria-sort="none" data-default-sort-order="descending" data-shortcut="m">missing<span class="arrows"></span></th>
+            <th id="excluded" aria-sort="none" data-default-sort-order="descending" data-shortcut="x">excluded<span class="arrows"></span></th>
+            <th class="spacer">&nbsp;</th>
+            <th id="coverage" aria-sort="none" data-shortcut="c">coverage<span class="arrows"></span></th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr class="region">
+            <td class="name"><a href="llm_py.html">llm.py</a></td>
+            <td class="spacer">&nbsp;</td>
+            <td>166</td>
+            <td>101</td>
+            <td>0</td>
+            <td class="spacer">&nbsp;</td>
+            <td data-ratio="65 166">39%</td>
+        </tr>
+        <tr class="region">
+            <td class="name"><a href="llm_modal_py.html">llm_modal.py</a></td>
+            <td class="spacer">&nbsp;</td>
+            <td>53</td>
+            <td>28</td>
+            <td>1</td>
+            <td class="spacer">&nbsp;</td>
+            <td data-ratio="25 53">47%</td>
+        </tr>
+        <tr class="region">
+            <td class="name"><a href="z_a44f0ac069e85531_system_py.html">tests&#8201;/&#8201;system.py</a></td>
+            <td class="spacer">&nbsp;</td>
+            <td>65</td>
+            <td>34</td>
+            <td>0</td>
+            <td class="spacer">&nbsp;</td>
+            <td data-ratio="31 65">48%</td>
+        </tr>
+        <tr class="region">
+            <td class="name"><a href="z_a44f0ac069e85531_unit_py.html">tests&#8201;/&#8201;unit.py</a></td>
+            <td class="spacer">&nbsp;</td>
+            <td>71</td>
+            <td>7</td>
+            <td>0</td>
+            <td class="spacer">&nbsp;</td>
+            <td data-ratio="64 71">90%</td>
+        </tr>
+    </tbody>
+</table>
+
 ## Deployment
 
 Deployed via Pulumi (see `src/deployment/modules/modal_llm.py`) or manually using `deploy.sh`.
