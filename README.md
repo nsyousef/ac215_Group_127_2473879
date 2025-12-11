@@ -11,6 +11,8 @@
 | **inference-cloud** | [![CI](https://github.com/nsyousef/ac215_Group_127_2473879/actions/workflows/ci.yml/badge.svg)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) | [![coverage](https://img.shields.io/badge/coverage-reports-blue?logo=github)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) |
 | **frontend-react** | [![CI](https://github.com/nsyousef/ac215_Group_127_2473879/actions/workflows/ci.yml/badge.svg)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) | [![coverage](https://img.shields.io/badge/coverage-reports-blue?logo=github)](https://github.com/nsyousef/ac215_Group_127_2473879/actions) |
 
+**Download from:** https://github.com/nsyousef/pibu_ai_model_release/releases
+
 An AI-powered desktop application for identification and tracking of skin conditions. Combines multiple dermatology datasets with multimodal ML and LLM-based medical explanations to provide personalized skin health insights.
 
 ## Project Overview
