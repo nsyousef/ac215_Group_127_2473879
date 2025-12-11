@@ -1080,9 +1080,31 @@ class Trainer:
 
     def test(self):
         """Test loop"""
-        # Handle case where test_loader is None
+        # Determine which loader to use: test_loader if available, otherwise val_loader
+        loader_to_use = None
+        using_validation = False
+        
+        # Check if test_loader is None or empty
         if self.test_loader is None:
-            logger.warning("No test loader available (test_size=0.0). Skipping test evaluation.")
+            logger.warning("No test loader available (test_size=0.0). Falling back to validation dataset.")
+            loader_to_use = self.val_loader
+            using_validation = True
+        else:
+            # Check if test_loader is empty
+            try:
+                if len(self.test_loader) == 0:
+                    logger.warning("Test loader is empty. Falling back to validation dataset.")
+                    loader_to_use = self.val_loader
+                    using_validation = True
+                else:
+                    loader_to_use = self.test_loader
+            except (TypeError, NotImplementedError):
+                # Some dataloaders don't support len(), assume it's not empty if it's not None
+                loader_to_use = self.test_loader
+        
+        # If we still don't have a loader, return error
+        if loader_to_use is None:
+            logger.error("No test loader or validation loader available. Cannot perform evaluation.")
             return {
                 "test_loss": None,
                 "test_accuracy": None,
@@ -1093,7 +1115,11 @@ class Trainer:
                 "macro_f1": None,
             }
         
-        logger.info("Starting test evaluation...")
+        # Log which dataset we're using
+        if using_validation:
+            logger.info("Starting evaluation on validation dataset (test loader unavailable/empty)...")
+        else:
+            logger.info("Starting test evaluation...")
 
         self.vision_model.eval()
         self.multimodal_classifier.eval()
@@ -1109,7 +1135,8 @@ class Trainer:
         text_aux_enabled = self.multimodal_classifier.auxiliary_text_loss_weight > 0
 
         with torch.no_grad():
-            pbar = tqdm(self.test_loader, desc="Testing")
+            desc = "Validation (fallback)" if using_validation else "Testing"
+            pbar = tqdm(loader_to_use, desc=desc)
             # ✅ Unpack 4 items now
             for images, targets, text_embeddings, text_content_flags in pbar:
                 # Move data to device
@@ -1160,7 +1187,7 @@ class Trainer:
                 # Update progress bar
                 pbar.set_postfix({"Loss": f"{loss.item():.4f}", "Acc": f"{100. * correct / total:.2f}%"})
 
-        avg_loss = total_loss / len(self.test_loader)
+        avg_loss = total_loss / len(loader_to_use)
         accuracy = 100.0 * correct / total
         with np.errstate(divide="ignore", invalid="ignore"):
             tp = np.diag(confusion).astype(np.float64)
@@ -1171,10 +1198,17 @@ class Trainer:
             f1_per_class = np.where(precision + recall > 0, 2 * precision * recall / (precision + recall), 0.0)
             macro_f1 = float(np.mean(f1_per_class))
 
-        logger.info("Test Results:")
-        logger.info(f"  Test Loss: {avg_loss:.4f}")
-        logger.info(f"  Test Accuracy: {accuracy:.2f}%")
-        logger.info(f"  Test Macro-F1: {macro_f1:.4f}")
+        # Log results with appropriate labels
+        if using_validation:
+            logger.info("Evaluation Results (using validation dataset):")
+            logger.info(f"  Validation Loss: {avg_loss:.4f}")
+            logger.info(f"  Validation Accuracy: {accuracy:.2f}%")
+            logger.info(f"  Validation Macro-F1: {macro_f1:.4f}")
+        else:
+            logger.info("Test Results:")
+            logger.info(f"  Test Loss: {avg_loss:.4f}")
+            logger.info(f"  Test Accuracy: {accuracy:.2f}%")
+            logger.info(f"  Test Macro-F1: {macro_f1:.4f}")
         logger.info(f"  Correct: {correct}/{total}")
 
         return {
