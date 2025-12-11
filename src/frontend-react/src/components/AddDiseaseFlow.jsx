@@ -245,7 +245,7 @@ export default function AddDiseaseFlow({ open, onClose, onSaved, canCancel = tru
             alreadyNavigated: firstChunkReceivedRef.current
           });
           if (predictionText && currentCaseIdRef.current === caseId && !firstChunkReceivedRef.current) {
-            console.log('[AddDiseaseFlow] ✅ Conditions met, navigating to results now');
+            console.log('[AddDiseaseFlow] Conditions met, navigating to results now');
             firstChunkReceivedRef.current = true;
 
             // Create timeline entry with initial image

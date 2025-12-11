@@ -6,7 +6,7 @@ IMAGE_NAME="llm-tests"
 
 echo "Building Docker image..."
 docker build -t $IMAGE_NAME . > /dev/null 2>&1
-echo "✓ Build complete"
+echo "Build complete"
 echo ""
 
 echo "Running all tests (unit + integration + system)..."

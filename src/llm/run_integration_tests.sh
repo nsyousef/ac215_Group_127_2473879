@@ -15,12 +15,12 @@ pytest tests/integration.py -v -m integration
 if [ $? -eq 0 ]; then
     echo ""
     echo "================================"
-    echo "✅ Integration tests passed!"
+    echo "Integration tests passed!"
     echo "================================"
 else
     echo ""
     echo "================================"
-    echo "❌ Integration tests failed!"
+    echo "ERROR: Integration tests failed!"
     echo "================================"
     exit 1
 fi

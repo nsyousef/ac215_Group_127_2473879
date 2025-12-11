@@ -38,12 +38,12 @@ pytest tests/system.py -v -m system --durations=10
 if [ $? -eq 0 ]; then
     echo ""
     echo "================================"
-    echo "✅ System tests passed!"
+    echo "System tests passed!"
     echo "================================"
 else
     echo ""
     echo "================================"
-    echo "❌ System tests failed!"
+    echo "ERROR: System tests failed!"
     echo "================================"
     exit 1
 fi

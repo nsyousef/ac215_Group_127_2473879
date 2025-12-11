@@ -3,7 +3,6 @@
 Rebuild diseases.json from existing case folders.
 """
 
-import os
 import json
 import base64
 from pathlib import Path
@@ -96,7 +95,7 @@ def rebuild_diseases():
     with open(diseases_path, "w") as f:
         json.dump(diseases, f, indent=2)
 
-    print(f"\n✓ Rebuilt diseases.json with {len(diseases)} entries")
+    print(f"\nRebuilt diseases.json with {len(diseases)} entries")
 
 
 if __name__ == "__main__":

@@ -43,7 +43,7 @@ jobs:
           DEPLOY_CONFIG=".github/deploy-config.yaml"
 
           if [ ! -f "$DEPLOY_CONFIG" ]; then
-            echo "⚠️ Deploy config file not found, using defaults"
+            echo "WARNING: Deploy config file not found, using defaults"
             CONFIG_PATH="configs/experiments/final_run.yaml"
             WEIGHTS_PATH=""
           else
@@ -105,7 +105,7 @@ jobs:
           ACCURACY=$(echo "$OUTPUT" | grep -oP 'Test Accuracy: \K[0-9.]+' | head -1)
 
           if [ -z "$ACCURACY" ]; then
-            echo "❌ Could not extract accuracy from output"
+            echo "ERROR: Could not extract accuracy from output"
             echo "Full output:"
             echo "$OUTPUT"
             exit 1
@@ -124,10 +124,10 @@ jobs:
           PASS=$(awk "BEGIN {print ($ACCURACY >= $MIN_ACCURACY)}")
 
           if [ "$PASS" = "1" ]; then
-            echo "✅ Model passes threshold (${ACCURACY}% >= ${MIN_ACCURACY}%)"
+            echo "Model passes threshold (${ACCURACY}% >= ${MIN_ACCURACY}%)"
             echo "status=pass" >> $GITHUB_OUTPUT
           else
-            echo "❌ Model fails threshold (${ACCURACY}% < ${MIN_ACCURACY}%)"
+            echo "ERROR: Model fails threshold (${ACCURACY}% < ${MIN_ACCURACY}%)"
             echo "status=fail" >> $GITHUB_OUTPUT
             exit 1
           fi

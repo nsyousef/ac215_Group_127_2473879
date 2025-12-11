@@ -4,12 +4,12 @@
 LOG_FILE="/tmp/Pibu_debug.log"
 
 if [ ! -f "$LOG_FILE" ]; then
-    echo "❌ Log file not found: $LOG_FILE"
+    echo "ERROR: Log file not found: $LOG_FILE"
     echo "   The app may not be running or hasn't written logs yet."
     exit 1
 fi
 
-echo "📋 App Logs: $LOG_FILE"
+echo "App Logs: $LOG_FILE"
 echo "=========================================="
 echo ""
 

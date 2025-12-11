@@ -14,12 +14,12 @@ pytest tests/unit.py -v
 if [ $? -eq 0 ]; then
     echo ""
     echo "================================"
-    echo "✅ Unit tests passed!"
+    echo "Unit tests passed!"
     echo "================================"
 else
     echo ""
     echo "================================"
-    echo "❌ Unit tests failed!"
+    echo "ERROR: Unit tests failed!"
     echo "================================"
     exit 1
 fi

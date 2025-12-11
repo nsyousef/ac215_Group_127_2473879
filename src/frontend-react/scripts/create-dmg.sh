@@ -14,13 +14,13 @@ if [ -z "$APP_DIR" ]; then
 fi
 
 if [ -z "$APP_DIR" ]; then
-  echo "❌ Error: Could not find packaged app in ./out"
+  echo "ERROR: Could not find packaged app in ./out"
   echo "   Expected Pibu-darwin-arm64 or Pibu-darwin-x64"
   echo "   Run 'npx electron-forge package' first"
   exit 1
 fi
 
-echo "📦 Found packaged app at: $APP_DIR"
+echo "Found packaged app at: $APP_DIR"
 
 # Create output directory if it doesn't exist
 mkdir -p ./dist
@@ -30,7 +30,7 @@ STAGING_DIR="./dist/Pibu_dmg_staging"
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 
-echo "🎬 Setting up DMG layout..."
+echo "Setting up DMG layout..."
 
 # Copy the app into staging folder
 # macOS adds com.apple.provenance extended attributes to many files in the
@@ -46,7 +46,7 @@ ln -s /Applications "$STAGING_DIR/Applications"
 
 # Create DMG from staging folder
 DMG_FILE="./dist/Pibu.dmg"
-echo "🎬 Creating DMG: $DMG_FILE"
+echo "Creating DMG: $DMG_FILE"
 
 hdiutil create \
   -srcfolder "$STAGING_DIR" \
@@ -60,15 +60,15 @@ rm -rf "$STAGING_DIR"
 
 if [ -f "$DMG_FILE" ]; then
   DMG_SIZE=$(du -h "$DMG_FILE" | cut -f1)
-  echo "✅ DMG created successfully!"
+  echo "DMG created successfully!"
   echo "   File: $DMG_FILE"
   echo "   Size: $DMG_SIZE"
   echo ""
-  echo "📦 Installation instructions:"
+  echo "Installation instructions:"
   echo "   1. Open Pibu.dmg"
   echo "   2. Drag Pibu.app to Applications (shown in the DMG window)"
   echo "   3. Launch from Applications"
 else
-  echo "❌ Error: DMG file was not created"
+  echo "ERROR: DMG file was not created"
   exit 1
 fi
