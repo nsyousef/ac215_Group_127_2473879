@@ -40,7 +40,7 @@ def migrate():
     for disease in old_diseases:
         disease_id = disease.get("id")
         if not disease_id:
-            print(f"Warning: Skipping disease without ID")
+            print("Warning: Skipping disease without ID")
             continue
 
         case_id = f"case_{disease_id}"
@@ -83,7 +83,7 @@ def migrate():
             with open(case_history_file, "w") as f:
                 json.dump(case_history, f, indent=2)
 
-            print(f"✓ Added 'name' field to {case_id}: {name}")
+            print(f"Added 'name' field to {case_id}: {name}")
         else:
             print(f"  {case_id} already has 'name' field: {case_history['name']}")
 
@@ -99,10 +99,10 @@ def migrate():
     with open(diseases_file, "w") as f:
         json.dump(new_diseases, f, indent=2)
 
-    print(f"\n✓ Migration complete!")
+    print("\nMigration complete!")
     print(f"  Updated {len(new_diseases)} diseases")
-    print(f"  Simplified diseases.json to only store: id, name, image")
-    print(f"  Added 'name' field to case_history.json files")
+    print("  Simplified diseases.json to only store: id, name, image")
+    print("  Added 'name' field to case_history.json files")
 
 
 if __name__ == "__main__":

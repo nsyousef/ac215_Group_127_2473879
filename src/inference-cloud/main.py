@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
 
     # Log startup info
     print("=" * 70)
-    print("🚀 INFERENCE SERVICE STARTUP")
+    print("INFERENCE SERVICE STARTUP")
     print("=" * 70)
     print(f"  Device: {device}")
     print(f"  Checkpoint path: {checkpoint_path}")
@@ -35,9 +35,9 @@ async def lifespan(app: FastAPI):
     model = InferenceClassifier(checkpoint_path=checkpoint_path, device=device)
 
     if model is not None:
-        print("✓ Model loaded successfully!")
+        print("Model loaded successfully!")
     else:
-        print("⚠️  Warning: Model loaded in baseline mode (random initialization)")
+        print("WARNING: Model loaded in baseline mode (random initialization)")
 
     print("=" * 70)
 

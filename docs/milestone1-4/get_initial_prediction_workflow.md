@@ -113,4 +113,3 @@ User clicks "Analyze"
 - ✅ Chunks are sent via IPC (`ml:streamChunk` events)
 - ❌ AddDiseaseFlow doesn't listen to chunks (only ChatPanel does)
 - ✅ After navigation, ChatPanel can display the streamed content
-

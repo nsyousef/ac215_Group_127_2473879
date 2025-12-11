@@ -10,9 +10,14 @@ from typing import Dict, Any, List, Optional, Tuple, Callable
 import requests
 from prediction_texts import get_prediction_text
 from model_manager import get_model_path
+from config_loader import get_config
 
 # Disclaimer appended to all LLM responses
-DISCLAIMER = "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. This information is for general knowledge, and a doctor is the best person to give you a proper diagnosis and treatment plan."
+DISCLAIMER = (
+    "\n\n**Please note:** I'm just a helpful assistant and can't give you a medical diagnosis. "
+    "This information is for general knowledge, and a doctor is the best person to give you "
+    "a proper diagnosis and treatment plan."
+)
 
 # Shared vision encoder instance (lazy-loaded)
 _VISION_ENCODER = None
@@ -25,15 +30,36 @@ if APP_DATA_DIR:
 else:
     SAVE_DIR = Path(os.getcwd())
 
+CONFIG_FROM_DEPLOYMENT = get_config()
+
+
+def _resolve_config_value(env_name: str, config_key: str, default: str) -> str:
+    """Prefer env var override, else Pulumi-injected config, else default."""
+    env_value = os.getenv(env_name)
+    if env_value:
+        return env_value
+    config_value = CONFIG_FROM_DEPLOYMENT.get(config_key)
+    if config_value:
+        return config_value
+    return default
+
+
 # Cloud ML API URLs (can be overridden with environment variables)
-BASE_URL = os.getenv("BASE_URL", "http://35.231.234.99")
-TEXT_EMBEDDING_URL = os.getenv("TEXT_EMBEDDING_URL", f"{BASE_URL}/embed-text")
-PREDICTION_URL = os.getenv("PREDICTION_URL", f"{BASE_URL}/predict")
+DEFAULT_BASE_URL = "http://35.231.234.99"
+BASE_URL = _resolve_config_value("BASE_URL", "BASE_URL", DEFAULT_BASE_URL)
+TEXT_EMBEDDING_URL = _resolve_config_value("TEXT_EMBEDDING_URL", "TEXT_EMBEDDING_URL", f"{BASE_URL}/embed-text")
+PREDICTION_URL = _resolve_config_value("PREDICTION_URL", "PREDICTION_URL", f"{BASE_URL}/predict")
 
 # LLM API URLs (can be overridden with environment variables for testing)
 DEFAULT_LLM_FOLLOWUP_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-ask-followu-41c84a.modal.run/"
 DEFAULT_LLM_EXPLAIN_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-explain-stream.modal.run/"
-LLM_TIME_TRACKING_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-time-tracki-2d32a8.modal.run/"
+DEFAULT_LLM_TIME_TRACKING_URL = "https://nsyousef--dermatology-llm-27b-dermatologyllm-time-tracki-2d32a8.modal.run/"
+
+LLM_EXPLAIN_URL = _resolve_config_value("LLM_EXPLAIN_URL", "LLM_EXPLAIN_URL", DEFAULT_LLM_EXPLAIN_URL)
+LLM_FOLLOWUP_URL = _resolve_config_value("LLM_FOLLOWUP_URL", "LLM_FOLLOWUP_URL", DEFAULT_LLM_FOLLOWUP_URL)
+LLM_TIME_TRACKING_URL = _resolve_config_value(
+    "LLM_TIME_TRACKING_URL", "LLM_TIME_TRACKING_URL", DEFAULT_LLM_TIME_TRACKING_URL
+)
 
 
 def debug_log(msg: str):
@@ -65,9 +91,9 @@ try:
     from module import run_cv_analysis as cv_run_analysis
 
     CV_ANALYSIS_AVAILABLE = True
-    debug_log("✓ CV analysis module loaded successfully")
+    debug_log("CV analysis module loaded successfully")
 except ImportError as e:
-    debug_log(f"⚠ Warning: CV analysis module not available: {e}")
+    debug_log(f"WARNING: CV analysis module not available: {e}")
     CV_ANALYSIS_AVAILABLE = False
 
 
@@ -125,9 +151,9 @@ class APIManager:
             file_path=self.demographics_file, default_value={}, description="demographics"
         )
 
-        # Set API URLs (can be overridden with environment variables)
-        self.llm_explain_url = os.getenv("LLM_EXPLAIN_URL", DEFAULT_LLM_EXPLAIN_URL)
-        self.llm_followup_url = os.getenv("LLM_FOLLOWUP_URL", DEFAULT_LLM_FOLLOWUP_URL)
+        # Set API URLs (can be overridden with environment variables or Pulumi config)
+        self.llm_explain_url = LLM_EXPLAIN_URL
+        self.llm_followup_url = LLM_FOLLOWUP_URL
         self.text_embed_url = TEXT_EMBEDDING_URL
         self.prediction_url = PREDICTION_URL
 
@@ -169,7 +195,7 @@ class APIManager:
             try:
                 _VISION_ENCODER = VisionEncoder(checkpoint_path=str(checkpoint_path))
                 info = _VISION_ENCODER.get_model_info()
-                debug_log(f"✓ Vision encoder initialized: {info}")
+                debug_log(f"Vision encoder initialized: {info}")
             except Exception as e:
                 debug_log(f"✗ Error initializing vision encoder: {e}")
                 import traceback
@@ -534,7 +560,7 @@ class APIManager:
 
         # Save updated case history
         APIManager.save_case_history(case_id, api.case_history)
-        debug_log(f"✅ Added timeline entry for case {case_id} on date {date}")
+        debug_log(f"Added timeline entry for case {case_id} on date {date}")
 
     @staticmethod
     def delete_cases(case_ids: List[str]) -> None:
@@ -780,9 +806,8 @@ class APIManager:
 
             # Remove coin from image if detected
             coin_mask_full = cv_result.get("masks", {}).get("coin_mask_full")
-            debug_log(
-                f"  → Coin mask check: mask is None={coin_mask_full is None}, has_data={coin_mask_full is not None and coin_mask_full.any() if coin_mask_full is not None else False}"
-            )
+            has_mask_data = coin_mask_full is not None and coin_mask_full.any()
+            debug_log(f"  → Coin mask check: mask is None={coin_mask_full is None}, has_data={has_mask_data}")
 
             if coin_mask_full is not None and coin_mask_full.any():
                 debug_log("  → Cropping coin from image...")
@@ -868,18 +893,18 @@ class APIManager:
                     if crop_w > 0 and crop_h > 0:
                         # Perform the crop
                         img_bgr = img_bgr[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
-                        debug_log(f"  → ✅ Cropped image to size: {img_bgr.shape[1]}x{img_bgr.shape[0]}")
+                        debug_log(f"  -> Cropped image to size: {img_bgr.shape[1]}x{img_bgr.shape[0]}")
                     else:
-                        debug_log("  → ⚠️ Invalid crop dimensions, skipping crop")
+                        debug_log("  -> WARNING: Invalid crop dimensions, skipping crop")
                 else:
-                    debug_log("  → ⚠️ Could not find coin coordinates in mask")
+                    debug_log("  -> WARNING: Could not find coin coordinates in mask")
 
                 # Convert back to PIL Image
                 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
                 processed_image = Image.fromarray(img_rgb)
 
             else:
-                debug_log("  → ⚠️ No coin detected or coin mask is empty, skipping coin removal")
+                debug_log("  -> WARNING: No coin detected or coin mask is empty, skipping coin removal")
 
         # Step 2: Run local ML model for embeddings (using coin-removed image)
         debug_log("  → Running local ML model for embeddings...")
@@ -958,7 +983,7 @@ class APIManager:
             "enriched_disease": enriched_disease,  # NEW: Complete disease object with all UI fields
         }
 
-        debug_log(f"✓ Initial prediction complete for case {self.case_id}")
+        debug_log(f"Initial prediction complete for case {self.case_id}")
         return results
 
     def update_text_input(self, text_input: str) -> str:
@@ -1109,7 +1134,7 @@ class APIManager:
             if not destination_path.exists():
                 raise FileNotFoundError(f"Image save failed: file not found at {destination_path}")
 
-            debug_log(f"    ✓ Image saved to: {destination_path}")
+            debug_log(f"    Image saved to: {destination_path}")
             return str(destination_path)
 
         except Exception as exc:
@@ -1157,7 +1182,7 @@ class APIManager:
             embedding_array = encoder.encode(image_path)
             embedding_list = embedding_array.tolist()
 
-            debug_log(f"    ✓ Embedding extracted (dim={len(embedding_list)})")
+            debug_log(f"    Embedding extracted (dim={len(embedding_list)})")
             return embedding_list
 
         except Exception as e:
@@ -1214,7 +1239,7 @@ class APIManager:
                 return result
 
             except Exception as e:
-                debug_log(f"    ⚠ CV analysis failed: {e}")
+                debug_log(f"    WARNING: CV analysis failed: {e}")
                 import traceback
 
                 debug_log(traceback.format_exc())
@@ -1301,7 +1326,7 @@ class APIManager:
 
         # Check if model is uncertain about the prediction
         if result.get("predicted_class") == "UNCERTAIN":
-            debug_log("⚠️ Model returned UNCERTAIN prediction")
+            debug_log("WARNING: Model returned UNCERTAIN prediction")
             # Still log the top k predictions for debugging
             if top_k_predictions:
                 debug_log("Top K predictions (even though uncertain):")
@@ -1333,7 +1358,7 @@ class APIManager:
 
         # Log the full prompt/payload being sent to the LLM
         debug_log("\n" + "=" * 80)
-        debug_log("📤 FULL PROMPT SENT TO LLM EXPLAIN API:")
+        debug_log("FULL PROMPT SENT TO LLM EXPLAIN API:")
         debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
         debug_log("=" * 80 + "\n")
@@ -1428,7 +1453,7 @@ class APIManager:
 
         # Log the full prompt/payload being sent to the LLM
         debug_log("\n" + "=" * 80)
-        debug_log("📤 FULL PROMPT SENT TO LLM FOLLOWUP API:")
+        debug_log("FULL PROMPT SENT TO LLM FOLLOWUP API:")
         debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
         debug_log("=" * 80 + "\n")
@@ -1517,7 +1542,10 @@ class APIManager:
         """
         if self.dummy:
             debug_log("    [DUMMY MODE] Returning dummy tracking summary...")
-            return "The affected area measures roughly 2.5 cm² with moderate color variation. The shape appears fairly regular."
+            return (
+                "The affected area measures roughly 2.5 cm² with moderate color variation. "
+                "The shape appears fairly regular."
+            )
 
         debug_log("Calling LLM time tracking summary API...")
 
@@ -1562,7 +1590,7 @@ class APIManager:
 
         # Log the full payload
         debug_log("\n" + "=" * 80)
-        debug_log("📤 TIME TRACKING SUMMARY REQUEST:")
+        debug_log("TIME TRACKING SUMMARY REQUEST:")
         debug_log("=" * 80)
         debug_log(json.dumps(payload, indent=2, default=str))
         debug_log("=" * 80 + "\n")
@@ -1583,11 +1611,10 @@ class APIManager:
 
             # Guard against empty/missing summaries – synthesize a simple one from CV metrics
             if not summary.strip():
-                debug_log("⚠ LLM returned empty tracking summary; generating fallback from CV metrics")
+                debug_log("WARNING: LLM returned empty tracking summary; generating fallback from CV metrics")
                 area = cv_analysis.get("area_cm2") or cv_analysis.get("area_cm2_uncorrected")
                 irregularity = cv_analysis.get("irregularity_index")
                 color = cv_analysis.get("color_stats_lab") or {}
-                mean_L = color.get("mean_L")
                 mean_A = color.get("mean_A")
 
                 sentences = []
@@ -1607,16 +1634,17 @@ class APIManager:
                     )
                 if not sentences:
                     sentences.append(
-                        "We have recorded this image for tracking. Future images will help show whether the spot is getting larger, smaller, or staying stable."
+                        "We have recorded this image for tracking. Future images will help show whether the spot is "
+                        "getting larger, smaller, or staying stable."
                     )
 
                 summary = " ".join(sentences[:3])
 
-            debug_log(f"✅ Time tracking summary received (or synthesized): {summary[:100]}...")
+            debug_log(f"Time tracking summary received (or synthesized): {summary[:100]}...")
             return summary
 
         except requests.exceptions.RequestException as e:
-            debug_log(f"⚠ Error calling time tracking summary API: {e}")
+            debug_log(f"WARNING: Error calling time tracking summary API: {e}")
             # Return a generic fallback
             return (
                 "We have recorded this image for tracking, but were unable to generate a detailed summary right now. "
@@ -1673,7 +1701,7 @@ class APIManager:
             llm_timestamp=llm_timestamp,
         )
 
-        debug_log(f"✓ Chat message processed for case {self.case_id}")
+        debug_log(f"Chat message processed for case {self.case_id}")
         return {
             "answer": response["answer"],
             "conversation_history": response.get("conversation_history", []),

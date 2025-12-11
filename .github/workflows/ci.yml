@@ -99,7 +99,7 @@ jobs:
       - name: Check if Docker image exists
         run: |
           if [ ! -f /tmp/${{ matrix.service }}.tar ]; then
-            echo "❌ Docker image not found for ${{ matrix.service }}"
+            echo "ERROR: Docker image not found for ${{ matrix.service }}"
             exit 1
           fi
 
@@ -154,7 +154,7 @@ jobs:
       - name: Check if Docker image exists
         run: |
           if [ ! -f /tmp/${{ matrix.service }}.tar ]; then
-            echo "⚠️ Docker image not found for ${{ matrix.service }}, skipping tests"
+            echo "WARNING: Docker image not found for ${{ matrix.service }}, skipping tests"
             exit 0
           fi
 
@@ -167,19 +167,19 @@ jobs:
         run: |
           case "${{ matrix.service }}" in
             data-processor)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/ -v --tb=short -m 'not integration'" || echo "WARNING: No tests found or tests failed for ${{ matrix.service }}"
               ;;
             llm)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "cd /app && bash run_unit_tests.sh" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "cd /app && bash run_unit_tests.sh" || echo "WARNING: No tests found or tests failed for ${{ matrix.service }}"
               ;;
             inference-cloud)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'not integration'" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'not integration'" || echo "WARNING: No tests found or tests failed for ${{ matrix.service }}"
               ;;
             frontend-react)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "python -m pytest python/tests/ -v --tb=short" || echo "⚠️ No tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "python -m pytest python/tests/ -v --tb=short" || echo "WARNING: No tests found or tests failed for ${{ matrix.service }}"
               ;;
             *)
-              echo "⚠️ Unknown service: ${{ matrix.service }}"
+              echo "WARNING: Unknown service: ${{ matrix.service }}"
               ;;
           esac
         continue-on-error: true
@@ -188,13 +188,13 @@ jobs:
         run: |
           case "${{ matrix.service }}" in
             llm)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "cd /app && bash run_integration_tests.sh" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "cd /app && bash run_integration_tests.sh" || echo "WARNING: No integration tests found or tests failed for ${{ matrix.service }}"
               ;;
             inference-cloud)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/test_integration.py -v --tb=short" || echo "⚠️ No integration tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && export PATH=/app/.venv/bin:\$PATH && pytest tests/test_integration.py -v --tb=short" || echo "WARNING: No integration tests found or tests failed for ${{ matrix.service }}"
               ;;
             *)
-              echo "ℹ️ No integration tests for ${{ matrix.service }}"
+              echo "INFO: No integration tests for ${{ matrix.service }}"
               ;;
           esac
         continue-on-error: true
@@ -203,13 +203,13 @@ jobs:
         run: |
           case "${{ matrix.service }}" in
             llm)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "cd /app && bash run_system_tests.sh" || echo "⚠️ No system tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "cd /app && bash run_system_tests.sh" || echo "WARNING: No system tests found or tests failed for ${{ matrix.service }}"
               ;;
             frontend-react)
-              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'system'" || echo "⚠️ No system tests found or tests failed for ${{ matrix.service }}"
+              docker run --rm --entrypoint /bin/bash -v $PWD:/workspace ${{ matrix.service }}:${{ github.sha }} -c "export VIRTUAL_ENV=/app/.venv && /app/.venv/bin/python -m pytest tests/ -v --tb=short -m 'system'" || echo "WARNING: No system tests found or tests failed for ${{ matrix.service }}"
               ;;
             *)
-              echo "ℹ️ No system tests for ${{ matrix.service }}"
+              echo "INFO: No system tests for ${{ matrix.service }}"
               ;;
           esac
         continue-on-error: true

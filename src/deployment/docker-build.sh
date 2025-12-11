@@ -7,4 +7,4 @@ set -e
 echo "Building deployment container..."
 docker build -t pibu-ai-deployment:latest .
 
-echo "✅ Container built successfully"
+echo "Container built successfully"

@@ -215,3 +215,7 @@ src/data-processor/data/
 src/data-processor/*.csv
 src/data-processor/*.zip
 .Rhistory
+
+# Project-specific build artifacts
+src/ml_workflow/ml_workflow.egg-info/
+src/ml_workflow/logs/

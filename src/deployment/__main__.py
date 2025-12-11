@@ -98,6 +98,7 @@ pulumi.export("inference_image", inference_service.image.image_name)
 # LLM service outputs
 pulumi.export("llm_explain_url", modal_llm.explain_url)
 pulumi.export("llm_followup_url", modal_llm.followup_url)
+pulumi.export("llm_time_tracking_url", modal_llm.time_tracking_url)
 pulumi.export(
     "llm_model_size", modal_llm.deployment.environment.apply(lambda env: env.get("MODAL_MODEL_NAME", "unknown"))
 )
@@ -109,11 +110,13 @@ pulumi.export(
         inference_url=inference_service.url,
         llm_explain_url=modal_llm.explain_url,
         llm_followup_url=modal_llm.followup_url,
+        llm_time_tracking_url=modal_llm.time_tracking_url,
     ).apply(
         lambda args: {
             "BASE_URL": args["inference_url"],
             "LLM_EXPLAIN_URL": args["llm_explain_url"],
             "LLM_FOLLOWUP_URL": args["llm_followup_url"],
+            "LLM_TIME_TRACKING_URL": args["llm_time_tracking_url"],
         }
     ),
 )

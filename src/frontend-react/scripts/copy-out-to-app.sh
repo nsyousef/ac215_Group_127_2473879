@@ -22,7 +22,7 @@ fi
 echo "Found app at: $APP_PATH"
 
 if [ -f "./out/index.html" ]; then
-  echo "📦 Copying out/ directory (static exports) to packaged app..."
+  echo "Copying out/ directory (static exports) to packaged app..."
 
   # Copy only the static files, excluding the packaged app directory itself
   mkdir -p "$APP_PATH/out"
@@ -37,12 +37,12 @@ if [ -f "./out/index.html" ]; then
   done
 
   if [ -f "$APP_PATH/out/index.html" ]; then
-    echo "✅ Successfully copied static files to packaged app"
+    echo "Successfully copied static files to packaged app"
   else
-    echo "❌ Failed: index.html not found in copied files"
+    echo "ERROR: Failed: index.html not found in copied files"
     exit 1
   fi
 else
-  echo "⚠️  ./out/index.html not found"
+  echo "WARNING: ./out/index.html not found"
   exit 1
 fi

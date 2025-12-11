@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if ! command -v gh >/dev/null 2>&1; then
-  echo "❌ GitHub CLI (gh) is required."
+  echo "ERROR: GitHub CLI (gh) is required."
   exit 1
 fi
 
@@ -46,7 +46,7 @@ if [[ -z "$REPO" ]]; then
 fi
 
 if [[ -z "$REPO" ]]; then
-  echo "❌ Unable to determine repository."
+  echo "ERROR: Unable to determine repository."
   exit 1
 fi
 
@@ -55,13 +55,13 @@ if [[ "$KEEP_COUNT" =~ [^0-9] ]]; then
   exit 1
 fi
 
-echo "📦 Managing artifacts for $REPO (keeping latest $KEEP_COUNT)"
+echo "Managing artifacts for $REPO (keeping latest $KEEP_COUNT)"
 
 ARTIFACT_LINES=$(gh api "repos/$REPO/actions/artifacts" --paginate \
   --jq '.artifacts[]? | "\(.created_at)\t\(.id)\t\(.name)\t\(.expired)"' | sort)
 
 if [[ -z "$ARTIFACT_LINES" ]]; then
-  echo "✅ No artifacts to delete."
+  echo "No artifacts to delete."
   exit 0
 fi
 
@@ -77,16 +77,16 @@ fi
 DELETE_COUNT=$((TOTAL - KEEP_INT))
 [[ "$KEEP_INT" -eq 0 ]] && DELETE_COUNT=$TOTAL
 
-echo "🗑️  Deleting $DELETE_COUNT oldest artifact(s)..."
+echo "Deleting $DELETE_COUNT oldest artifact(s)..."
 
 echo "$ARTIFACT_LINES" | head -n "$DELETE_COUNT" | while IFS=$'\t' read -r CREATED ID NAME EXPIRED; do
   STATE=$([[ "$EXPIRED" == "true" ]] && echo "expired" || echo "active")
   echo "  • $NAME ($ID) created $CREATED [$STATE]"
   if gh api -X DELETE "repos/$REPO/actions/artifacts/$ID" >/dev/null; then
-    echo "    ✓ deleted"
+    echo "    deleted"
   else
-    echo "    ⚠️  failed to delete"
+    echo "    failed to delete"
   fi
 done
 
-echo "✅ Cleanup complete."
+echo "Cleanup complete."
