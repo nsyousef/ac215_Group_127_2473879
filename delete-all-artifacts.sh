@@ -58,7 +58,7 @@ fi
 echo "Managing artifacts for $REPO (keeping latest $KEEP_COUNT)"
 
 ARTIFACT_LINES=$(gh api "repos/$REPO/actions/artifacts" --paginate \
-  --jq '.artifacts[]? | "\(.created_at)\t\(.id)\t\(.name)\t\(.expired)"' | sort)
+  --jq '.artifacts[]? | "\(.created_at)\t\(.id)\t\(.name)\t\(.expired)\t\(.workflow_run.id // 0)"' | sort)
 
 if [[ -z "$ARTIFACT_LINES" ]]; then
   echo "No artifacts to delete."
@@ -79,7 +79,13 @@ DELETE_COUNT=$((TOTAL - KEEP_INT))
 
 echo "Deleting $DELETE_COUNT oldest artifact(s)..."
 
-echo "$ARTIFACT_LINES" | head -n "$DELETE_COUNT" | while IFS=$'\t' read -r CREATED ID NAME EXPIRED; do
+CURRENT_RUN=${GITHUB_RUN_ID:-0}
+
+echo "$ARTIFACT_LINES" | head -n "$DELETE_COUNT" | while IFS=$'\t' read -r CREATED ID NAME EXPIRED RUN_ID; do
+  if [[ "$RUN_ID" == "$CURRENT_RUN" ]]; then
+    echo "  • Skipping $NAME ($ID) because it belongs to current run $RUN_ID"
+    continue
+  fi
   STATE=$([[ "$EXPIRED" == "true" ]] && echo "expired" || echo "active")
   echo "  • $NAME ($ID) created $CREATED [$STATE]"
   if gh api -X DELETE "repos/$REPO/actions/artifacts/$ID" >/dev/null; then
