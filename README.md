@@ -34,7 +34,9 @@ The system processes multiple dermatology datasets (Fitzpatrick17k, DDI, ISIC, S
 ```
 secrets/
 ac215_Group_127_2473879/
-├── docs/                          # Project documentation
+└── docs/                          # Project documentation
+|   └── milestone5/
+|       └── milestone5.md          # Documentation of milestone 5 deliverables
 ├── eda/                           # Exploratory Data Analysis
 └── src/                           # Source code (microservices architecture)
     ├── data-processor/            # Data processing and harmonization
