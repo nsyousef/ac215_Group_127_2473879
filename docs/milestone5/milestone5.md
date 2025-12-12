@@ -42,6 +42,10 @@ In this milestone, we added `.github/workflows/deploy-and-build.yml`. This workf
 
 Please note that it was necessary to upload the deployed version of the app to a public repository. The reason for this is private repos on GitHub are limited to 500 MB of storage for artifacts, and our .dmg file alone is larger in size than that. Public repos do not have artifact size limitations, so it was necessary to upload our .dmg to the public repo.
 
+Here is a screenshot of the CI pipeline successfully running.
+
+![](ci/test_lint.png)
+
 #### Unit Test Suite
 
 Unit tests for each microservice can be found in their respective microservice folder. The location of the unit test files for each microservice is as follows:
